@@ -59,7 +59,7 @@ class RetrievalMetadataParser:
             business_process=str(ret_dict.get("business_process", "Operational Workflow")),
             equipment=parse_list(ret_dict.get("equipment")),
             workflow_tags=parse_list(ret_dict.get("workflow_tags")),
-            embedding_metadata=ret_dict.get("embedding_metadata", {"model": "cortex_embed_e5_base_v2", "dimensions": 768}),
-            vector_metadata=ret_dict.get("vector_metadata", {"indexed": True}),
-            cortex_search_metadata=ret_dict.get("cortex_search_metadata", {"service": "cortex_search_v1"}),
+            embedding_metadata=ret_dict.get("embedding_metadata", {}),
+            vector_metadata=ret_dict.get("vector_metadata", {}),
+            cortex_search_metadata=ret_dict.get("cortex_search_metadata", {}),
         )

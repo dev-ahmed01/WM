@@ -388,13 +388,13 @@ class DocumentAIMetadataModel(BaseModel):
     keywords: List[str] = Field(default_factory=list)
     entities: Dict[str, Any] = Field(default_factory=dict)
     language_detected: str = "en-US"
-    embedding_model: str = "cortex_embed_e5_base_v2"
-    embedding_version: str = "1.0"
+    embedding_model: str = "none"
+    embedding_version: str = "none"
     chunk_count: int = 0
     average_chunk_size: int = 0
-    embedding_status: str = "READY"
-    evaluation_score: float = 0.95
-    confidence_score: float = 0.95
+    embedding_status: str = "NOT_REQUIRED"
+    evaluation_score: Optional[float] = None
+    confidence_score: Optional[float] = None
 
 
 class DocumentChunkModel(BaseModel):
@@ -408,8 +408,8 @@ class DocumentChunkModel(BaseModel):
     character_count: int = 0
     token_count: int = 0
     chunk_content: str
-    embedding_ref: str = "cortex_embed_e5_base_v2"
-    vector_status: str = "READY"
+    embedding_ref: str = "none"
+    vector_status: str = "NOT_REQUIRED"
     chunk_hash: str
     chunk_type: str = "STATE_STEP"
     section_name: Optional[str] = None
@@ -463,4 +463,3 @@ class LoadResult(BaseModel):
     version_id: str
     tables_updated: List[str] = Field(default_factory=list)
     error_message: Optional[str] = None
-

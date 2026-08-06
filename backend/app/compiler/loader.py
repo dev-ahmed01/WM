@@ -349,9 +349,9 @@ class OWDLoader:
                             ON target.id = src.id
                             WHEN MATCHED THEN UPDATE SET search_content = src.search_content, status = 'published'
                             WHEN NOT MATCHED THEN INSERT (id, workflow_version_id, state_id, department_id, search_content, embedding_ref, status)
-                            VALUES (src.id, src.workflow_version_id, src.state_id, src.department_id, src.search_content, COALESCE(src.embedding_ref, 'cortex_embed_e5_base_v2'), 'published')
+                            VALUES (src.id, src.workflow_version_id, src.state_id, src.department_id, src.search_content, COALESCE(src.embedding_ref, 'none'), 'published')
                             """,
-                            (sm["id"], sm["workflow_version_id"], sm["state_id"], sm["department_id"], sm["search_content"], sm.get("embedding_ref", "cortex_embed_e5_base_v2"), sm["status"]),
+                            (sm["id"], sm["workflow_version_id"], sm["state_id"], sm["department_id"], sm["search_content"], sm.get("embedding_ref", "none"), sm["status"]),
                         )
                     tables_updated.append("KNOWLEDGE_STUDIO.workflow_search_metadata")
 
