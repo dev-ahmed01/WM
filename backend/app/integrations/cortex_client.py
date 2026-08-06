@@ -202,56 +202,6 @@ VERIFIED SOURCES:
             f"{str(top.get('content', '')).strip()}"
         )
 
-    @staticmethod
-    def summarize_text(text: str) -> str:
-        """Executes SNOWFLAKE.CORTEX.SUMMARIZE on text input with fallback."""
-        if not text or not text.strip():
-            return ""
-        try:
-            with get_snowflake_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT SNOWFLAKE.CORTEX.SUMMARIZE(%s)", (text,))
-                    row = cur.fetchone()
-                    if row and row[0]:
-                        return str(row[0])
-        except Exception as exc:
-            logger.warning(f"Cortex SUMMARIZE fallback active: {exc}")
-        
-        lines = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
-        return " ".join(lines[:3])[:300] if lines else text[:300]
-
-    @staticmethod
-    def extract_entities(text: str, question: str = "What departments, roles, and safety hazards are mentioned?") -> Dict[str, Any]:
-        """Executes SNOWFLAKE.CORTEX.EXTRACT_ANSWER to pull structured domain entities."""
-        if not text or not text.strip():
-            return {}
-        try:
-            with get_snowflake_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT SNOWFLAKE.CORTEX.EXTRACT_ANSWER(%s, %s)", (text, question))
-                    row = cur.fetchone()
-                    if row and row[0]:
-                        return {"extracted_entities": row[0]}
-        except Exception as exc:
-            logger.warning(f"Cortex EXTRACT_ANSWER fallback active: {exc}")
-        return {"extracted_entities": None}
-
-    @staticmethod
-    def generate_embedding(text: str) -> List[float]:
-        """Executes SNOWFLAKE.CORTEX.EMBED_TEXT_1024 to generate 1024-dim text vector embedding."""
-        if not text or not text.strip():
-            return []
-        try:
-            with get_snowflake_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT SNOWFLAKE.CORTEX.EMBED_TEXT_1024('e5-base-v2', %s)", (text,))
-                    row = cur.fetchone()
-                    if row and row[0]:
-                        val = row[0]
-                        return json.loads(val) if isinstance(val, str) else list(val)
-        except Exception as exc:
-            logger.warning(f"Cortex EMBED_TEXT_1024 fallback active: {exc}")
-        return []
     _STOP_WORDS = {
         "a", "an", "and", "are", "do", "for", "how", "i", "if", "in",
         "is", "it", "of", "on", "should", "the", "to", "what", "when",
