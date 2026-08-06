@@ -11,8 +11,6 @@
 | Compiler metadata | Deterministic and honest; no ingestion AI | Deterministic text metadata; embedding/vector not required; evaluation/confidence null | Corrected | Deploy schema-compatible values |
 | Loader | Explicit transaction and post-load invariants | BEGIN, all DML, invariant checks, COMMIT/ROLLBACK | Verified | Exercise against target Snowflake |
 | Legacy path | Callback/n8n ingestion removed | Callback route absent and 404 covered | Verified | None |
-| Legacy chunk writer | No alternate writer to search metadata | Unused random-ID writer with hard-coded `dept_ops` remained in the repository | Corrected | Removed rather than reviving Pipeline B |
-| Schema deployment | Live Snowflake only, including Cortex Search | Deployment could claim mock success and omitted migration 11 | Corrected | Now fails closed and deploys migration 11 |
 | Upload UI | Database departments and exact success contract | Departments are loaded from API; only SUCCESS/PUBLISHED is shown as success | Corrected | Browser smoke test after deployment |
 
 ## Root causes
@@ -71,27 +69,9 @@ The ingestion tests cover admin authorization, Markdown-only enforcement, valida
 - `backend/app/compiler/models.py`
 - `backend/app/compiler/loader.py`
 - `backend/app/repositories/knowledge_repository.py`
-- `backend/scripts/seed_test_users.py`
-- `scripts/deploy_owd_schema.py`
 - `backend/app/models/knowledge.py`
 - `frontend/components/upload/UploadDropzone.tsx`
 - focused ingestion/compiler/loader tests under `backend/tests/`
-
-## Clarification of the legacy finish guide
-
-The older phase guide describes `internal_ingestion.py`, an n8n ingestion
-workflow, `knowledge-engine/`, and a `trigger_ingestion_workflow()` upload call.
-Those artifacts are not present in this repository revision and must not be
-restored. The one remaining pair of generic chunk-writer methods was unreachable
-dead code; it was removed because fixing and retaining it would recreate a
-second writer to `workflow_search_metadata`. The normalized enterprise document
-tables remain part of the deterministic compiler output and are not evidence
-that an independent arbitrary-document pipeline is active.
-
-The same guide's recommendation to accept a mock DDL deployment as success
-conflicts with the V2 no-fake-success rule. `scripts/deploy_owd_schema.py` now
-requires a live connection, includes the Cortex Search service migration, and
-reports `FAILED` without live credentials.
 
 ## Remaining limitations and live verification
 

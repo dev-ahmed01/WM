@@ -118,10 +118,6 @@ returns only the caller's department and configured lifecycle statuses. Confirm
 that empty searches produce the grounded failure/escalation response and that
 each returned citation ID exists in the search response passed to the model.
 
-The Cortex Search migration is included in the ordered deployment script, but
-its presence is not proof of deployment. A successful live run plus `SHOW
-CORTEX SEARCH SERVICES` and a scoped Search Preview query are still required.
-
 ## Security note
 
 The uploaded archive contained real-looking credentials in `backend/.env` and
