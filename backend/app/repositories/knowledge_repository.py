@@ -1,6 +1,5 @@
 """Repository managing Snowflake SQL operations for OWD workflows, versions, states, and steps."""
 
-import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
@@ -309,33 +308,6 @@ class KnowledgeRepository:
                     return cur.rowcount > 0
         except Exception as exc:
             raise WorkMateException(message=f"Failed to update version status: {str(exc)}") from exc
-
-    @staticmethod
-    def save_chunks(version_id: str, chunks: List[str]) -> int:
-        """Inserts generated search metadata entries into WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata in Snowflake."""
-        query = """
-            INSERT INTO WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata (id, workflow_version_id, department_id, search_content, embedding_ref, status)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        inserted_count = 0
-        try:
-            with get_snowflake_connection() as conn:
-                with conn.cursor() as cur:
-                    for idx, chunk_text in enumerate(chunks):
-                        sm_id = f"sm_{uuid.uuid4().hex[:12]}"
-                        cur.execute(query, (sm_id, version_id, "dept_ops", chunk_text, "cortex_embed_e5_base_v2", "published"))
-                        inserted_count += 1
-            return inserted_count
-        except Exception as exc:
-            raise WorkMateException(message=f"Failed to save search metadata chunks: {str(exc)}") from exc
-
-    @staticmethod
-    def insert_document_chunks(version_id: str, chunks: List[Dict[str, Any]]) -> int:
-        """Persists list of chunk metadata dictionaries into WORKMATE_AI.KNOWLEDGE_STUDIO tables."""
-        if not chunks:
-            return 0
-        text_list = [c["text"] if isinstance(c, dict) and "text" in c else str(c) for c in chunks]
-        return KnowledgeRepository.save_chunks(version_id, text_list)
 
     @staticmethod
     def soft_delete_item(item_id: str) -> bool:

@@ -50,7 +50,10 @@ def test_get_active_session(mock_get):
 
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.create")
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
-def test_start_session(mock_get_by_id, mock_create):
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.OWDRepository.get_initial_state")
+def test_start_session(mock_initial, mock_event, mock_get_by_id, mock_create):
+    mock_initial.return_value = {"id": "state_initial"}
     mock_create.return_value = "sess_101"
     mock_get_by_id.return_value = {
         "id": "sess_101",

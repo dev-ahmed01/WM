@@ -54,7 +54,7 @@ export const UploadDropzone: React.FC = () => {
         body: formData,
       });
 
-      if (res.compilation_status === 'VALIDATION_FAILED' || res.deployment_status === 'FAILED') {
+      if (res.compilation_status !== 'SUCCESS' || res.deployment_status !== 'PUBLISHED') {
         setProgress(100);
         const err = res.validation_errors?.[0] || res.message || 'Compilation validation failed.';
         setErrorDetails(err);
@@ -63,7 +63,7 @@ export const UploadDropzone: React.FC = () => {
       }
 
       setProgress(100);
-      setMessage(`Successfully uploaded and compiled "${file.name}" (${res.number_of_states || 1} state, ${res.number_of_steps || 1} steps)!`);
+      setMessage(`Successfully uploaded and compiled "${file.name}" (${res.number_of_states ?? 0} states, ${res.number_of_steps ?? 0} steps)!`);
       if (res.knowledge_item_id) {
         setUploadedDocId(res.knowledge_item_id);
       }

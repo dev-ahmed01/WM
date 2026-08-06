@@ -48,9 +48,6 @@ class Settings(BaseSettings):
     # Internal Webhook & Service Security
     INTERNAL_WEBHOOK_SECRET: str = "internal_secret_key_12345"
 
-    # Document Parsing AI Flag
-    USE_DOCUMENT_AI: bool = False
-
     # Orchestration Settings
     N8N_BASE_URL: str = "http://localhost:5678"
     N8N_WEBHOOK_BASE_URL: str = "http://localhost:5678"

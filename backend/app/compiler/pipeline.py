@@ -40,7 +40,7 @@ class OWDCompilerPipeline:
         prepared_document: Optional[OWDDocument] = None,
     ) -> Dict[str, Any]:
         """Executes Parser -> Validator -> Compiler -> Loader pipeline and returns detailed compilation report."""
-        logger.info(f"[STAGE 0 INIT] Processing OWD Markdown. Content length: {len(markdown_text)} chars. Snippet: {repr(markdown_text[:80])}")
+        logger.info("[STAGE 0 INIT] Processing OWD Markdown (%d characters)", len(markdown_text))
 
         # 1. PARSE STAGE
         try:
@@ -54,13 +54,6 @@ class OWDCompilerPipeline:
             )
             parsed_states_cnt = len(owd_doc.workflow.states)
             parsed_steps_cnt = sum(len(s.steps) for s in owd_doc.workflow.states)
-            logger.info("================================================================================")
-            logger.info("                     POST-PARSE STAGE 1 FORENSIC INSPECTION                     ")
-            logger.info("================================================================================")
-            logger.info(f"1. Parsed Workflow Code               : {owd_doc.workflow.workflow_code}")
-            logger.info(f"2. Number of Parsed States            : {parsed_states_cnt}")
-            logger.info(f"3. Number of Parsed Steps             : {parsed_steps_cnt}")
-            logger.info("================================================================================")
             logger.info(f"[STAGE 1 PARSE COMPLETE] UnifiedAST assembled for '{owd_doc.workflow.workflow_code}': {parsed_states_cnt} states parsed.")
         except OWDParsingException as parse_err:
             logger.error(f"[PIPELINE STAGE 1 PARSE FAILED] {parse_err.message}")
