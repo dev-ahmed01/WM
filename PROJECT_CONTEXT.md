@@ -1,94 +1,321 @@
-# WorkMate AI — Project Context & Single Source of Truth
+# PROJECT_CONTEXT_V2.md — WorkMate AI
 
-> **FROZEN CONTEXT DOCUMENT**
-> This document is the single source of truth for the WorkMate AI platform architecture, requirements, stack rules, and implementation scope. All AI agents and human developers MUST strictly adhere to this file.
+**Purpose of this document:** The original `PROJECT_CONTEXT.md` describes the
+**intended architecture** from the initial product/vision doc. It was written
+before implementation and was never updated as the team actually built the
+system. During implementation the project **pivoted significantly** — a
+different core pipeline was built, several planned features were never
+started, and (until a recent audit/fix pass) the codebase had two parallel,
+conflicting ingestion pipelines due to that pivot never being fully cleaned
+up.
 
----
+This document is the **as-built source of truth**. It exists so any AI
+assistant (ChatGPT, Claude, Copilot, Cursor, etc.) picking up this project
+understands what is *actually running today*, not what was originally
+planned. Where the original vision and the real system diverge, both are
+stated explicitly so nobody "fixes" the real system back toward a plan that
+was abandoned on purpose, and nobody assumes a feature exists because it was
+in the original doc.
 
-## 1. Project Overview
-WorkMate AI is an Enterprise Operational Intelligence Platform designed to transform static corporate documentation (SOPs, manuals, policies) into interactive, step-aware guidance for frontline employees and operational staff.
-
-Unlike standard QA chatbots, WorkMate AI maintains procedural workflow state across interactions, deterministically guiding employees through complex operational steps while enforcing strict grounding, department-scoped permissions, and confidence validation.
-
----
-
-## 2. Confirmed Tech Stack & Scope Boundaries
-
-### Confirmed Stack (Non-Negotiable)
-- **Backend Framework**: FastAPI (Python 3.11+)
-- **Database & Data Platform**: **Snowflake ONLY**
-  - Structured data: Relational SQL tables (`users`, `knowledge_items`, `knowledge_versions`, `knowledge_chunks`, `conversations`, `conversation_messages`, `workflow_sessions`, `escalations`, `analytics_events`)
-  - Document storage: Snowflake Stage (`@RAW_OWD_STAGE`)
-  - OCR & Parsing: Document AI (with Python fallback)
-  - Semantic Chunking: Windowed semantic chunker
-  - Embeddings: Snowflake Cortex Embed (`cortex_embed_e5_base_v2`)
-  - Vector Search: Snowflake Cortex Search Index
-  - LLM Reasoning: Snowflake Cortex Complete
-- **Frontend Framework**: Next.js (React) + TypeScript + Tailwind CSS + shadcn/ui
-- **Orchestration**: n8n (triggers/retries/notifications/scheduling ONLY — n8n never performs AI reasoning)
-- **Authentication**: JWT via FastAPI Security + RBAC (role + department scoped)
-- **Deployment**: Docker, Vercel (frontend), Render/Railway (backend)
-
-### Explicitly Excluded Technologies
-- No PostgreSQL
-- No MongoDB
-- No Redis
-- No Java / Spring Boot
-- No separate vector database vendor (e.g. Pinecone, Weaviate, Qdrant) — everything AI/data related lives in Snowflake.
+**Status as of this document:** Backend has just been through a full
+architectural audit and cleanup pass (see §7). All known critical bugs from
+that pass are fixed and the codebase compiles cleanly. Submission deadline
+was imminent at time of writing — treat anything marked "not yet verified"
+as the top priority before demoing.
 
 ---
 
-## 3. The Three Core Modules
+## 1. What This Project Actually Is (real, current definition)
 
-### 1. Knowledge Studio (Admin)
-Enterprise knowledge ingestion & versioning pipeline:
-`Upload Document` $\rightarrow$ `Validate (type & <=25MB)` $\rightarrow$ `Snowflake Stage Upload` $\rightarrow$ `n8n Webhook Trigger` $\rightarrow$ `Document AI Parse/OCR` $\rightarrow$ `Semantic Chunking` $\rightarrow$ `Cortex Embed Generation` $\rightarrow$ `Cortex Search Index Update` $\rightarrow$ `Publish`.
+WorkMate AI, as built, is **not** the general-purpose "upload any document,
+AI parses/OCRs/categorizes/summarizes it, chat with everything" platform
+described in the original vision doc. It is currently:
 
-### 2. WorkMate Copilot (Employee)
-Step-aware operational guidance assistant:
-`Employee Message` $\rightarrow$ `Intent Detection & Ambiguity Check` $\rightarrow$ `Active SOP State Resolution` $\rightarrow$ `Department-Scoped Cortex Search` $\rightarrow$ `Context Assembly` $\rightarrow$ `Cortex Complete Generation` $\rightarrow$ `Response Validation Gate (Grounding, Permissions, Citations, Confidence)` $\rightarrow$ `Escalation if Low Confidence` $\rightarrow$ `Telemetry Recording` $\rightarrow$ `Response Delivery`.
+**A structured Markdown-DSL compiler + execution engine for Operational
+Workflow Definitions (OWDs), plus a RAG-lite copilot chat layer on top.**
 
-### 3. Intelligence Hub (Manager)
-Read-only managerial analytics dashboard reading from low-latency Snowflake BI materialized views (`V_ANALYTICS_*`):
-`SOP Usage`, `FAQs`, `Confusing Procedures`, `Escalation Logs`, `Department Adoption`, `Confidence Score Trends`.
+In practice:
+- Administrators upload a `.md` file written in a specific internal
+  directive syntax (state blocks, step blocks, decision/rule blocks,
+  metadata front-matter — see §4).
+- A deterministic compiler (not an LLM) parses that markdown into an AST,
+  validates it, compiles it into a relational workflow graph (states, steps,
+  transitions, rules), and loads it into Snowflake.
+- Employees converse with a Copilot that retrieves from that compiled
+  workflow graph (via Cortex) and tracks which step/state the employee is
+  currently on.
+- Managers see analytics dashboards sourced from conversation + workflow
+  data.
 
----
-
-## 4. Mandatory Architectural Rules
-
-1. **Response Validation Layer Pre-Delivery Gate**:
-   - Runs on EVERY Copilot response without bypass.
-   - Enforces grounding verification, department permission checks, citation generation, and confidence scoring ($<0.70$ or ungrounded triggers escalation).
-   - Zero-hallucination canonical fallback phrasing:
-     > *"I could not find verified organizational guidance for this request. Please contact your supervisor or administrator. The closest related documentation is provided below."*
-2. **Strict Separation of Reasoning and Orchestration**:
-   - n8n orchestrates events, retries, and notifications.
-   - FastAPI + Snowflake Cortex perform all AI reasoning, semantic retrieval, embeddings, and LLM text generation.
-3. **Deterministic Procedural Navigation Engine**:
-   - `get_next_action()` in `WorkflowStateService` indexes strictly into actual retrieved SOP step lists. It NEVER delegates step generation or next-step selection to an LLM.
-4. **Data Isolation & Scope**:
-   - Only `PUBLISHED` document versions are retrievable by employees.
-   - All retrieval is strictly scoped to the caller's `department_id` (admins bypass).
+This is a **narrower, more deterministic** system than the original vision.
+That's a legitimate architectural choice (deterministic compilation is more
+reliable and auditable than "AI categorizes and summarizes your PDF"), but
+it means most of the original ingestion pipeline (OCR, AI categorization, AI
+summarization, department auto-identification) **was never built** — it was
+replaced by a compiler.
 
 ---
 
-## 5. Current Development Status (Phase 1 – Phase 8 Fully Completed)
+## 2. Original Vision vs. What Was Actually Built
 
-| Module / Area | Implementation & Verification Status |
+| Area | Original vision (`PROJECT_CONTEXT.md`) | What's actually built |
+|---|---|---|
+| **Core ingestion model** | Upload any document type → OCR → AI categorization → AI summarization → department tagging → semantic chunking → embeddings | Upload a **markdown file written in a specific OWD directive syntax** → deterministic parse → AST → compile → MERGE into Snowflake relational tables. No OCR, no AI summarization, no AI categorization at ingest time. |
+| **File type handling** | PDF, DOCX, manuals, flowcharts, etc. | Upload endpoint *accepts* `.pdf/.docx/.md/.txt` by extension, but the compiler always decodes the raw bytes as UTF-8/latin-1 **text** and expects OWD directive markdown. A real PDF/DOCX upload will not be parsed correctly — there is no OCR or binary document parser wired in. **Only `.md` files written in the OWD syntax actually work today.** |
+| **"AI Categorization" / "AI Summary" pipeline stages** | Explicit pipeline stages performed by Cortex during ingestion | Not implemented. The compiler is deterministic (regex/AST-based parsing), not LLM-based, at ingest time. |
+| **Knowledge Graph** | Explicitly listed as a *future* enhancement, cross-document | A **relationship parser** exists (`compiler/parsers/relationship_parser.py`) that parses Parent/Child/Related/Previous/Next/Escalation/Exception SOP references *within a single OWD document's metadata*. This is a building block, not the enterprise-wide knowledge graph described in the vision doc — still not built at that scope. |
+| **Voice input (Whisper)** | Listed as a supported interaction mode | **Not implemented anywhere in the codebase.** No Whisper integration, no audio upload/transcription endpoint, nothing. Confirmed via full-repo search — zero references. |
+| **Text-to-Speech (ElevenLabs/OpenAI TTS)** | Listed as optional stack component | **Not implemented anywhere.** Zero references in the codebase. |
+| **Multilingual conversation support** | Listed as a supported interaction method | **Not implemented anywhere.** No language-detection or translation layer exists. Copilot only handles whatever language the LLM naturally responds in via Cortex Complete; there is no explicit multilingual handling logic. |
+| **`ai-services/` directory** | Not named as such in the original doc, but implied by "AI reasoning lives in Cortex/backend services" | Exists but is minimal: two prompt template `.txt` files (`copilot_procedural.txt`, `validation_grounding.txt`) and one eval script (`grounding_test.py`). No standalone AI service layer beyond that — prompt building actually happens inline in `services/retrieval.py` / `services/validation.py`, not as a separate service module. |
+| **n8n orchestration** | Orchestration-only (ingestion triggers, retries, notifications, approvals, scheduling) — explicitly must not do AI reasoning | **Historically violated this rule.** A legacy n8n-driven ingestion pipeline (`internal_ingestion.py` + `automation/ingestion_workflow/`) existed in parallel with the real OWD compiler and independently wrote to a separate legacy table family (`knowledge_chunks`). This has just been **deleted** (see §7) — n8n is currently only wired to `escalation_workflow`, `maintenance_workflow`, and `versioning_workflow`, which is closer to the intended orchestration-only role. |
+| **Response Validation Layer (grounding/permission/citation/confidence gate)** | Mandatory pre-delivery gate, explicit pipeline stage | **Implemented** — `services/validation.py` (`ResponseValidationService`) exists and is wired into the copilot message endpoint, alongside `services/retrieval.py`, `services/workflow_state.py`, and `services/escalation.py`. This part of the vision was actually built close to spec. |
+| **Workflow State Tracking / Procedural Navigation** | Core differentiator — track which SOP/step employee is on | **Implemented** — `services/workflow_state.py` + `repositories/owd_repository.py` (read paths: `get_initial_state`, `get_steps_for_state`, `get_next_state_transition`) drive this. This part matches the vision. |
+| **Escalation Engine** | Routes low-confidence responses to a human, optional Jira integration | **Partially implemented.** `services/escalation.py` and `api/v1/escalations.py` exist. Jira integration is a known TODO/stub (matches the original doc's "optional" framing — this one is *not* a divergence, it was correctly scoped as optional and left unbuilt). |
+| **Auth/RBAC/JWT** | JWT auth, RBAC, department scoping, audit logging | **Implemented** — `middleware/auth_middleware.py`, `middleware/rbac_middleware.py`, `middleware/audit_logger.py`, real Snowflake-backed `SECURITY.users`/`roles`/`user_roles` tables. Matches the vision. Audit logging writes to a real `AUDIT_LOG` Snowflake table (mock fallback was just removed — see §7). |
+| **Frontend** | Next.js + TypeScript, Tailwind + shadcn/ui, chat/voice UI, admin UI, manager dashboards | **Implemented for chat/admin/dashboards; no voice UI** (matches the "voice not implemented" gap above). All frontend↔backend API wiring was checked and is correct — no broken links. |
+
+---
+
+## 3. Why the Pivot Happened (inferred from code, not documented anywhere)
+
+There is no written decision record for this pivot — it's inferred from the
+codebase itself. What the evidence shows:
+
+- The project moved from "ingest arbitrary enterprise documents with AI" to
+  "compile a strict internal markdown DSL deterministically" at some point.
+- This is a reasonable engineering decision for a hackathon/MVP timeline —
+  deterministic compilation is far easier to get *correct and demoable* in
+  limited time than a full AI-driven OCR/categorization/summarization
+  pipeline, and it produces auditable, structured output (exact states,
+  steps, transitions) rather than fuzzy AI-generated structure.
+- **The problem was not the pivot itself — it's that the old pipeline was
+  never deleted.** Both the old (legacy n8n → `knowledge_chunks` table
+  family) and new (OWD compiler → `KNOWLEDGE_STUDIO.*` tables) paths stayed
+  wired into the same upload endpoint, running on every single upload,
+  writing to different tables, and racing each other to set the same
+  `status` field. This produced exactly the kind of "it looks published but
+  the data doesn't match" symptoms that triggered the audit in §7.
+
+**Going forward:** if another pivot happens, delete the old path in the same
+change that introduces the new one. Do not leave two implementations wired
+into the same endpoint "just in case."
+
+---
+
+## 4. The OWD Markdown DSL (the actual core artifact of this system)
+
+This is the single most important thing for any AI assistant to understand
+before touching ingestion code, because it's not documented anywhere else
+and doesn't match the original vision doc at all.
+
+- Administrators upload a `.md` file.
+- The file must contain **directive blocks** recognized by the parser
+  suite in `backend/app/compiler/parsers/`: at minimum `state` blocks
+  (parsed by `state_parser.py`) and `step` blocks (parsed by
+  `step_parser.py`), plus decision, rule, evidence, and relationship
+  blocks handled by their respective parser modules.
+- There is YAML-style metadata front-matter (relationship_parser.py uses
+  `yaml` to parse Parent/Child/Related/Previous/Next SOP references from
+  it).
+- `ASTBuilder` (`compiler/parsers/ast_builder.py`) composes all sub-parser
+  output into a `UnifiedAST`.
+- `OWDParser` (`compiler/parser.py`) is the facade that orchestrates
+  `ASTBuilder`.
+- `compiler.py` walks the AST and generates **deterministic UUIDs** (via
+  `generate_deterministic_uuid`) for every workflow, version, state, and
+  step — not random UUIDs and not `item_xxx`/`ver_xxx` style string IDs
+  (those only ever appeared in unit test fixtures, never in real output).
+- `loader.py` transactionally `MERGE`s the compiled structures into
+  `KNOWLEDGE_STUDIO.workflows`, `workflow_versions`, `workflow_states`,
+  `workflow_steps`, `workflow_transitions`.
+
+**If you need the exact directive grammar** (precise bracket/block syntax),
+read `backend/app/compiler/parsers/*.py` directly — this document
+intentionally doesn't guess at exact syntax it can't verify with 100%
+confidence from a single pass.
+
+**Practical implication:** if you want to upload a real SOP today, it must
+be hand-authored (or generated) in this OWD markdown format. You cannot
+hand it a plain prose PDF/Word SOP and expect it to work — that gap (no
+OCR/prose-to-structure conversion) is real and currently unaddressed.
+
+---
+
+## 5. Actual Module/Feature Status (MVP scope from original §5.1, graded against reality)
+
+| Original MVP item | Status |
 |---|---|
-| **Phase 1: Project Architecture & Context** | Single source of truth locked in `PROJECT_CONTEXT.md` and `.agents/AGENTS.md`. |
-| **Phase 2: Auth & RBAC Security** | Implemented `security.py`, `auth_middleware.py`, `rbac_middleware.py`, `POST /login`, `POST /refresh`, `GET /me`. Verified with test suite. |
-| **Phase 3 & 4: Knowledge Studio & Pipeline** | Implemented `knowledge_studio.py`, `internal_ingestion.py`, Document AI/OCR fallback parser, windowed semantic chunker, `CortexClient` (embed & search index), `X-Internal-Token` n8n webhook authentication. Verified with test suite. |
-| **Phase 5: Copilot Retrieval & Validation** | Implemented `retrieval.py` (published & department-scoped chunk search), `validation.py` (mandatory pre-delivery gate with canonical fallback). Verified with test suite. |
-| **Phase 6: Workflow State Engine** | Implemented `workflow_state.py` backed by Snowflake `workflow_sessions` table (`get_active_session`, `start_session`, `mark_step_complete`, `pause_session`, `resume_session`, `abandon_session`, `get_next_action` deterministic state machine) and `POST /copilot/session/{id}/resume`. Verified with test suite. |
-| **Phase 7: Full Orchestration & Real Escalations** | Extended `POST /copilot/message` with intent detection, clarification short-circuit, active SOP step progression, real `escalation.py` triggering (`escalations` table + n8n webhook), `analytics_service.py` telemetry logging (`analytics_events`), and frontend connection in Next.js `CopilotPage`. Verified with 100% test pass rate. |
-| **Phase 8: Intelligence Hub Analytics** | Created Snowflake BI views (`V_ANALYTICS_*`) in `analytics/` folder, implemented manager-only `/api/v1/analytics/*` router (`sop-usage`, `faqs`, `confusing-procedures`, `escalations`, `department-adoption`, `confidence-trends`), and connected real data calls to Next.js `IntelligenceHubPage`. Verified with 100% test pass rate. |
+| Knowledge Studio — upload, ingestion pipeline | ✅ Built, but as the OWD compiler described in §4, not the OCR/AI-categorization pipeline originally described |
+| WorkMate Copilot — chat, intent detection, workflow state, grounded retrieval, escalation | ✅ Built and reasonably close to spec (retrieval, workflow state, validation, escalation are all real services) |
+| WorkMate Copilot — Voice, Multilingual | ❌ Not built at all |
+| Intelligence Hub — manager dashboards | ✅ Built — `api/v1/intelligence.py` exposes sop-usage, faqs, confusing-procedures, escalations, department-adoption, confidence-trends; frontend consumes all of them correctly |
+| Auth & RBAC | ✅ Built, real Snowflake-backed, JWT, audit logging |
+| Automation layer (n8n) | ⚠️ Built, but was doing more than orchestration (running a parallel legacy ingestion pipeline) until the recent cleanup. Now scoped down to escalation/maintenance/versioning workflows only. |
 
 ---
 
-## 6. Glossary & Key References
-- **SOP**: Standard Operating Procedure.
-- **Response Validation Layer**: Mandatory pre-delivery gate checking grounding, permissions, citations, confidence score.
-- **Workflow State Engine**: Deterministic state machine tracking employee progress through SOP steps (`workflow_sessions`).
-- **Cortex**: Snowflake AI platform (Cortex Search, Cortex Embed, Cortex Complete).
-- **Intelligence Hub**: Manager dashboard powered by Snowflake BI views (`analytics/` folder SQL).
+## 6. Technology Stack — Actual vs. Original
+
+Mostly matches the original table (§11 of `PROJECT_CONTEXT.md`) with these
+corrections:
+
+- **LLM/AI reasoning:** Real usage is via `backend/app/utils/cortex_client.py`
+  (used by `services/retrieval.py` and `api/v1/copilot.py`) — this is the
+  live, working Cortex integration. A second, now-deleted duplicate
+  (`integrations/cortex_client.py`) existed only for the legacy pipeline
+  and has been removed.
+- **Voice/TTS/Multilingual stack rows** (Whisper, ElevenLabs/OpenAI TTS):
+  accurately still "optional/future" per the original doc, but should now
+  be understood as **0% started**, not partially started.
+- **Deployment target** (Docker + Vercel + Render/Railway): not verified in
+  this pass — no deployment manifests were audited for correctness. Treat
+  as unverified.
+
+---
+
+## 7. Recent Architectural Audit & Fix Pass (institutional memory — read before touching backend/)
+
+A full forensic audit was performed on the codebase shortly before
+submission, followed by a direct fix pass. This section exists so nobody
+re-discovers or re-introduces these issues.
+
+### Root causes found and fixed
+1. **Silent fake-success on Snowflake write failure.** `compiler/loader.py`
+   used to catch any Snowflake insert exception and, if `APP_ENV=="dev"`,
+   silently write to an in-memory mock store and return `success=True`
+   anyway — meaning the API could report "published" while nothing was
+   actually persisted. **Fixed:** now always raises a real exception on
+   failure.
+2. **A full legacy parallel ingestion pipeline was still live.** A second
+   upload-adjacent flow (`api/v1/internal_ingestion.py`, triggered via an
+   n8n webhook after every real upload) wrote toward the old
+   `knowledge_chunks` table family — the exact thing the OWD migration was
+   supposed to replace. It depended on a whole separate `knowledge-engine/`
+   parser directory and a duplicate `CortexClient` implementation. **Fixed:**
+   this entire path — the router, the n8n workflow JSON, the
+   `knowledge-engine/` directory, the duplicate Cortex client, the dead
+   `admin.py` stub, and the callback endpoint that received its status
+   updates — was deleted.
+3. **Race condition on `workflow_versions.status`.** Because both pipelines
+   fired on every upload, the real compiler would set `status='published'`
+   synchronously, and the legacy n8n callback chain would later
+   asynchronously overwrite the same field with `'staged'`/`'parsed'`/etc.
+   This produced intermittent, timing-dependent "why does this sometimes
+   show published and sometimes not" symptoms. **Fixed** as a side effect
+   of removing the legacy pipeline (only one writer remains).
+4. **Pervasive mock-data fallback (`USE_MOCK_DB`).** Six files
+   (`config.py`, `knowledge_repository.py`, `user_repository.py`,
+   `conversation_repository.py`, `analytics_service.py`,
+   `audit_logger.py`) had branches that would silently substitute
+   in-memory mock data for real Snowflake reads/writes, either
+   unconditionally (`USE_MOCK_DB=True`, which was the **default** in
+   `config.py`) or as a silent fallback whenever a real Snowflake call
+   failed in `dev` environment. **Fixed:** all 25 mock/fallback branches
+   across those 6 files were removed. Every code path now either performs
+   the real Snowflake operation or raises a real error — nothing is
+   silently faked.
+5. **Snowflake connection schema mismatch.** `.env` had
+   `SNOWFLAKE_SCHEMA=PUBLIC` even though every query in the codebase is
+   fully-qualified against `KNOWLEDGE_STUDIO.*`. Changed default to
+   `KNOWLEDGE_STUDIO` for consistency. **Not independently verified**
+   that the schema and grants exist in the live Snowflake account — this
+   is the one item that needs a human (or an assistant with live Snowflake
+   access) to confirm.
+6. **Minor cleanup:** legacy `KNOWLEDGE_STAGE` stage name renamed to
+   `RAW_OWD_STAGE`; stray debug `print()` statements removed from two
+   parser files; a dead, never-called duplicate persistence method
+   (`owd_repository.py::save_compiled_workflow`) removed.
+
+### Consequence you must know about
+Because the mock user-login fallback was removed from `user_repository.py`,
+**real users must exist in Snowflake's `SECURITY.users` table** for login
+to work — there is a real seed script for this:
+`backend/scripts/seed_test_users.py` (does a genuine Snowflake `MERGE`, not
+a mock). Run it before assuming login is broken.
+
+### Verified clean (checked during the audit, no action needed)
+- All frontend↔backend API call sites match real registered routes exactly.
+- Snowflake connection layer (`core/database.py`) has a single, correct
+  connection implementation.
+- `compiler/parser.py` is a legitimate facade over the modular
+  `compiler/parsers/*` sub-parsers, not a duplicate implementation.
+- `backend/app/utils/cortex_client.py` is the one real, live Cortex client.
+
+### Known remaining debt (not yet cleaned up, lower priority)
+- `api/v1/knowledge_studio.py`'s `upload_knowledge` endpoint still contains
+  a large block of "FORENSIC INSPECTION" debug logging (filename, byte
+  count, SHA-256 hash, directive counts) left over from the original bug
+  investigation. Not harmful, just noisy — candidate for removal once the
+  system is stable.
+- No OCR/binary-document parsing exists despite `.pdf`/`.docx` being in the
+  allowed upload extensions — see §2 and §4. Either restrict the allowed
+  extensions to `.md`/`.txt` to match reality, or build real PDF/DOCX
+  support, but don't leave the mismatch as-is long term.
+
+---
+
+## 8. Pending Decisions (carried over from original doc, still unresolved)
+
+All six items from the original `PROJECT_CONTEXT.md` §25 remain genuinely
+unresolved — nothing in the recent audit touched these:
+
+1. Voice input (Whisper) / multilingual — MVP or phase 2? Given zero
+   implementation exists, this is effectively already phase 2 by default
+   unless someone actively decides otherwise.
+2. Text-to-Speech — same as above, zero implementation.
+3. Formal database schema documentation — still doesn't exist as a
+   standalone doc; the real schema must be reverse-engineered from
+   `backend/app/repositories/*.py` and `scripts/deploy_owd_schema.py` if
+   needed.
+4. API versioning/error-handling conventions — the API does use `/api/v1/`
+   prefixing in practice, but this was never written down as a decided
+   convention.
+5. Security specifics (encryption, secrets management, token expiry, PII
+   retention) — still undecided. Note: `.env` currently has real secrets
+   (Snowflake password, JWT secret) committed in plaintext — fine for a
+   hackathon repo kept private, but flag before any public repo push.
+6. Jira integration for escalation — still correctly scoped as optional,
+   still unbuilt.
+
+**New pending decision from this pass:**
+
+7. Should the upload endpoint's allowed extensions be narrowed to
+   `.md`/`.txt` to match what the compiler actually supports, or should
+   real PDF/DOCX parsing be built to match what's advertised? Currently
+   neither — it's a silent gap.
+
+---
+
+## 9. Instructions for Any AI Assistant Working on This Project
+
+- **Do not assume the original `PROJECT_CONTEXT.md` describes the current
+  system.** Use this document (§1–§7) as ground truth for what exists
+  today. Use the original only for understanding long-term product vision
+  and features that are legitimately still "future."
+- **Do not re-introduce a second ingestion path.** There is exactly one
+  upload → compile → persist path now (`knowledge_studio.py` →
+  `OWDCompilerPipeline` → `loader.py` → `KNOWLEDGE_STUDIO.*`). If a new
+  ingestion method is ever needed (e.g., real PDF/OCR support), it should
+  replace or extend this path, not run alongside it.
+- **Do not add mock-data fallbacks "for dev convenience."** That exact
+  pattern caused the majority of the bugs found in the recent audit. If
+  Snowflake is unreachable, the correct behavior is to raise a real error,
+  not silently substitute fake data.
+- **Before adding voice, multilingual, TTS, or Knowledge Graph features,**
+  confirm with the product owner whether these are actually in scope now —
+  per §8 these are still officially undecided, and none of the
+  groundwork for them exists yet (no audio handling, no translation layer,
+  no cross-document graph store).
+- **If you regenerate this document,** merge new source material into it
+  rather than hand-patching — same rule the original doc specified for
+  itself.
+
+---
+
+*This document reconciles the original product vision
+(`PROJECT_CONTEXT.md`) with the actual as-built system as of the most
+recent architectural audit and fix pass. Regenerate, don't hand-edit into
+drift, when major new source material (a real PRD, finalized DB schema, or
+a decision on §8's pending items) becomes available.*
+
