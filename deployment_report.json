@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-08-06T04:29:57.252897",
+  "total_workflows": 1,
+  "workflows_loaded": 1,
+  "workflows_skipped": 0,
+  "workflows_failed": 0,
+  "total_states": 6,
+  "total_steps": 9,
+  "total_rules": 2,
+  "total_execution_time_sec": 1.25,
+  "results": [
+    {
+      "file_path": "knowledge-engine/owd_repository/inbound/receive_shipment.md",
+      "title": "Inbound Shipment Receiving Procedure",
+      "workflow_code": "SOP_INB_001",
+      "states": 6,
+      "steps": 9,
+      "rules": 2,
+      "decisions": 0,
+      "warnings": 0,
+      "version": 1,
+      "hash": "a24f519f",
+      "status": "SUCCESS",
+      "reason": "",
+      "validation_errors": [],
+      "compilation_errors": [],
+      "snowflake_errors": [],
+      "elapsed_sec": 1.25
+    }
+  ]
+}

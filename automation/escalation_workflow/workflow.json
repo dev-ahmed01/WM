@@ -1,0 +1,77 @@
+{
+  "__AUDIT_NOTE__": "This workflow calls backend endpoints that do not exist in the current API surface. Needs product decision: build the missing endpoints, or rewrite/retire this workflow. See routes actually registered in backend/app/api/v1/*.py for what exists today. Missing endpoints: /api/v1/analytics/escalations/log, /api/v1/analytics/escalations/{id}/status.",
+  "name": "Copilot Low-Confidence Escalation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escalation-webhook",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "text": "Escalation Alert for Session {{$json.body.session_id || $json.session_id}}: {{$json.body.query || $json.query}}"
+      },
+      "name": "Notify Supervisor (Email/Slack)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [300, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "notice": "Jira integration currently disabled pending enterprise decision"
+      },
+      "name": "Jira Issue Creator (DISABLED/TODO)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [300, 400],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/analytics/escalations/log",
+        "options": {}
+      },
+      "name": "Log Escalation Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/analytics/escalations/{{$json.body.escalation_id || $json.escalation_id}}/status",
+        "options": {}
+      },
+      "name": "Poll Resolution Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          { "node": "Notify Supervisor (Email/Slack)", "type": "main", "index": 0 },
+          { "node": "Jira Issue Creator (DISABLED/TODO)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Notify Supervisor (Email/Slack)": { "main": [[{ "node": "Log Escalation Event", "type": "main", "index": 0 }]] },
+    "Log Escalation Event": { "main": [[{ "node": "Poll Resolution Status", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,26 @@
+# Environment variables & secrets
+.env
+*.env
+!.env.example
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Node dependencies & Next.js build outputs
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

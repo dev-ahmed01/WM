@@ -1,0 +1,79 @@
+{
+  "__AUDIT_NOTE__": "This workflow calls backend endpoints that do not exist in the current API surface. Needs product decision: build the missing endpoints, or rewrite/retire this workflow. See routes actually registered in backend/app/api/v1/*.py for what exists today. Missing endpoints: /api/v1/knowledge/versions/create, /api/v1/knowledge/versions/ingest, /api/v1/knowledge/versions/{id}/supersede, /api/v1/notifications/department.",
+  "name": "Knowledge Versioning Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "versioning-webhook",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/knowledge/versions/create",
+        "options": {}
+      },
+      "name": "Create Version Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [300, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/knowledge/versions/ingest",
+        "options": {}
+      },
+      "name": "Re-run Ingestion Steps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/knowledge/versions/{{$json.body.version_id || $json.version_id}}/supersede",
+        "options": {}
+      },
+      "name": "Mark Prior Version Superseded",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/notifications/department",
+        "options": {}
+      },
+      "name": "Notify Departments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Create Version Row", "type": "main", "index": 0 }]] },
+    "Create Version Row": { "main": [[{ "node": "Re-run Ingestion Steps", "type": "main", "index": 0 }]] },
+    "Re-run Ingestion Steps": { "main": [[{ "node": "Mark Prior Version Superseded", "type": "main", "index": 0 }]] },
+    "Mark Prior Version Superseded": { "main": [[{ "node": "Notify Departments", "type": "main", "index": 0 }]] }
+  }
+}

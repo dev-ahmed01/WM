@@ -1,0 +1,1 @@
+# System prompt template driving grounding verification and citation checking in Response Validation Layer.

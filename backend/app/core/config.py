@@ -1,0 +1,73 @@
+"""Pydantic Settings module reading environment configuration variables."""
+
+# Assumption: Sane defaults are provided for local development and unit testing when .env is absent.
+# env_file is resolved to an ABSOLUTE path anchored at this file's directory so that scripts
+# running from any working directory (e.g. repo root) always load backend/.env correctly.
+
+from functools import lru_cache
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Absolute path to backend/.env, resolved relative to this file — CWD-independent
+_ENV_FILE: Path = Path(__file__).resolve().parent.parent.parent / ".env"
+
+
+class Settings(BaseSettings):
+    # Application Info
+    PROJECT_TITLE: str = "WorkMate AI API"
+    PROJECT_VERSION: str = "1.0.0"
+    APP_ENV: str = "dev"
+    LOG_LEVEL: str = "INFO"
+    FRONTEND_ORIGIN: str = "http://localhost:3000"
+
+    # Snowflake Persistence & AI Services Connection Settings
+    SNOWFLAKE_ACCOUNT: str = "your_snowflake_account_placeholder"
+    SNOWFLAKE_USER: str = "your_snowflake_user_placeholder"
+    SNOWFLAKE_PASSWORD: str = "your_snowflake_password_placeholder"
+    SNOWFLAKE_WAREHOUSE: str = "COMPUTE_WH"
+    SNOWFLAKE_DATABASE: str = "WORKMATE_AI"
+    SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
+    SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
+    SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
+
+    # Copilot retrieval and generation. Production should keep the allowed
+    # status list restricted to published knowledge only.
+    CORTEX_SEARCH_SERVICE: str = "WORKMATE_AI.KNOWLEDGE_STUDIO.WORKMATE_KNOWLEDGE_SEARCH"
+    CORTEX_COMPLETE_MODEL: str = "mistral-large2"
+    CORTEX_SEARCH_ENABLED: bool = True
+    CORTEX_COMPLETE_ENABLED: bool = True
+    COPILOT_RETRIEVAL_LIMIT: int = 5
+    COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
+
+    # Auth & Security Credentials
+    JWT_SECRET: str = "test_super_secret_jwt_key_32_bytes_min"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_EXPIRE_DAYS: int = 7
+
+    # Internal Webhook & Service Security
+    INTERNAL_WEBHOOK_SECRET: str = "internal_secret_key_12345"
+
+    # Document Parsing AI Flag
+    USE_DOCUMENT_AI: bool = False
+
+    # Orchestration Settings
+    N8N_BASE_URL: str = "http://localhost:5678"
+    N8N_WEBHOOK_BASE_URL: str = "http://localhost:5678"
+
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Returns a singleton, cached instance of application settings."""
+    return Settings()
+
+
+# Cached settings instance export
+settings = get_settings()

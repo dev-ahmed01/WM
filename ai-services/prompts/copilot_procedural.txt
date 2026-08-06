@@ -1,0 +1,1 @@
+# System prompt template driving step-aware operational guidance in Snowflake Cortex Complete.

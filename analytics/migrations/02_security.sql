@@ -1,0 +1,31 @@
+-- 02_security.sql: Create SECURITY schema tables (departments, roles, users, user_roles)
+
+CREATE TABLE IF NOT EXISTS SECURITY.departments (
+    id VARCHAR(64) PRIMARY KEY,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
+);
+
+CREATE TABLE IF NOT EXISTS SECURITY.roles (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    permission_set VARIANT NOT NULL,
+    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
+);
+
+CREATE TABLE IF NOT EXISTS SECURITY.users (
+    id VARCHAR(64) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    hashed_password VARCHAR(255) NOT NULL,
+    department_id VARCHAR(64) NOT NULL REFERENCES SECURITY.departments(id),
+    full_name VARCHAR(255) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
+);
+
+CREATE TABLE IF NOT EXISTS SECURITY.user_roles (
+    user_id VARCHAR(64) NOT NULL REFERENCES SECURITY.users(id),
+    role_id VARCHAR(64) NOT NULL REFERENCES SECURITY.roles(id),
+    PRIMARY KEY (user_id, role_id)
+);
