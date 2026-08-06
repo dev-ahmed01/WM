@@ -22,6 +22,10 @@
 - The loader described its work as transactional while relying on Snowflake connector autocommit.
 - Compilation invoked Cortex summarization/entity extraction and wrote fabricated embedding/evaluation readiness metadata.
 - A legacy n8n callback could mutate the status of a version loaded by the current compiler path.
+- Dead repository methods from that legacy path could still insert random,
+  hard-coded `dept_ops` search rows if called by future code.
+- The deployment script could report `SUCCESS` after an in-memory SQLite
+  simulation and did not include the Cortex Search migration.
 - The upload UI used hard-coded departments that did not match the database.
 
 ## Corrected flow
@@ -36,6 +40,8 @@
 8. Execute all loader DML inside explicit `BEGIN`/`COMMIT`; roll back on any failure.
 9. Verify published status plus expected state and search-record counts before commit.
 10. Return success only after the published invariants pass.
+11. Deploy all migrations through `11_cortex_search_service.sql` against live
+    Snowflake and return `FAILED` when credentials or connectivity are absent.
 
 ## Deployment prerequisites
 

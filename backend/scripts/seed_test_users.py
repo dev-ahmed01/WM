@@ -18,7 +18,6 @@ DEFAULT_PASSWORD = "Test1234!"
 SEED_DEPARTMENTS = [
     {"id": "dept_admin", "code": "ADMIN", "name": "Executive Administration"},
     {"id": "dept_ops", "code": "OPS", "name": "Operations & Logistics"},
-    {"id": "dept_eng", "code": "ENG", "name": "Engineering & Tech"},
 ]
 
 SEED_ROLES = [
@@ -45,7 +44,9 @@ SEED_USERS = [
     {
         "id": "usr_emp001",
         "email": "employee@workmate.ai",
-        "department_id": "dept_eng",
+        # Keep the demo employee in a migration-backed department that owns
+        # seeded OWD content, so strict retrieval scoping can return guidance.
+        "department_id": "dept_ops",
         "role_id": "role_employee",
         "role_name": "employee",
     },
