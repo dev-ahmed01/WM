@@ -22,6 +22,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("owd_deployer")
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "analytics" / "migrations"
+# This migration is intentionally not in MIGRATION_FILES: deploy it separately
+# with a role holding the required Snowflake Cortex privileges.
+CORTEX_SEARCH_MIGRATION = "11_cortex_search_service.sql"
 MIGRATION_FILES = [
     "01_schemas.sql",
     "02_security.sql",
