@@ -35,7 +35,7 @@ MIGRATION_FILES = [
     "08_seed_data.sql",
     "09_owd_v1_1_tables.sql",
     "10_enterprise_document_layer.sql",
-    "12_runtime_alignment.sql",
+    "11_cortex_search_service.sql",
 ]
 
 

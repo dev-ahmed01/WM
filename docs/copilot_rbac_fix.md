@@ -118,10 +118,6 @@ returns only the caller's department and configured lifecycle statuses. Confirm
 that empty searches produce the grounded failure/escalation response and that
 each returned citation ID exists in the search response passed to the model.
 
-The relational deployment intentionally excludes the Cortex Search migration.
-Apply `11_cortex_search_service.sql` separately with a Cortex-privileged role;
-then run `SHOW CORTEX SEARCH SERVICES` and a scoped Search Preview query.
-
 ## Security note
 
 The uploaded archive contained real-looking credentials in `backend/.env` and
