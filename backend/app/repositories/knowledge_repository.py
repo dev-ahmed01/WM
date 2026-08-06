@@ -29,7 +29,7 @@ class KnowledgeRepository:
 
     @staticmethod
     def department_exists(department_id: str) -> bool:
-        query = "SELECT 1 FROM SECURITY.departments WHERE id = %s AND is_active = TRUE LIMIT 1"
+        query = "SELECT 1 FROM SECURITY.departments WHERE id = %s LIMIT 1"
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -40,7 +40,7 @@ class KnowledgeRepository:
 
     @staticmethod
     def list_departments() -> List[Dict[str, str]]:
-        query = "SELECT id, name FROM SECURITY.departments WHERE is_active = TRUE ORDER BY name"
+        query = "SELECT id, name FROM SECURITY.departments ORDER BY name"
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
