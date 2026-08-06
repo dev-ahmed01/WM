@@ -37,3 +37,4 @@ USE_DOCUMENT_AI=false # Enable native Snowflake Document AI for PDF parsing (fal
 # n8n Automation Engine Webhooks
 N8N_BASE_URL=http://localhost:5678 # Base URL for n8n orchestration instance
 N8N_WEBHOOK_BASE_URL=http://localhost:5678 # Webhook base URL for outgoing n8n triggers
+
