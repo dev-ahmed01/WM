@@ -31,7 +31,10 @@ SOP_3_STEPS = {
 # 1. Starting a session creates a workflow_sessions row at step 0
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.create")
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
-def test_dod_1_start_session_creates_row_at_step_0(mock_get_by_id, mock_create):
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.OWDRepository.get_initial_state")
+def test_dod_1_start_session_creates_row_at_step_0(mock_initial, mock_event, mock_get_by_id, mock_create):
+    mock_initial.return_value = {"id": "state_initial"}
     mock_create.return_value = "sess_dod6_001"
     mock_get_by_id.return_value = {
         "id": "sess_dod6_001",

@@ -1,5 +1,18 @@
 # Knowledge ingestion production fix
 
+## Audit summary
+
+| Area | Expected behaviour | Current implementation | Status | Required action |
+|---|---|---|---|---|
+| Upload boundary | UTF-8 OWD `.md`, 25 MB, validate before staging | Strict BOM-aware UTF-8 decode and parse/validation precede external writes | Verified | None |
+| Identity/versioning | Deterministic workflow ID and server-selected version | Parsed workflow code drives UUID and Snowflake version lookup; mismatches return 409 | Verified | Verify concurrent upload policy live |
+| Departments | Active Snowflake departments only | Protected list endpoint and active-row validation feed the upload UI | Verified | Seed production departments |
+| Staging | Unique safe path, no runtime DDL/overwrite/compression | Sanitized workflow/version/hash path, exact source basename, PUT then LIST | Verified | Provision stage and grants |
+| Compiler metadata | Deterministic and honest; no ingestion AI | Deterministic text metadata; embedding/vector not required; evaluation/confidence null | Corrected | Deploy schema-compatible values |
+| Loader | Explicit transaction and post-load invariants | BEGIN, all DML, invariant checks, COMMIT/ROLLBACK | Verified | Exercise against target Snowflake |
+| Legacy path | Callback/n8n ingestion removed | Callback route absent and 404 covered | Verified | None |
+| Upload UI | Database departments and exact success contract | Departments are loaded from API; only SUCCESS/PUBLISHED is shown as success | Corrected | Browser smoke test after deployment |
+
 ## Root causes
 
 - The API staged uploads before parsing and validation, then returned HTTP 200 even when the compiler reported failure.
@@ -40,3 +53,26 @@ npm run build --prefix frontend
 ```
 
 The ingestion tests cover admin authorization, Markdown-only enforcement, validation-before-staging, server-side version selection, publication success, and removal of the legacy callback.
+
+## Files changed in this correction set
+
+- `backend/app/api/v1/knowledge_studio.py`
+- `backend/app/services/ingestion.py`
+- `backend/app/compiler/pipeline.py`
+- `backend/app/compiler/compiler.py`
+- `backend/app/compiler/models.py`
+- `backend/app/compiler/loader.py`
+- `backend/app/repositories/knowledge_repository.py`
+- `backend/app/models/knowledge.py`
+- `frontend/components/upload/UploadDropzone.tsx`
+- focused ingestion/compiler/loader tests under `backend/tests/`
+
+## Remaining limitations and live verification
+
+The system intentionally does not ingest PDF, DOCX, TXT, OCR output, or
+arbitrary prose. It does not generate embeddings during compilation. Before
+production approval, provision `RAW_OWD_STAGE`, grant the backend role stage
+READ/WRITE and table DML privileges, seed active departments, upload two
+versions of a real OWD, and verify the stage object, deterministic IDs, version
+increment, published status, state/search counts, rollback behavior, and Cortex
+Search refresh in the target account.
