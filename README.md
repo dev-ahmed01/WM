@@ -1,48 +1,105 @@
 # WorkMate AI — Enterprise Operational Intelligence Platform
 
-WorkMate AI transforms static organizational knowledge (SOPs, manuals, policies) into dynamic operational intelligence using step-aware guidance, verified citations, and automated operational analytics.
+WorkMate AI turns organizational SOPs and policies into state-aware operational guidance with verified citations and analytics.
 
-## Tech Stack
-- **Backend:** FastAPI (Python 3.11+)
-- **Database & AI Engine:** Snowflake ONLY (Snowflake Stage, Document AI, Cortex Search, Cortex Embed, Cortex Complete)
-- **Frontend:** Next.js 14+ (React, TypeScript, Tailwind CSS, shadcn/ui)
-- **Orchestration:** n8n (Triggers, retries, and notifications only — no AI reasoning)
-- **Auth:** JWT via FastAPI Security + RBAC (Role and Department scoped)
+## Technology
 
----
+- **Backend:** FastAPI on Python 3.11+
+- **Data and AI:** Snowflake Stage, Cortex Search, and Cortex Complete
+- **Frontend:** Next.js, React, TypeScript, and Tailwind CSS
+- **Orchestration:** n8n for triggers, retries, approvals, and notifications only
+- **Security:** JWT authentication with role- and department-scoped access
 
-## Getting Started
+## Repository map
 
-### 1. Prerequisites
-- Docker & Docker Compose
+| Path | Responsibility |
+| --- | --- |
+| `backend/app/api` | Versioned FastAPI routes |
+| `backend/app/services` | Ingestion, retrieval, validation, workflow state, and analytics logic |
+| `backend/app/repositories` | Snowflake persistence boundaries |
+| `backend/app/compiler` | Deterministic OWD parser, validator, compiler, and loader |
+| `backend/tests` | Backend unit and orchestration regression tests |
+| `frontend/app` | Next.js pages and route groups |
+| `frontend/components` | Reusable UI, chat, dashboard, and upload components |
+| `analytics/migrations` | Ordered Snowflake schema and service migrations |
+| `automation` | n8n orchestration workflow definitions |
+| `ai-services` | Prompt assets and executable grounding evaluations |
+| `scripts` | Schema deployment, OWD loading, and verification CLIs |
+| `docs` | Architecture, focused remediation notes, and operational guides |
+
+Generated deployment reports belong in the ignored `logs/` directory. TypeScript build state, runtime environment files, caches, and dependency directories must not be committed.
+
+## Prerequisites
+
+- Docker with Docker Compose
 - Node.js 18+ and npm
-- Active Snowflake Account with Cortex enabled
+- Python 3.11+
+- A Snowflake account with the required database, stage, runtime-role, and Cortex privileges
 
-### 2. Environment Setup
-Copy the configuration template and set your Snowflake credentials:
+## Environment setup
+
+Create the ignored backend runtime file from the sanitized template:
+
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-### 3. Running Backend Locally
-Run via Docker Compose:
-```bash
-docker-compose up --build
-```
-Or directly using Python:
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-API Documentation will be available at http://localhost:8000/docs.
+Replace every placeholder in `backend/.env`. Use a least-privilege Snowflake runtime role; do not place real credentials in `.env.example` or any tracked document.
 
-### 4. Running Frontend Locally
+For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env.local` and set its public API base URL.
+
+## Run locally
+
+### Docker Compose
+
+```bash
+docker compose up --build
+```
+
+### Backend without Docker
+
+Run from the repository root so scripts and tests resolve their root-relative imports consistently:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+PYTHONPATH=backend uvicorn app.main:app --reload --port 8000
+```
+
+API documentation is available at <http://localhost:8000/docs>.
+
+### Frontend
+
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
-Access the application at http://localhost:3000.
+
+The frontend is available at <http://localhost:3000>.
+
+## Database setup and test users
+
+Deploy the Snowflake schema with the deployment CLI, then seed local test identities with the single canonical seed script:
+
+```bash
+PYTHONPATH=.:backend python scripts/deploy_owd_schema.py
+PYTHONPATH=.:backend python backend/scripts/seed_test_users.py
+```
+
+These commands access Snowflake using `backend/.env`. Review the SQL migrations and role grants before running them outside a development account.
+
+## Validation
+
+```bash
+PYTHONPATH=.:backend python -m pytest -q backend/tests
+cd frontend
+npm run lint
+npm run build
+```
+
+See [`docs/snowflake_runtime_runbook.md`](docs/snowflake_runtime_runbook.md) for core/Cortex
+deployment, grants, upload verification, direct Search checks, and the two-department acceptance
+matrix. The [`repository remediation plan`](docs/repository_remediation_plan.md) records the cleanup
+decisions and implementation status.

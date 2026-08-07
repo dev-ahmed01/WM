@@ -26,7 +26,8 @@ class AnalyticsService:
         payload_json = json.dumps(payload or {})
 
         query = """
-            INSERT INTO analytics_events (id, event_type, conversation_message_id, workflow_version_id, payload, created_at)
+            INSERT INTO INTELLIGENCE_HUB.analytics_events
+                (id, event_type, conversation_message_id, workflow_version_id, payload, created_at)
             SELECT %s, %s, %s, %s, PARSE_JSON(%s), %s
         """
         try:

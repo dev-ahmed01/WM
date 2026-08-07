@@ -1,20 +1,20 @@
 # Snowflake SQL Persistence layer for Escalations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from app.core.database import get_snowflake_connection
 from app.exceptions.custom_exceptions import DatabaseException
 
 class EscalationRepository:
-    """Handles CRUD operations on the Snowflake 'escalations' table."""
+    """Handles CRUD operations on WORKMATE_COPILOT.escalation_records."""
 
     @staticmethod
     def create(conversation_message_id: str, reason: str) -> str:
         escalation_id = f"esc_{uuid.uuid4().hex[:12]}"
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = """
-            INSERT INTO escalations (
+            INSERT INTO WORKMATE_COPILOT.escalation_records (
                 id, conversation_message_id, reason, status, created_at, updated_at
             ) VALUES (%s, %s, %s, %s, %s, %s)
         """
@@ -28,17 +28,17 @@ class EscalationRepository:
 
     @staticmethod
     def update_status(escalation_id: str, status: str, notified_at: Optional[datetime] = None) -> bool:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if notified_at:
             query = """
-                UPDATE escalations
+                UPDATE WORKMATE_COPILOT.escalation_records
                 SET status = %s, notified_at = %s, updated_at = %s
                 WHERE id = %s
             """
             params = (status, notified_at, now, escalation_id)
         else:
             query = """
-                UPDATE escalations
+                UPDATE WORKMATE_COPILOT.escalation_records
                 SET status = %s, updated_at = %s
                 WHERE id = %s
             """
@@ -54,9 +54,9 @@ class EscalationRepository:
 
     @staticmethod
     def resolve(escalation_id: str, resolution_note: str) -> bool:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = """
-            UPDATE escalations
+            UPDATE WORKMATE_COPILOT.escalation_records
             SET status = 'resolved', resolution_note = %s, resolved_at = %s, updated_at = %s
             WHERE id = %s
         """
@@ -72,7 +72,7 @@ class EscalationRepository:
     def list_all(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         query = """
             SELECT id, conversation_message_id, reason, status, notified_at, resolved_at, resolution_note, created_at, updated_at
-            FROM escalations
+            FROM WORKMATE_COPILOT.escalation_records
             ORDER BY created_at DESC
             LIMIT %s OFFSET %s
         """

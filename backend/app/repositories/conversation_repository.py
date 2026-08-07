@@ -15,10 +15,14 @@ class ConversationRepository:
     """Manages CRUD operations for 'conversations' and 'conversation_messages' tables in Snowflake."""
 
     @staticmethod
-    def get_or_create_session(user_id: str, session_id: Optional[str] = None) -> str:
+    def get_or_create_session(
+        user_id: str,
+        department_id: str,
+        session_id: Optional[str] = None,
+    ) -> str:
         now = datetime.now(timezone.utc)
         if session_id:
-            query = "SELECT id FROM conversations WHERE id = %s AND user_id = %s"
+            query = "SELECT id FROM WORKMATE_COPILOT.conversations WHERE id = %s AND user_id = %s"
             try:
                 with get_snowflake_connection() as conn:
                     with conn.cursor() as cur:
@@ -31,11 +35,15 @@ class ConversationRepository:
 
         new_id = f"conv_{uuid.uuid4().hex[:12]}"
 
-        insert_query = "INSERT INTO conversations (id, user_id, started_at) VALUES (%s, %s, %s)"
+        insert_query = """
+            INSERT INTO WORKMATE_COPILOT.conversations
+                (id, user_id, department_id, started_at)
+            VALUES (%s, %s, %s, %s)
+        """
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(insert_query, (new_id, user_id, now))
+                    cur.execute(insert_query, (new_id, user_id, department_id, now))
             return new_id
         except Exception as e:
             raise DatabaseException(message=f"Failed to create conversation session: {str(e)}")
@@ -44,7 +52,7 @@ class ConversationRepository:
     def load_history(conversation_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         query = """
             SELECT id, sender, message_text AS content, confidence_score, created_at
-            FROM conversation_messages
+            FROM WORKMATE_COPILOT.conversation_messages
             WHERE conversation_id = %s
             ORDER BY created_at DESC
             LIMIT %s
@@ -74,7 +82,7 @@ class ConversationRepository:
         now = datetime.now(timezone.utc)
 
         query = """
-            INSERT INTO conversation_messages (
+            INSERT INTO WORKMATE_COPILOT.conversation_messages (
                 id, conversation_id, sender, message_text, confidence_score, created_at
             ) VALUES (%s, %s, %s, %s, %s, %s)
         """
@@ -94,10 +102,10 @@ class ConversationRepository:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
                     query = """
-                        SELECT id, user_id, created_at, updated_at
-                        FROM conversations
+                        SELECT id, user_id, started_at AS created_at, ended_at AS updated_at
+                        FROM WORKMATE_COPILOT.conversations
                         WHERE user_id = %s
-                        ORDER BY updated_at DESC, created_at DESC
+                        ORDER BY started_at DESC
                         LIMIT %s OFFSET %s
                     """
                     cur.execute(query, (user_id, limit, offset))
@@ -105,24 +113,8 @@ class ConversationRepository:
                     if rows:
                         columns = [col[0].lower() for col in cur.description]
                         conversations = [dict(zip(columns, row)) for row in rows]
-        except Exception:
-            try:
-                with get_snowflake_connection() as conn:
-                    with conn.cursor() as cur:
-                        query = """
-                            SELECT id, user_id, started_at AS created_at, ended_at AS updated_at
-                            FROM conversations
-                            WHERE user_id = %s
-                            ORDER BY started_at DESC
-                            LIMIT %s OFFSET %s
-                        """
-                        cur.execute(query, (user_id, limit, offset))
-                        rows = cur.fetchall()
-                        if rows:
-                            columns = [col[0].lower() for col in cur.description]
-                            conversations = [dict(zip(columns, row)) for row in rows]
-            except Exception as exc:
-                raise DatabaseException(message=f"Failed to list user conversations: {str(exc)}") from exc
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to list user conversations: {str(exc)}") from exc
 
         results = []
         for conv in conversations:
@@ -158,7 +150,10 @@ class ConversationRepository:
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM conversations WHERE user_id = %s", (user_id,))
+                    cur.execute(
+                        "SELECT COUNT(*) FROM WORKMATE_COPILOT.conversations WHERE user_id = %s",
+                        (user_id,),
+                    )
                     row = cur.fetchone()
                     return row[0] if row else 0
         except Exception:

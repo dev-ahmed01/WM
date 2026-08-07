@@ -5,6 +5,7 @@ seeds initial SECURITY departments and roles, and runs INFORMATION_SCHEMA verifi
 Deployment fails closed when live Snowflake credentials are unavailable.
 """
 
+import argparse
 import sys
 import logging
 from pathlib import Path
@@ -22,8 +23,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("owd_deployer")
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "analytics" / "migrations"
-# This migration is intentionally not in MIGRATION_FILES: deploy it separately
-# with a role holding the required Snowflake Cortex privileges.
 CORTEX_SEARCH_MIGRATION = "11_cortex_search_service.sql"
 MIGRATION_FILES = [
     "01_schemas.sql",
@@ -35,8 +34,28 @@ MIGRATION_FILES = [
     "08_seed_data.sql",
     "09_owd_v1_1_tables.sql",
     "10_enterprise_document_layer.sql",
-    "11_cortex_search_service.sql",
+    "12_runtime_alignment.sql",
+    "13_runtime_prerequisites.sql",
 ]
+
+
+def ordered_migrations(include_cortex: bool = False) -> List[str]:
+    """Return core migrations, optionally inserting Cortex creation in numeric order."""
+    migrations = list(MIGRATION_FILES)
+    if include_cortex:
+        migrations.insert(migrations.index("12_runtime_alignment.sql"), CORTEX_SEARCH_MIGRATION)
+    return migrations
+
+
+def has_placeholder_credentials() -> bool:
+    """Reject the shipped template values before opening a Snowflake connection."""
+    values = (
+        getattr(settings, "SNOWFLAKE_ACCOUNT", ""),
+        getattr(settings, "SNOWFLAKE_USER", ""),
+        getattr(settings, "SNOWFLAKE_PASSWORD", ""),
+    )
+    markers = ("your_", "replace_with_", "placeholder")
+    return any(not value or any(marker in value.lower() for marker in markers) for value in values)
 
 
 def split_sql_statements(sql_text: str) -> List[str]:
@@ -68,9 +87,9 @@ def split_sql_statements(sql_text: str) -> List[str]:
     return statements
 
 
-def deploy_migrations() -> Dict[str, Any]:
+def deploy_migrations(include_cortex: bool = False) -> Dict[str, Any]:
     """Run ordered SQL migrations against live Snowflake, failing closed."""
-    if getattr(settings, "SNOWFLAKE_ACCOUNT", "") == "your_snowflake_account_placeholder":
+    if has_placeholder_credentials():
         return {
             "schemas_created": [], "tables_created": [], "views_created": [],
             "seed_data_inserted": [], "warnings": [],
@@ -93,7 +112,7 @@ def deploy_migrations() -> Dict[str, Any]:
     try:
         with get_snowflake_connection() as conn:
             with conn.cursor() as cur:
-                for mig_file in MIGRATION_FILES:
+                for mig_file in ordered_migrations(include_cortex=include_cortex):
                     file_path = MIGRATIONS_DIR / mig_file
                     if not file_path.exists():
                         msg = f"Migration file not found: {file_path}"
@@ -173,7 +192,14 @@ def deploy_migrations() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    result = deploy_migrations()
+    parser = argparse.ArgumentParser(description="Deploy WorkMate Snowflake migrations.")
+    parser.add_argument(
+        "--include-cortex",
+        action="store_true",
+        help="Create the Cortex Search service; requires a separately privileged deployment role.",
+    )
+    args = parser.parse_args()
+    result = deploy_migrations(include_cortex=args.include_cortex)
     print("\n" + "=" * 80)
     print("OWD SNOWFLAKE DATABASE DEPLOYMENT REPORT")
     print("=" * 80)
