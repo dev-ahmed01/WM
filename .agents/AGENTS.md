@@ -1,6 +1,6 @@
 # WorkMate AI — Project Architecture & Rules (FROZEN CONTEXT)
 
-All AI agents working on this codebase MUST strictly adhere to the single source of truth defined in [PROJECT_CONTEXT.md](file:///d:/workmate-ai/workmate-ai/PROJECT_CONTEXT.md). 
+All AI agents working on this codebase MUST strictly adhere to the single source of truth defined in [PROJECT_CONTEXT_V2.md](../PROJECT_CONTEXT_V2.md).
 
 ## Non-Negotiable Core Principles & Architecture Rules
 
