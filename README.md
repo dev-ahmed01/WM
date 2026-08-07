@@ -99,7 +99,4 @@ npm run lint
 npm run build
 ```
 
-See [`docs/snowflake_runtime_runbook.md`](docs/snowflake_runtime_runbook.md) for core/Cortex
-deployment, grants, upload verification, direct Search checks, and the two-department acceptance
-matrix. The [`repository remediation plan`](docs/repository_remediation_plan.md) records the cleanup
-decisions and implementation status.
+See [`docs/repository_remediation_plan.md`](docs/repository_remediation_plan.md) for the audited cleanup target and the separate ingestion/Copilot restoration assignment.

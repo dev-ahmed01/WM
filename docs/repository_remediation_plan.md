@@ -175,16 +175,6 @@ still pass; tracked count is 163/162. Merge and deploy before Person 2 begins.
 **Effort:** approximately three person-days. **Scope:** runtime functionality and its tests/runbook.
 Start from Person 1's merged commit; do not reintroduce reports, credentials, or duplicate scripts.
 
-### Implementation status
-
-Repository-side Person 2 work is complete: core deployment now includes runtime alignment and
-stage/side-effect prerequisites; Cortex creation is an explicit privileged option; persistence SQL
-uses the schemas created by migrations; conversations persist the user's department; and
-escalation or analytics failures no longer suppress the canonical fallback. The live deployment,
-role grants, upload smoke test, Search refresh, model probe, and two-department matrix remain
-environment-owner steps because this repository contains no live credentials. Follow
-[`snowflake_runtime_runbook.md`](snowflake_runtime_runbook.md) against the target account.
-
 ### 1. Reproduce each boundary independently (quarter day)
 
 Capture the browser request ID, URL, response status, structured `error_code`, and matching backend
