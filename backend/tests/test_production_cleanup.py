@@ -26,8 +26,17 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
     assert metadata.cortex_search_metadata == {}
 
 
-def test_deployment_includes_cortex_search_and_fails_closed(monkeypatch):
-    assert deploy_owd_schema.MIGRATION_FILES[-1] == "11_cortex_search_service.sql"
+def test_deployment_orders_runtime_prerequisites_and_separates_cortex(monkeypatch):
+    assert deploy_owd_schema.MIGRATION_FILES[-2:] == [
+        "12_runtime_alignment.sql",
+        "13_runtime_prerequisites.sql",
+    ]
+    assert "11_cortex_search_service.sql" not in deploy_owd_schema.ordered_migrations()
+    assert deploy_owd_schema.ordered_migrations(include_cortex=True)[-3:] == [
+        "11_cortex_search_service.sql",
+        "12_runtime_alignment.sql",
+        "13_runtime_prerequisites.sql",
+    ]
     monkeypatch.setattr(
         deploy_owd_schema.settings,
         "SNOWFLAKE_ACCOUNT",
@@ -39,6 +48,14 @@ def test_deployment_includes_cortex_search_and_fails_closed(monkeypatch):
     assert report["status"] == "FAILED"
     assert report["failed_statements"]
     assert report["schemas_created"] == []
+
+
+def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_ACCOUNT", "your_snowflake_account")
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_USER", "your_snowflake_user")
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_PASSWORD", "replace_with_a_local_secret")
+
+    assert deploy_owd_schema.has_placeholder_credentials() is True
 
 
 def test_deployment_cli_returns_failure_for_placeholder_credentials():

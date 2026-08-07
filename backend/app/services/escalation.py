@@ -1,11 +1,14 @@
 # Escalation Service for low-confidence Copilot responses
 
 import httpx
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
 from app.repositories.escalation_repository import EscalationRepository
-from app.exceptions.custom_exceptions import ExternalServiceException, NotFoundException
+from app.exceptions.custom_exceptions import NotFoundException
+
+logger = logging.getLogger("workmate.escalation_service")
 
 class EscalationService:
     """Manages escalation lifecycle and triggers n8n notification webhooks."""
@@ -29,7 +32,7 @@ class EscalationService:
             "escalation_id": escalation_id,
             "conversation_message_id": conversation_message_id,
             "reason": reason,
-            "triggered_at": datetime.utcnow().isoformat()
+            "triggered_at": datetime.now(timezone.utc).isoformat()
         }
 
         try:
@@ -39,7 +42,7 @@ class EscalationService:
                     self.mark_notified(escalation_id)
         except Exception as exc:
             # Log error without failing escalation database creation
-            print(f"[WARNING] n8n Escalation Webhook notification failed: {str(exc)}")
+            logger.warning("n8n escalation webhook notification failed: %s", exc)
 
         return escalation_id
 
@@ -48,7 +51,7 @@ class EscalationService:
         success = self.repository.update_status(
             escalation_id=escalation_id,
             status="notified",
-            notified_at=datetime.utcnow()
+            notified_at=datetime.now(timezone.utc)
         )
         if not success:
             raise NotFoundException(message=f"Escalation {escalation_id} not found.")
