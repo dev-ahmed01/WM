@@ -1,5 +1,12 @@
 # PROJECT_CONTEXT_V2.md — WorkMate AI
 
+> **Architecture decision (2026-08-09):** Snowflake is now the durable database
+> and stage only. Cortex Search and Cortex Complete remain optional compatibility
+> adapters but are disabled by default. The baseline uses department-scoped SQL
+> retrieval and grounded extractive responses. Optional self-hosted providers are
+> described in `docs/cortex_replacement_options.md`. This decision supersedes
+> older statements below that require Cortex for retrieval or generation.
+
 **Purpose of this document:** The original `PROJECT_CONTEXT.md` describes the
 **intended architecture** from the initial product/vision doc. It was written
 before implementation and was never updated as the team actually built the
@@ -42,7 +49,7 @@ In practice:
   validates it, compiles it into a relational workflow graph (states, steps,
   transitions, rules), and loads it into Snowflake.
 - Employees converse with a Copilot that retrieves from that compiled
-  workflow graph (via Cortex) and tracks which step/state the employee is
+  workflow graph (scoped SQL by default, or an optional search provider) and tracks which step/state the employee is
   currently on.
 - Managers see analytics dashboards sourced from conversation + workflow
   data.
@@ -318,4 +325,3 @@ unresolved — nothing in the recent audit touched these:
 recent architectural audit and fix pass. Regenerate, don't hand-edit into
 drift, when major new source material (a real PRD, finalized DB schema, or
 a decision on §8's pending items) becomes available.*
-

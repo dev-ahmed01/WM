@@ -34,10 +34,22 @@ class Settings(BaseSettings):
     # status list restricted to published knowledge only.
     CORTEX_SEARCH_SERVICE: str = "WORKMATE_AI.KNOWLEDGE_STUDIO.WORKMATE_KNOWLEDGE_SEARCH"
     CORTEX_COMPLETE_MODEL: str = "mistral-large2"
-    CORTEX_SEARCH_ENABLED: bool = True
-    CORTEX_COMPLETE_ENABLED: bool = True
+    # Cortex is opt-in. By default Snowflake is persistence only; retrieval
+    # uses scoped SQL and answers use the grounded extractive fallback.
+    CORTEX_SEARCH_ENABLED: bool = False
+    CORTEX_COMPLETE_ENABLED: bool = False
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
+
+    # Free/self-hosted AI provider. Ollama is attempted first and every failure
+    # safely falls back to scoped SQL retrieval or an extractive response.
+    LOCAL_AI_ENABLED: bool = True
+    LOCAL_AI_BASE_URL: str = "http://127.0.0.1:11434"
+    LOCAL_CHAT_MODEL: str = "qwen2.5:3b"
+    LOCAL_EMBEDDING_MODEL: str = "nomic-embed-text"
+    LOCAL_AI_TIMEOUT_SECONDS: float = 30.0
+    LOCAL_AI_CANDIDATE_LIMIT: int = 100
+    LOCAL_AI_MIN_SIMILARITY: float = 0.35
 
     # Auth & Security Credentials
     JWT_SECRET: str = "test_super_secret_jwt_key_32_bytes_min"

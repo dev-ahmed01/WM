@@ -1,6 +1,6 @@
 """Unit tests for FastAPI entry point and health check endpoint."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -26,3 +26,14 @@ def test_health_check_unreachable_graceful(mock_ping):
     data = response.json()
     assert data["status"] == "degraded"
     assert data["database"] == "unreachable"
+
+
+@patch("app.main.LocalAIClient.health", new_callable=AsyncMock)
+def test_ai_health_reports_local_provider(mock_health):
+    mock_health.return_value = {"enabled": True, "reachable": True, "models": ["qwen2.5:3b"]}
+
+    response = client.get("/health/ai")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["provider"] == "ollama"
