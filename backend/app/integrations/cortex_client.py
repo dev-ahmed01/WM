@@ -1,7 +1,7 @@
-"""Snowflake Cortex Client Integration.
+"""Copilot retrieval and generation gateway.
 
-Centralized AI Gateway interface for Snowflake Cortex Search, Cortex Embed,
-Cortex Summarize, Cortex Extract Answer, and Cortex Complete LLM response APIs.
+Local Ollama is preferred, Cortex is an opt-in compatibility path, and scoped
+Snowflake SQL plus extractive generation are mandatory fallbacks.
 """
 
 import json
@@ -11,13 +11,14 @@ from typing import Dict, Any, List, Optional
 from app.core.database import get_snowflake_connection
 from app.core.config import settings
 from app.exceptions import WorkMateException
+from app.integrations.local_ai_client import LocalAIClient
 
 logger = logging.getLogger("cortex_client")
 cortex_logger = logging.getLogger("ingestion_jobs")
 
 
 class CortexClient:
-    """Unified AI Gateway for Snowflake Cortex LLM and Vector Search functions."""
+    """Compatibility gateway preserving the existing public API during provider migration."""
 
     @staticmethod
     async def detect_intent(message: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -36,6 +37,16 @@ class CortexClient:
             return []
 
         effective_limit = max(1, min(limit, settings.COPILOT_RETRIEVAL_LIMIT, 20))
+        if settings.LOCAL_AI_ENABLED:
+            try:
+                results = await CortexClient._search_local_embeddings(
+                    query, department_id, effective_limit
+                )
+                if results:
+                    return results
+            except Exception as exc:
+                logger.warning("Local semantic search unavailable; continuing safely: %s", exc)
+
         if settings.CORTEX_SEARCH_ENABLED:
             try:
                 results = CortexClient._search_cortex_service(query, department_id, effective_limit)
@@ -45,6 +56,62 @@ class CortexClient:
                 logger.warning("Cortex Search service unavailable; using scoped SQL fallback: %s", exc)
 
         return CortexClient._search_sql_fallback(query, department_id, effective_limit)
+
+    @staticmethod
+    async def _search_local_embeddings(
+        query: str, department_id: str, limit: int
+    ) -> List[Dict[str, Any]]:
+        """Rank authorized Snowflake rows with embeddings computed by local Ollama."""
+        candidates = CortexClient._load_semantic_candidates(department_id)
+        if not candidates:
+            return []
+        texts = [query.strip(), *[str(item.get("content", "")) for item in candidates]]
+        embeddings = await LocalAIClient.embed(texts)
+        query_embedding = embeddings[0]
+        ranked: List[Dict[str, Any]] = []
+        for candidate, vector in zip(candidates, embeddings[1:]):
+            score = LocalAIClient.cosine_similarity(query_embedding, vector)
+            if score >= settings.LOCAL_AI_MIN_SIMILARITY:
+                ranked.append({**candidate, "score": round(score, 6)})
+        ranked.sort(key=lambda item: item["score"], reverse=True)
+        return ranked[:limit]
+
+    @staticmethod
+    def _load_semantic_candidates(department_id: str) -> List[Dict[str, Any]]:
+        """Load a bounded, pre-authorized candidate set from Snowflake."""
+        statuses = CortexClient._allowed_statuses()
+        placeholders = ", ".join(["%s"] * len(statuses))
+        sql = f"""
+            SELECT sm.id AS chunk_id,
+                   w.id AS document_id,
+                   w.title AS document_title,
+                   wv.version_number,
+                   s.id AS state_id,
+                   s.ordinal_index + 1 AS step_number,
+                   s.title AS step_title,
+                   sm.search_content AS content,
+                   sm.department_id,
+                   LOWER(wv.status) AS status
+            FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata sm
+            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions wv
+              ON sm.workflow_version_id = wv.id
+            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflows w
+              ON wv.workflow_id = w.id
+            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_states s
+              ON sm.state_id = s.id
+            WHERE LOWER(wv.status) IN ({placeholders})
+              AND LOWER(sm.status) = 'published'
+              AND sm.department_id = %s
+            ORDER BY wv.version_number DESC, s.ordinal_index ASC
+            LIMIT %s
+        """
+        params: List[Any] = [*statuses, department_id, settings.LOCAL_AI_CANDIDATE_LIMIT]
+        with get_snowflake_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                columns = [column[0].lower() for column in cur.description]
+                return [dict(zip(columns, row)) for row in rows]
 
     @staticmethod
     def _search_cortex_service(query: str, department_id: str, limit: int) -> List[Dict[str, Any]]:
@@ -147,7 +214,7 @@ class CortexClient:
 
     @staticmethod
     async def generate_response(prompt_context: Dict[str, Any]) -> str:
-        """Generate a response from retrieved evidence using Snowflake AI_COMPLETE."""
+        """Generate from verified evidence locally, with Cortex/extractive fallbacks."""
         chunks = prompt_context.get("retrieved_chunks", [])
         if not chunks:
             return "No verified knowledge document was found matching your request for your department."
@@ -180,6 +247,12 @@ VERIFIED SOURCES:
             query=str(prompt_context.get("query", ""))[:2000],
             sources="\n\n".join(context_sections),
         )
+
+        if settings.LOCAL_AI_ENABLED:
+            try:
+                return await LocalAIClient.generate(prompt)
+            except Exception as exc:
+                logger.warning("Local generation unavailable; continuing safely: %s", exc)
 
         if settings.CORTEX_COMPLETE_ENABLED:
             try:

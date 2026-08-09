@@ -188,13 +188,18 @@ class TestOWDIngestionPipeline(unittest.TestCase):
             }
         ]
 
-        write_report_files(results, total_elapsed_sec=1.25, output_dir=self.test_root)
+        report_dir = self.test_root / "logs"
+        simulated_repo_root = self.test_root / "repo-root"
+        with patch("scripts.load_owd.ROOT_DIR", simulated_repo_root):
+            write_report_files(results, total_elapsed_sec=1.25, output_dir=report_dir)
 
-        json_file = self.test_root / "deployment_report.json"
-        md_file = self.test_root / "deployment_report.md"
+        json_file = report_dir / "deployment_report.json"
+        md_file = report_dir / "deployment_report.md"
 
         self.assertTrue(json_file.exists())
         self.assertTrue(md_file.exists())
+        self.assertFalse((simulated_repo_root / "deployment_report.json").exists())
+        self.assertFalse((simulated_repo_root / "deployment_report.md").exists())
 
         report_json = json.loads(json_file.read_text(encoding="utf-8"))
         self.assertEqual(report_json["total_workflows"], 1)

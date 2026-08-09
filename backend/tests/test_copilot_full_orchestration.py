@@ -11,6 +11,7 @@ from app.core.security import create_access_token
 from app.models.workflow_session import WorkflowSession
 from app.services.retrieval import RetrievalService
 from app.integrations.cortex_client import CortexClient
+from app.services.validation import CANONICAL_FALLBACK
 
 app = FastAPI()
 app.include_router(copilot_router, prefix="/api/v1")
@@ -105,6 +106,48 @@ def test_copilot_clarification_short_circuit(
     assert "specify which SOP" in data["answer"]
     assert data["confidence_score"] == 0.50
     assert data["requires_escalation"] is False
+
+
+@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
+@patch.object(CortexClient, "generate_response", new_callable=AsyncMock)
+@patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
+@patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
+@patch("app.repositories.conversation_repository.ConversationRepository.get_history")
+@patch("app.services.workflow_state.WorkflowStateService.get_active_session")
+@patch("app.api.v1.copilot.EscalationService.escalate", new_callable=AsyncMock)
+@patch("app.api.v1.copilot.AnalyticsService.record_event")
+def test_grounded_fallback_survives_escalation_and_analytics_failures(
+    mock_record_event,
+    mock_escalate,
+    mock_get_active_session,
+    mock_get_history,
+    mock_persist,
+    mock_session,
+    mock_generate,
+    mock_retrieve,
+    mock_detect_intent,
+):
+    mock_session.return_value = "conv_fallback_001"
+    mock_persist.return_value = "msg_fallback_001"
+    mock_get_history.return_value = []
+    mock_get_active_session.return_value = None
+    mock_detect_intent.return_value = {"needs_clarification": False}
+    mock_retrieve.return_value = []
+    mock_generate.return_value = "No knowledge found."
+    mock_escalate.side_effect = RuntimeError("missing escalation grant")
+    mock_record_event.side_effect = RuntimeError("analytics unavailable")
+
+    response = client.post(
+        "/api/v1/copilot/message",
+        headers={"Authorization": f"Bearer {EMP_ENG_TOKEN}"},
+        json={"message": "How do I perform an unknown procedure?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == CANONICAL_FALLBACK
+    assert response.json()["requires_escalation"] is True
+    mock_escalate.assert_awaited_once()
 
 
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")

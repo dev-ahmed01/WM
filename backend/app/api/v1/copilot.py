@@ -77,6 +77,7 @@ async def copilot_message(
     # 1. Session Resolution & Persist User Message
     conversation_id = ConversationRepository.get_or_create_session(
         user_id=user_id,
+        department_id=department_id,
         session_id=payload.conversation_id,
     )
     ConversationRepository.persist_message(
@@ -96,11 +97,14 @@ async def copilot_message(
             content=clarification_text,
             confidence_score=0.50,
         )
-        AnalyticsService.record_event(
-            event_type="copilot.clarification",
-            conversation_message_id=msg_id,
-            payload={"user_id": user_id, "query": payload.message},
-        )
+        try:
+            AnalyticsService.record_event(
+                event_type="copilot.clarification",
+                conversation_message_id=msg_id,
+                payload={"user_id": user_id, "query": payload.message},
+            )
+        except Exception:
+            copilot_logger.exception("Clarification telemetry write failed")
         return CopilotResponse(
             conversation_id=conversation_id,
             message_id=msg_id,
@@ -156,23 +160,31 @@ async def copilot_message(
 
     if requires_escalation:
         escalation_service = EscalationService()
-        await escalation_service.escalate(
-            conversation_message_id=msg_id,
-            reason=f"Low confidence ({validated.confidence_score}) or ungrounded response",
-        )
+        try:
+            await escalation_service.escalate(
+                conversation_message_id=msg_id,
+                reason=f"Low confidence ({validated.confidence_score}) or ungrounded response",
+            )
+        except Exception:
+            # Escalation is an auditable side effect, but failure must not suppress
+            # the mandatory grounded fallback response.
+            copilot_logger.exception("Escalation persistence or notification failed")
 
     # 8. Record Telemetry Event
-    AnalyticsService.record_event(
-        event_type="copilot.turn",
-        conversation_message_id=msg_id,
-        payload={
-            "user_id": user_id,
-            "department_id": department_id,
-            "confidence_score": validated.confidence_score,
-            "requires_escalation": requires_escalation,
-            "workflow_session_id": active_session.id if active_session else None,
-        },
-    )
+    try:
+        AnalyticsService.record_event(
+            event_type="copilot.turn",
+            conversation_message_id=msg_id,
+            payload={
+                "user_id": user_id,
+                "department_id": department_id,
+                "confidence_score": validated.confidence_score,
+                "requires_escalation": requires_escalation,
+                "workflow_session_id": active_session.id if active_session else None,
+            },
+        )
+    except Exception:
+        copilot_logger.exception("Copilot telemetry write failed")
 
     # 9. Return CopilotResponse matching frontend contract
     return CopilotResponse(

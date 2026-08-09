@@ -21,6 +21,8 @@ def _connection_with_cursor(cursor):
 
 @pytest.mark.asyncio
 async def test_search_preview_enforces_department_and_status_filters(monkeypatch):
+    monkeypatch.setattr("app.integrations.cortex_client.settings.LOCAL_AI_ENABLED", False)
+    monkeypatch.setattr("app.integrations.cortex_client.settings.CORTEX_SEARCH_ENABLED", True)
     cursor = MagicMock()
     cursor.fetchone.return_value = (
         json.dumps(
@@ -54,6 +56,8 @@ async def test_search_preview_enforces_department_and_status_filters(monkeypatch
 
 @pytest.mark.asyncio
 async def test_generate_response_calls_ai_complete(monkeypatch):
+    monkeypatch.setattr("app.integrations.cortex_client.settings.LOCAL_AI_ENABLED", False)
+    monkeypatch.setattr("app.integrations.cortex_client.settings.CORTEX_COMPLETE_ENABLED", True)
     cursor = MagicMock()
     cursor.fetchone.return_value = ("Stop unloading and notify the inbound supervisor.",)
     monkeypatch.setattr("app.integrations.cortex_client.get_snowflake_connection", _connection_with_cursor(cursor))
@@ -78,6 +82,7 @@ async def test_generate_response_calls_ai_complete(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_arbitrary_department_fallback(monkeypatch):
+    monkeypatch.setattr("app.integrations.cortex_client.settings.LOCAL_AI_ENABLED", False)
     monkeypatch.setattr("app.integrations.cortex_client.settings.CORTEX_SEARCH_ENABLED", False)
     cursor = MagicMock()
     cursor.fetchall.return_value = []

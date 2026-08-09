@@ -1,6 +1,6 @@
 """Unit tests for Pydantic settings configuration and caching."""
 
-from app.core.config import get_settings, settings
+from app.core.config import Settings, get_settings, settings
 
 
 def test_get_settings_cached_instance():
@@ -25,3 +25,11 @@ def test_settings_fields_present():
     assert hasattr(settings, "FRONTEND_ORIGIN")
     assert hasattr(settings, "APP_ENV")
     assert hasattr(settings, "LOG_LEVEL")
+
+
+def test_cortex_is_opt_in_by_default():
+    defaults = Settings(_env_file=None)
+
+    assert defaults.CORTEX_SEARCH_ENABLED is False
+    assert defaults.CORTEX_COMPLETE_ENABLED is False
+    assert defaults.LOCAL_AI_ENABLED is True
