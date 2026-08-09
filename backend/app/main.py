@@ -16,6 +16,7 @@ from app.core.database import ping_snowflake_connection
 from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
+from app.integrations.ai_gateway import AIGateway
 
 # Initialize structured logging subsystem
 setup_logging()
@@ -120,4 +121,26 @@ async def health_check() -> Dict[str, Any]:
         "status": "ok" if db_connected else "degraded",
         "database": "connected" if db_connected else "unreachable",
         "version": settings.PROJECT_VERSION,
+    }
+
+
+@app.get("/health/ai", tags=["Health"])
+async def ai_health_check() -> Dict[str, Any]:
+    """Report local provider readiness without contacting any managed AI service."""
+    local = await AIGateway.health()
+    provider_ready = (
+        not local["enabled"]
+        or (
+            local["reachable"]
+            and local["chat_ready"]
+            and local["embedding_ready"]
+        )
+    )
+    return {
+        "status": "ok" if provider_ready else "degraded",
+        "provider": "ollama",
+        "local": local,
+        "chat_model": settings.LOCAL_CHAT_MODEL,
+        "embedding_model": settings.LOCAL_EMBEDDING_MODEL,
+        "fallback_ready": True,
     }

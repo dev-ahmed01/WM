@@ -10,7 +10,8 @@ from app.core.security import create_access_token
 from app.models.workflow_session import WorkflowSession
 from app.services.retrieval import RetrievalService
 from app.services.validation import CANONICAL_FALLBACK
-from app.integrations.cortex_client import CortexClient
+from app.integrations.ai_gateway import AIGateway
+from app.integrations.ai_provider import GeneratedAnswer
 
 app = FastAPI()
 app.include_router(copilot_router, prefix="/api/v1")
@@ -21,9 +22,9 @@ EMP_TOKEN = create_access_token(user_id="usr_emp001", role="employee", departmen
 
 
 # 1. Full round trip returns a grounded, cited response
-@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
 @patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
-@patch.object(CortexClient, "generate_response", new_callable=AsyncMock)
+@patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -44,13 +45,14 @@ def test_dod7_1_full_roundtrip_grounded_cited_response(
             "document_id": "doc_eng_101",
             "document_title": "Emergency Valve Isolation SOP",
             "version_number": 2,
+            "step_number": 1,
             "department_id": "dept_eng",
             "status": "PUBLISHED",
             "content": "Turn handwheel counterclockwise 5 full rotations.",
             "score": 0.95,
         }
     ]
-    mock_generate.return_value = "Turn the handwheel counterclockwise 5 full rotations."
+    mock_generate.return_value = GeneratedAnswer("Turn the handwheel counterclockwise 5 full rotations.", ["chk_eng_101"], "test")
 
     res = client.post(
         "/api/v1/copilot/message",
@@ -68,9 +70,9 @@ def test_dod7_1_full_roundtrip_grounded_cited_response(
 
 
 # 2. Continuing an active workflow correctly shows SOP step indicator fields
-@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
 @patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
-@patch.object(CortexClient, "generate_response", new_callable=AsyncMock)
+@patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -104,13 +106,14 @@ def test_dod7_2_active_workflow_shows_sop_step_indicator(
             "document_id": "d1",
             "document_title": "SOP Title",
             "version_number": 1,
+            "step_number": 1,
             "department_id": "dept_eng",
             "status": "PUBLISHED",
             "content": "Step 1 content",
             "score": 0.90,
         }
     ]
-    mock_generate.return_value = "Step 1 guidance text."
+    mock_generate.return_value = GeneratedAnswer("Step 1 content guidance.", ["c1"], "test")
 
     res = client.post(
         "/api/v1/copilot/message",
@@ -126,7 +129,7 @@ def test_dod7_2_active_workflow_shows_sop_step_indicator(
 
 
 # 3. Deliberately vague message triggers clarifying question, not a guess
-@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -152,13 +155,13 @@ def test_dod7_3_vague_message_triggers_clarifying_question(
     data = res.json()
     assert "specify which SOP" in data["answer"]
     assert data["requires_escalation"] is False
-    assert data["is_grounded"] is True
+    assert data["is_grounded"] is False
 
 
 # 4. Forcing low-confidence case shows escalation banner and creates an escalations row
-@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
 @patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
-@patch.object(CortexClient, "generate_response", new_callable=AsyncMock)
+@patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -175,7 +178,7 @@ def test_dod7_4_low_confidence_forces_escalation_banner_and_creates_escalation_r
     mock_get_active.return_value = None
     mock_detect.return_value = {"needs_clarification": False}
     mock_retrieve.return_value = []  # No published knowledge found
-    mock_generate.return_value = "No knowledge found."
+    mock_generate.return_value = GeneratedAnswer("", [], "none")
     mock_create_esc.return_value = "esc_phase7_001"
 
     res = client.post(

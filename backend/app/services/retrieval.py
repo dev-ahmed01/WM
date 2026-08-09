@@ -1,13 +1,13 @@
 """Retrieval Service.
 
-Retrieves published knowledge document chunks from Snowflake Cortex Search index.
+Retrieves published knowledge candidates using local semantic search with scoped SQL fallback.
 """
 
 # Assumption: Retrieval is strictly scoped to status='PUBLISHED' and the caller's department_id.
 
 import logging
 from typing import List, Dict, Any
-from app.integrations.cortex_client import CortexClient
+from app.integrations.ai_gateway import AIGateway
 from app.exceptions import WorkMateException
 from app.core.config import settings
 
@@ -20,9 +20,9 @@ class RetrievalService:
     @staticmethod
     async def retrieve_chunks(query: str, department_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Retrieve relevant chunks restricted to configured statuses and caller department."""
-        retrieval_logger.info(f"Retrieving published chunks for query '{query}' in department '{department_id}'")
+        retrieval_logger.info("Retrieving published chunks for department '%s'", department_id)
         try:
-            raw_chunks = await CortexClient.search(query=query, department_id=department_id, limit=limit)
+            raw_chunks = await AIGateway.search(query=query, department_id=department_id, limit=limit)
 
             allowed_statuses = {
                 value.strip().upper()
@@ -41,5 +41,5 @@ class RetrievalService:
             retrieval_logger.info(f"Retrieved {len(published_chunks)} published chunks for department '{department_id}'")
             return published_chunks
         except Exception as exc:
-            retrieval_logger.error(f"Retrieval failed for query '{query}': {str(exc)}")
-            raise WorkMateException(message=f"Retrieval failed: {str(exc)}") from exc
+            retrieval_logger.error("Retrieval failed: %s", type(exc).__name__)
+            raise WorkMateException(message="Retrieval failed.") from exc

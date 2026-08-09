@@ -1,4 +1,38 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: workmate_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama-model-init:
+    image: ollama/ollama:latest
+    container_name: workmate_ollama_model_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-qwen2.5:3b}
+      LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        ollama pull "$${LOCAL_CHAT_MODEL}" &&
+        ollama pull "$${LOCAL_EMBEDDING_MODEL}" &&
+        ollama show "$${LOCAL_CHAT_MODEL}" >/dev/null &&
+        ollama show "$${LOCAL_EMBEDDING_MODEL}" >/dev/null
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -7,7 +41,24 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - backend/.env
+      - path: backend/.env
+        required: false
+    environment:
+      LOCAL_AI_BASE_URL: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-model-init:
+        condition: service_completed_successfully
     volumes:
       - ./backend/app:/app/app
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
+
+volumes:
+  ollama_data:

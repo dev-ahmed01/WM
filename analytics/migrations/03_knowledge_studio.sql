@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS KNOWLEDGE_STUDIO.workflow_search_metadata (
     state_id VARCHAR(64) NOT NULL REFERENCES KNOWLEDGE_STUDIO.workflow_states(id),
     department_id VARCHAR(64) NOT NULL REFERENCES SECURITY.departments(id),
     search_content TEXT NOT NULL,
-    embedding_ref VARCHAR(255) NOT NULL DEFAULT 'cortex_embed_e5_base_v2',
+    embedding_ref VARCHAR(255) NOT NULL DEFAULT 'none',
     status VARCHAR(32) NOT NULL CHECK (status IN ('published', 'archived', 'staged'))
 );
 

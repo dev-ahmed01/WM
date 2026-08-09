@@ -9,7 +9,7 @@ class WorkflowSession(BaseModel):
     conversation_id: str
     workflow_version_id: str = ""
     current_step: int = 0
-    status: Literal['active', 'paused', 'complete', 'abandoned']
+    status: Literal['active', 'paused', 'completed', 'abandoned']
     abandon_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime

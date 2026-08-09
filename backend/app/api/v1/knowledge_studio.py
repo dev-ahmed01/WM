@@ -27,6 +27,7 @@ from app.compiler.parser import OWDParser
 from app.compiler.validator import OWDValidator
 from app.compiler.utils import generate_deterministic_uuid
 from app.exceptions import WorkMateException
+from app.integrations.ai_gateway import AIGateway
 from app.models.knowledge import (
     UploadResponse,
     PaginatedKnowledgeItemsResponse,
@@ -171,8 +172,10 @@ async def upload_knowledge(
         )
     workflow_id = compilation_report.get("workflow_id", "")
     version_id = compilation_report.get("version_id", "")
-
-
+    # The local semantic index is disposable derived state. Invalidate only
+    # after a successful transactional publication; the next Copilot query
+    # rebuilds it entirely from authoritative Snowflake rows.
+    AIGateway.invalidate_department(department_id)
 
     return UploadResponse(
         knowledge_item_id=workflow_id,
@@ -386,4 +389,3 @@ async def delete_knowledge_item(id: str) -> KnowledgeDeleteResponse:
 
     KnowledgeRepository.soft_delete_item(id)
     return KnowledgeDeleteResponse(id=id)
-

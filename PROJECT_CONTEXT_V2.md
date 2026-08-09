@@ -1,5 +1,12 @@
 # PROJECT_CONTEXT_V2.md — WorkMate AI
 
+> **Architecture decision (2026-08-09):** Snowflake is the durable database and
+> OWD source stage only. All managed Snowflake AI/search code, settings, migrations,
+> and grants have been removed. Runtime embeddings and grounded generation use
+> self-hosted Ollama; a disposable in-memory semantic index and scoped SQL/extractive
+> fallbacks preserve operation. See `docs/local_ai_runtime.md`. This decision
+> supersedes older historical statements below.
+
 **Purpose of this document:** The original `PROJECT_CONTEXT.md` describes the
 **intended architecture** from the initial product/vision doc. It was written
 before implementation and was never updated as the team actually built the
@@ -42,7 +49,7 @@ In practice:
   validates it, compiles it into a relational workflow graph (states, steps,
   transitions, rules), and loads it into Snowflake.
 - Employees converse with a Copilot that retrieves from that compiled
-  workflow graph (via Cortex) and tracks which step/state the employee is
+  workflow graph (scoped SQL by default, or an optional search provider) and tracks which step/state the employee is
   currently on.
 - Managers see analytics dashboards sourced from conversation + workflow
   data.
@@ -61,13 +68,13 @@ replaced by a compiler.
 | Area | Original vision (`PROJECT_CONTEXT.md`) | What's actually built |
 |---|---|---|
 | **Core ingestion model** | Upload any document type → OCR → AI categorization → AI summarization → department tagging → semantic chunking → embeddings | Upload a **markdown file written in a specific OWD directive syntax** → deterministic parse → AST → compile → MERGE into Snowflake relational tables. No OCR, no AI summarization, no AI categorization at ingest time. |
-| **File type handling** | PDF, DOCX, manuals, flowcharts, etc. | Upload endpoint *accepts* `.pdf/.docx/.md/.txt` by extension, but the compiler always decodes the raw bytes as UTF-8/latin-1 **text** and expects OWD directive markdown. A real PDF/DOCX upload will not be parsed correctly — there is no OCR or binary document parser wired in. **Only `.md` files written in the OWD syntax actually work today.** |
+| **File type handling** | PDF, DOCX, manuals, flowcharts, etc. | Upload endpoint accepts only UTF-8 `.md` and requires OWD directives. PDF/DOCX/TXT/OCR and arbitrary prose are not supported. |
 | **"AI Categorization" / "AI Summary" pipeline stages** | Explicit pipeline stages performed by Cortex during ingestion | Not implemented. The compiler is deterministic (regex/AST-based parsing), not LLM-based, at ingest time. |
 | **Knowledge Graph** | Explicitly listed as a *future* enhancement, cross-document | A **relationship parser** exists (`compiler/parsers/relationship_parser.py`) that parses Parent/Child/Related/Previous/Next/Escalation/Exception SOP references *within a single OWD document's metadata*. This is a building block, not the enterprise-wide knowledge graph described in the vision doc — still not built at that scope. |
 | **Voice input (Whisper)** | Listed as a supported interaction mode | **Not implemented anywhere in the codebase.** No Whisper integration, no audio upload/transcription endpoint, nothing. Confirmed via full-repo search — zero references. |
 | **Text-to-Speech (ElevenLabs/OpenAI TTS)** | Listed as optional stack component | **Not implemented anywhere.** Zero references in the codebase. |
-| **Multilingual conversation support** | Listed as a supported interaction method | **Not implemented anywhere.** No language-detection or translation layer exists. Copilot only handles whatever language the LLM naturally responds in via Cortex Complete; there is no explicit multilingual handling logic. |
-| **`ai-services/` directory** | Not named as such in the original doc, but implied by "AI reasoning lives in Cortex/backend services" | Exists but is minimal: two prompt template `.txt` files (`copilot_procedural.txt`, `validation_grounding.txt`) and one eval script (`grounding_test.py`). No standalone AI service layer beyond that — prompt building actually happens inline in `services/retrieval.py` / `services/validation.py`, not as a separate service module. |
+| **Multilingual conversation support** | Listed as a supported interaction method | **Not implemented anywhere.** No language-detection or translation layer exists. There is no translation or explicit multilingual handling logic. |
+| **`ai-services/` directory** | Not named as such in the original doc, but implied by "AI reasoning lives in backend services" | Exists but is minimal: two prompt template `.txt` files (`copilot_procedural.txt`, `validation_grounding.txt`) and one eval script (`grounding_test.py`). No standalone AI service layer beyond that — prompt building actually happens inline in `services/retrieval.py` / `services/validation.py`, not as a separate service module. |
 | **n8n orchestration** | Orchestration-only (ingestion triggers, retries, notifications, approvals, scheduling) — explicitly must not do AI reasoning | **Historically violated this rule.** A legacy n8n-driven ingestion pipeline (`internal_ingestion.py` + `automation/ingestion_workflow/`) existed in parallel with the real OWD compiler and independently wrote to a separate legacy table family (`knowledge_chunks`). This has just been **deleted** (see §7) — n8n is currently only wired to `escalation_workflow`, `maintenance_workflow`, and `versioning_workflow`, which is closer to the intended orchestration-only role. |
 | **Response Validation Layer (grounding/permission/citation/confidence gate)** | Mandatory pre-delivery gate, explicit pipeline stage | **Implemented** — `services/validation.py` (`ResponseValidationService`) exists and is wired into the copilot message endpoint, alongside `services/retrieval.py`, `services/workflow_state.py`, and `services/escalation.py`. This part of the vision was actually built close to spec. |
 | **Workflow State Tracking / Procedural Navigation** | Core differentiator — track which SOP/step employee is on | **Implemented** — `services/workflow_state.py` + `repositories/owd_repository.py` (read paths: `get_initial_state`, `get_steps_for_state`, `get_next_state_transition`) drive this. This part matches the vision. |
@@ -160,11 +167,10 @@ OCR/prose-to-structure conversion) is real and currently unaddressed.
 Mostly matches the original table (§11 of `PROJECT_CONTEXT.md`) with these
 corrections:
 
-- **LLM/AI reasoning:** Real usage is via `backend/app/utils/cortex_client.py`
-  (used by `services/retrieval.py` and `api/v1/copilot.py`) — this is the
-  live, working Cortex integration. A second, now-deleted duplicate
-  (`integrations/cortex_client.py`) existed only for the legacy pipeline
-  and has been removed.
+- **LLM/AI reasoning:** Runtime AI is self-hosted through
+  `backend/app/integrations/ai_gateway.py` and `local_ai_provider.py`. Snowflake
+  remains data/stage only. Provider failure falls back to scoped SQL retrieval
+  and deterministic extractive answers.
 - **Voice/TTS/Multilingual stack rows** (Whisper, ElevenLabs/OpenAI TTS):
   accurately still "optional/future" per the original doc, but should now
   be understood as **0% started**, not partially started.
@@ -192,9 +198,9 @@ re-discovers or re-introduces these issues.
    n8n webhook after every real upload) wrote toward the old
    `knowledge_chunks` table family — the exact thing the OWD migration was
    supposed to replace. It depended on a whole separate `knowledge-engine/`
-   parser directory and a duplicate `CortexClient` implementation. **Fixed:**
+   parser directory and a duplicate managed-AI client implementation. **Fixed:**
    this entire path — the router, the n8n workflow JSON, the
-   `knowledge-engine/` directory, the duplicate Cortex client, the dead
+   `knowledge-engine/` directory, the duplicate managed-AI client, the dead
    `admin.py` stub, and the callback endpoint that received its status
    updates — was deleted.
 3. **Race condition on `workflow_versions.status`.** Because both pipelines
@@ -240,7 +246,7 @@ a mock). Run it before assuming login is broken.
   connection implementation.
 - `compiler/parser.py` is a legitimate facade over the modular
   `compiler/parsers/*` sub-parsers, not a duplicate implementation.
-- `backend/app/utils/cortex_client.py` is the one real, live Cortex client.
+- `backend/app/integrations/ai_gateway.py` is the provider-neutral runtime AI gateway.
 
 ### Known remaining debt (not yet cleaned up, lower priority)
 - `api/v1/knowledge_studio.py`'s `upload_knowledge` endpoint still contains
@@ -248,10 +254,7 @@ a mock). Run it before assuming login is broken.
   count, SHA-256 hash, directive counts) left over from the original bug
   investigation. Not harmful, just noisy — candidate for removal once the
   system is stable.
-- No OCR/binary-document parsing exists despite `.pdf`/`.docx` being in the
-  allowed upload extensions — see §2 and §4. Either restrict the allowed
-  extensions to `.md`/`.txt` to match reality, or build real PDF/DOCX
-  support, but don't leave the mismatch as-is long term.
+- No OCR/binary-document parsing exists. The endpoint correctly restricts uploads to strict UTF-8 OWD `.md`.
 
 ---
 
@@ -280,10 +283,7 @@ unresolved — nothing in the recent audit touched these:
 
 **New pending decision from this pass:**
 
-7. Should the upload endpoint's allowed extensions be narrowed to
-   `.md`/`.txt` to match what the compiler actually supports, or should
-   real PDF/DOCX parsing be built to match what's advertised? Currently
-   neither — it's a silent gap.
+7. General document ingestion remains out of scope; the current endpoint intentionally accepts only strict OWD Markdown.
 
 ---
 
@@ -318,4 +318,3 @@ unresolved — nothing in the recent audit touched these:
 recent architectural audit and fix pass. Regenerate, don't hand-edit into
 drift, when major new source material (a real PRD, finalized DB schema, or
 a decision on §8's pending items) becomes available.*
-

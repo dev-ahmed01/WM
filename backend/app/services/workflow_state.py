@@ -32,10 +32,15 @@ class WorkflowStateService:
         """Begins tracking a new OWD workflow session at the initial workflow state."""
         # Try to resolve initial state node from compiled OWD structures
         initial_state = OWDRepository.get_initial_state(workflow_version_id)
+        if not initial_state:
+            raise WorkMateException(
+                message=f"Workflow version '{workflow_version_id}' has no initial state."
+            )
         
         session_id = WorkflowSessionRepository.create(
             conversation_id=conversation_id,
             workflow_version_id=workflow_version_id,
+            current_state_id=initial_state["id"],
         )
         session_dict = WorkflowSessionRepository.get_by_id(session_id)
         if not session_dict:
@@ -71,10 +76,10 @@ class WorkflowStateService:
         if current_state_id:
             next_transition = OWDRepository.get_next_state_transition(current_state_id)
             if next_transition and next_transition.get("is_terminal"):
-                new_status = "complete"
+                new_status = "completed"
 
         if total_steps is not None and next_step >= total_steps:
-            new_status = "complete"
+            new_status = "completed"
 
         WorkflowSessionRepository.update_step_and_status(session_id, next_step, new_status)
         updated_dict = WorkflowSessionRepository.get_by_id(session_id)
@@ -85,7 +90,7 @@ class WorkflowStateService:
         OWDRepository.record_analytics_event(
             session_id=session_id,
             workflow_version_id=version_id,
-            event_type="SESSION_COMPLETED" if new_status == "complete" else "STEP_COMPLETED",
+            event_type="SESSION_COMPLETED" if new_status == "completed" else "STEP_COMPLETED",
             step_id=str(next_step),
         )
 

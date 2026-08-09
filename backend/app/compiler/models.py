@@ -45,7 +45,7 @@ class AIRetrievalMetadata(BaseModel):
     workflow_tags: List[str] = Field(default_factory=list)
     embedding_metadata: Dict[str, Any] = Field(default_factory=dict)
     vector_metadata: Dict[str, Any] = Field(default_factory=dict)
-    cortex_search_metadata: Dict[str, Any] = Field(default_factory=dict)
+    semantic_search_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 # -----------------------------------------------------------------------------
@@ -374,7 +374,7 @@ class DocumentContentModel(BaseModel):
 
 
 class DocumentAIMetadataModel(BaseModel):
-    """Cortex AI analysis & readability metadata."""
+    """Local analysis & readability metadata."""
     id: str
     document_id: str
     workflow_version_id: str
