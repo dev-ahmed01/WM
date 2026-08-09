@@ -5,8 +5,7 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 ## Technology
 
 - **Backend:** FastAPI on Python 3.11+
-- **Data:** Snowflake relational storage and Stage; Cortex is optional and disabled by default
-- **Optional local AI:** self-hosted retrieval/generation providers, with SQL and extractive baselines
+- **Data and AI:** Snowflake Stage, Cortex Search, and Cortex Complete
 - **Frontend:** Next.js, React, TypeScript, and Tailwind CSS
 - **Orchestration:** n8n for triggers, retries, approvals, and notifications only
 - **Security:** JWT authentication with role- and department-scoped access
@@ -50,28 +49,6 @@ Replace every placeholder in `backend/.env`. Use a least-privilege Snowflake run
 For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env.local` and set its public API base URL.
 
 ## Run locally
-
-### Optional free local AI
-
-The backend uses Ollama for local embeddings and grounded chat when it is reachable, then falls
-back automatically to scoped Snowflake SQL and extractive answers. Install Ollama through your
-approved package source, start `ollama serve`, and run:
-
-```bash
-scripts/setup_local_ai.sh
-```
-
-Or start the optional container profile, point `LOCAL_AI_BASE_URL` at
-`http://ollama:11434`, and pull the two configured models inside that container:
-
-```bash
-docker compose --profile ai up -d ollama
-docker exec workmate_ollama ollama pull qwen2.5:3b
-docker exec workmate_ollama ollama pull nomic-embed-text
-```
-
-Check provider readiness at `GET /health/ai`. Model downloads require network access once; normal
-inference stays local.
 
 ### Docker Compose
 
@@ -122,11 +99,4 @@ npm run lint
 npm run build
 ```
 
-See [`docs/snowflake_runtime_runbook.md`](docs/snowflake_runtime_runbook.md) for core/Cortex
-deployment, grants, upload verification, direct Search checks, and the two-department acceptance
-matrix. The [`repository remediation plan`](docs/repository_remediation_plan.md) records the cleanup
-decisions and implementation status.
-
-If managed Cortex access is restricted, use the
-[`Cortex replacement strategy`](docs/cortex_replacement_options.md). The default configuration
-treats Snowflake as the database/stage only and runs without Cortex privileges.
+See [`docs/repository_remediation_plan.md`](docs/repository_remediation_plan.md) for the audited cleanup target and the separate ingestion/Copilot restoration assignment.

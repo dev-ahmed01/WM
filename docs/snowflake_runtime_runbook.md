@@ -4,14 +4,6 @@ This runbook separates basic connectivity from the capabilities required by know
 Copilot. Run deployment commands with an object-owning role. Run every smoke check a second time
 with the least-privilege backend role configured in `backend/.env`.
 
-> Cortex is now optional and disabled by default. For the Snowflake-as-database-only deployment,
-> skip section 2 and the Cortex-specific checks; validate scoped SQL retrieval and extractive
-> responses instead. See [`cortex_replacement_options.md`](cortex_replacement_options.md).
-
-For free local semantic retrieval and generation, start Ollama, run
-`scripts/setup_local_ai.sh`, and verify `GET /health/ai` reports `reachable=true`. No local model is
-required for the SQL/extractive fallback.
-
 ## 1. Deploy core objects
 
 ```bash
