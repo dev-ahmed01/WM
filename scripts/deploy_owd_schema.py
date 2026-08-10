@@ -7,8 +7,9 @@ Deployment fails closed when live Snowflake credentials are unavailable.
 
 import sys
 import logging
+import re
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 # Ensure backend app imports work
 backend_dir = Path(__file__).resolve().parent.parent / "backend"
@@ -36,6 +37,12 @@ MIGRATION_FILES = [
     "13_runtime_prerequisites.sql",
     "14_runtime_integrity.sql",
 ]
+
+_ADD_COLUMN_IF_MISSING_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+([A-Z0-9_$."]+)\s+'
+    r'ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+([A-Z0-9_$"]+)',
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def ordered_migrations() -> List[str]:
@@ -83,6 +90,35 @@ def split_sql_statements(sql_text: str) -> List[str]:
     return statements
 
 
+def add_column_if_missing_target(statement: str) -> Optional[Tuple[str, str]]:
+    """Return the table/column guarded by an ADD COLUMN IF NOT EXISTS statement."""
+    match = _ADD_COLUMN_IF_MISSING_RE.match(statement)
+    if not match:
+        return None
+    return match.group(1), match.group(2)
+
+
+def column_exists(cur: Any, table_identifier: str, column_identifier: str) -> bool:
+    """Check column metadata before Snowflake evaluates an idempotent ADD COLUMN."""
+    parts = [part.strip('"').upper() for part in table_identifier.split(".")]
+    column_name = column_identifier.strip('"').upper()
+    if len(parts) == 2:
+        metadata_view = "INFORMATION_SCHEMA.COLUMNS"
+        schema_name, table_name = parts
+    elif len(parts) == 3:
+        database_name, schema_name, table_name = parts
+        metadata_view = f"{database_name}.INFORMATION_SCHEMA.COLUMNS"
+    else:
+        raise ValueError(f"Unsupported table identifier: {table_identifier}")
+
+    cur.execute(
+        f"SELECT 1 FROM {metadata_view} "
+        "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s LIMIT 1",
+        (schema_name, table_name, column_name),
+    )
+    return cur.fetchone() is not None
+
+
 def deploy_migrations() -> Dict[str, Any]:
     """Run ordered SQL migrations against live Snowflake, failing closed."""
     if has_placeholder_credentials():
@@ -122,6 +158,14 @@ def deploy_migrations() -> Dict[str, Any]:
 
                     for idx, stmt in enumerate(statements, 1):
                         try:
+                            add_column_target = add_column_if_missing_target(stmt)
+                            if add_column_target and column_exists(cur, *add_column_target):
+                                logger.info(
+                                    "  [SKIP] Column %s already exists on %s",
+                                    add_column_target[1],
+                                    add_column_target[0],
+                                )
+                                continue
                             cur.execute(stmt)
                             logger.info(f"  [OK] Statement {idx}/{len(statements)} in {mig_file}")
                         except Exception as exc:

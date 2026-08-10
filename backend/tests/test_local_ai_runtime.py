@@ -7,7 +7,11 @@ import pytest
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
 from app.integrations.local_ai_provider import OllamaLocalAIProvider
-from app.integrations.retrieval_providers import CandidateRepository, LocalSemanticIndex
+from app.integrations.retrieval_providers import (
+    CandidateRepository,
+    LocalSemanticIndex,
+    SqlLexicalRetrievalProvider,
+)
 
 
 @pytest.mark.asyncio
@@ -196,9 +200,30 @@ def test_candidate_query_scopes_department_and_status_before_rows_are_returned(m
     CandidateRepository.load_page("dept_ops", ("published",), 100, 0)
 
     sql, params = cursor.execute.call_args.args
+    assert "wv.id AS workflow_version_id" in sql
     assert "LOWER(wv.status) IN (%s)" in sql
     assert "sm.department_id = %s" in sql
     assert params == ["published", "dept_ops", 100, 0]
+
+
+@pytest.mark.asyncio
+async def test_sql_fallback_returns_workflow_version_identity(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+    cursor.description = []
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    monkeypatch.setattr(
+        "app.integrations.retrieval_providers.get_snowflake_connection",
+        MagicMock(return_value=context),
+    )
+
+    await SqlLexicalRetrievalProvider().search("receive seal", "dept_ops", 5)
+
+    sql, _ = cursor.execute.call_args.args
+    assert "wv.id AS workflow_version_id" in sql
 
 
 @pytest.mark.asyncio

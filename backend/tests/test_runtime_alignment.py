@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.escalation_repository import EscalationRepository
+from app.repositories.owd_repository import OWDRepository
 from app.services.analytics_service import AnalyticsService
 from app.middleware.audit_logger import _record_audit_entry_sync
 
@@ -83,3 +84,18 @@ def test_runtime_integrity_migration_provisions_analytics_views():
     assert "INTELLIGENCE_HUB.V_ANALYTICS_FAQS" in sql
     assert "INTELLIGENCE_HUB.V_ANALYTICS_CONFIDENCE_TRENDS" in sql
     assert "ADD COLUMN IF NOT EXISTS status_code" in sql
+
+
+@patch("app.repositories.owd_repository.get_snowflake_connection")
+def test_decision_options_order_by_a_migration_backed_column(mock_connection):
+    manager, cursor = _mock_connection()
+    cursor.description = []
+    cursor.fetchall.return_value = []
+    mock_connection.return_value = manager
+
+    OWDRepository.get_decision_options("state_1")
+
+    sql, params = cursor.execute.call_args.args
+    assert "ORDER BY option_code ASC" in sql
+    assert "ordinal_index" not in sql
+    assert params == ("state_1",)

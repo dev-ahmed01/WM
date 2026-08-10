@@ -33,7 +33,9 @@ def test_local_ai_is_default_provider():
     assert defaults.LOCAL_AI_ENABLED is True
 
 
-def test_checked_in_security_defaults_are_placeholders():
+def test_checked_in_security_defaults_are_placeholders(monkeypatch):
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    monkeypatch.delenv("INTERNAL_WEBHOOK_SECRET", raising=False)
     defaults = Settings(_env_file=None)
 
     assert defaults.JWT_SECRET.startswith("replace_with_")

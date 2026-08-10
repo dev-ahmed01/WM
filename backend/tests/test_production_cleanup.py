@@ -1,5 +1,7 @@
 """Regression tests for removal of abandoned deployment and ingestion fallbacks."""
 
+from unittest.mock import MagicMock
+
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.compiler.parsers.retrieval_metadata_parser import RetrievalMetadataParser
 from backend.scripts.seed_test_users import SEED_USERS
@@ -49,3 +51,20 @@ def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_PASSWORD", "replace_with_a_local_secret")
 
     assert deploy_owd_schema.has_placeholder_credentials() is True
+
+
+def test_deployer_preflights_idempotent_add_column_statements():
+    target = deploy_owd_schema.add_column_if_missing_target(
+        """ALTER TABLE SECURITY.departments
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"""
+    )
+
+    assert target == ("SECURITY.departments", "is_active")
+    assert target is not None
+
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (1,)
+    assert deploy_owd_schema.column_exists(cursor, *target) is True
+    sql, params = cursor.execute.call_args.args
+    assert "INFORMATION_SCHEMA.COLUMNS" in sql
+    assert params == ("SECURITY", "DEPARTMENTS", "IS_ACTIVE")

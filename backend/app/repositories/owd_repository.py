@@ -84,7 +84,7 @@ class OWDRepository:
             SELECT option_code, option_label
             FROM KNOWLEDGE_STUDIO.workflow_decision_options
             WHERE state_id = %s
-            ORDER BY ordinal_index ASC, option_code ASC
+            ORDER BY option_code ASC
         """
         try:
             with get_snowflake_connection() as conn:
