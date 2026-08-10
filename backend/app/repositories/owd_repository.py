@@ -1,7 +1,7 @@
 """Snowflake SQL Persistence layer for Operational Workflow Definitions (OWD).
 
 Handles transactional persistence and retrieval of OWD state graphs, atomic steps,
-transitions, rules, evidence specs, and Cortex search metadata in Snowflake.
+transitions, rules, evidence specs, and semantic search metadata in Snowflake.
 """
 
 import json

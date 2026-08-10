@@ -1,6 +1,6 @@
 # WorkMate AI — Project Architecture & Rules (FROZEN CONTEXT)
 
-All AI agents working on this codebase MUST strictly adhere to the single source of truth defined in [PROJECT_CONTEXT.md](file:///d:/workmate-ai/workmate-ai/PROJECT_CONTEXT.md). 
+All AI agents working on this codebase MUST strictly adhere to the single source of truth defined in [PROJECT_CONTEXT_V2.md](../PROJECT_CONTEXT_V2.md).
 
 ## Non-Negotiable Core Principles & Architecture Rules
 
@@ -10,7 +10,7 @@ All AI agents working on this codebase MUST strictly adhere to the single source
 
 2. **Strict Separation of Reasoning and Orchestration**:
    - **n8n**: Responsible ONLY for workflow orchestration (triggering ingestion pipelines, retries, approvals, notifications, scheduling, integration triggers). n8n MUST NOT perform AI reasoning, embedding generation, semantic retrieval, or LLM summarization.
-   - **Snowflake Cortex & FastAPI**: All AI reasoning, semantic processing, OCR/parsing, chunking, embeddings generation, vector search (Cortex Search), and LLM completion (Cortex Complete) MUST live in Snowflake Cortex / FastAPI backend services.
+   - **FastAPI + self-hosted Ollama**: Runtime embeddings and generation live in the backend/local provider. Snowflake is data and stage only; n8n performs no AI reasoning.
 
 3. **Data Platform Unification**:
    - **Snowflake** is the single database and storage platform for documents (Snowflake Stage), embeddings, conversation memory, analytics, and versioned knowledge. Do not introduce secondary databases without explicit authorization.
@@ -25,7 +25,7 @@ All AI agents working on this codebase MUST strictly adhere to the single source
      > *"I could not find verified organizational guidance for this request. Please contact your supervisor or administrator. The closest related documentation is provided below."*
 
 5. **Event-Driven Knowledge Ingestion**:
-   - Knowledge upload processing is strictly event-driven (Upload → FastAPI → Snowflake Stage → n8n trigger → Ingestion Service → Cortex Processing → Search Index update). Do not refactor into polling or batch jobs.
+   - Knowledge upload remains deterministic and synchronous through FastAPI (upload → validate → compile → transactional Snowflake load). Successful publication invalidates only disposable local semantic cache state; n8n is not an ingestion engine.
 
 6. **Scope Boundaries**:
    - **MVP**: Knowledge Studio, WorkMate Copilot (chat), Intelligence Hub, Auth/RBAC + Audit Logging, n8n Ingestion Orchestration.

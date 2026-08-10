@@ -20,12 +20,12 @@
 - Snowflake `PUT` uploaded a random temporary filename while the database stored a different URI, and every upload targeted a shared overwrite-enabled stage path.
 - Version 1 was selected whenever the browser omitted `knowledge_item_id`; the browser always omitted it.
 - The loader described its work as transactional while relying on Snowflake connector autocommit.
-- Compilation invoked Cortex summarization/entity extraction and wrote fabricated embedding/evaluation readiness metadata.
+- Compilation invoked managed summarization/entity extraction and wrote fabricated embedding/evaluation readiness metadata.
 - A legacy n8n callback could mutate the status of a version loaded by the current compiler path.
 - Dead repository methods from that legacy path could still insert random,
   hard-coded `dept_ops` search rows if called by future code.
 - The deployment script could report `SUCCESS` after an in-memory SQLite
-  simulation and did not include the Cortex Search migration.
+  simulation and did not include the managed search migration.
 - The upload UI used hard-coded departments that did not match the database.
 
 ## Corrected flow
@@ -40,14 +40,13 @@
 8. Execute all loader DML inside explicit `BEGIN`/`COMMIT`; roll back on any failure.
 9. Verify published status plus expected state and search-record counts before commit.
 10. Return success only after the published invariants pass.
-11. Deploy all migrations through `11_cortex_search_service.sql` against live
-    Snowflake and return `FAILED` when credentials or connectivity are absent.
+11. Deploy all database-only migrations against live Snowflake and return `FAILED` when credentials or connectivity are absent.
 
 ## Deployment prerequisites
 
 - Provision `SNOWFLAKE_STAGE_NAME` ahead of deployment and grant the backend role `WRITE`/`READ` access. Runtime ingestion no longer attempts stage DDL.
 - Ensure `SECURITY.departments` contains the active departments shown in the UI.
-- Keep the Cortex Search service configured to index `KNOWLEDGE_STUDIO.workflow_search_metadata`; ingestion creates deterministic text search records and does not create vector embeddings.
+- Ingestion creates deterministic search text only. Runtime local indexing derives disposable embeddings from authorized Snowflake candidates.
 
 ## Verification
 
@@ -80,5 +79,4 @@ arbitrary prose. It does not generate embeddings during compilation. Before
 production approval, provision `RAW_OWD_STAGE`, grant the backend role stage
 READ/WRITE and table DML privileges, seed active departments, upload two
 versions of a real OWD, and verify the stage object, deterministic IDs, version
-increment, published status, state/search counts, rollback behavior, and Cortex
-Search refresh in the target account.
+increment, published status, state/search counts, rollback behavior, and local semantic-index refresh in the target account.

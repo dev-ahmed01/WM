@@ -59,7 +59,10 @@ def test_invalid_owd_returns_422_without_staging():
 @patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_next_version_number", return_value=3)
 @patch.object(IngestionService, "stage_file", return_value="@RAW_OWD_STAGE/SOP_INB_001/v3/hash/receive.md")
 @patch("app.api.v1.knowledge_studio.OWDCompilerPipeline.process_owd")
-def test_upload_uses_server_version_and_publishes(process, stage, next_version, department_exists):
+@patch("app.api.v1.knowledge_studio.AIGateway.invalidate_department")
+def test_upload_uses_server_version_and_publishes(
+    invalidate, process, stage, next_version, department_exists
+):
     process.return_value = {
         "compilation_status": "SUCCESS", "deployment_status": "PUBLISHED",
         "workflow_id": "workflow-id", "version_id": "version-id",
@@ -75,6 +78,7 @@ def test_upload_uses_server_version_and_publishes(process, stage, next_version, 
     assert process.call_args.kwargs["version_number"] == 3
     assert process.call_args.kwargs["prepared_document"].workflow.version_number == 3
     stage.assert_called_once()
+    invalidate.assert_called_once_with("dept_inbound")
 
 
 def test_legacy_ingestion_callback_is_removed():

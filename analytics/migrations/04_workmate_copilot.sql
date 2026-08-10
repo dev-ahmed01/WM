@@ -3,6 +3,8 @@
 CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.conversations (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL REFERENCES SECURITY.users(id),
+    current_step INT NOT NULL DEFAULT 0,
+    abandon_reason TEXT NULL,
     department_id VARCHAR(64) NOT NULL REFERENCES SECURITY.departments(id),
     started_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
     ended_at TIMESTAMP_NTZ NULL
@@ -60,13 +62,15 @@ CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.workflow_evidence_submissions (
 
 CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.escalation_records (
     id VARCHAR(64) PRIMARY KEY,
-    session_id VARCHAR(64) NOT NULL REFERENCES WORKMATE_COPILOT.workflow_sessions(id),
+    session_id VARCHAR(64) NULL REFERENCES WORKMATE_COPILOT.workflow_sessions(id),
     conversation_message_id VARCHAR(64) NULL REFERENCES WORKMATE_COPILOT.conversation_messages(id),
     escalation_policy_id VARCHAR(64) NULL REFERENCES KNOWLEDGE_STUDIO.workflow_escalation_policies(id),
     reason VARCHAR(255) NOT NULL,
     status VARCHAR(32) NOT NULL CHECK (status IN ('open', 'notified', 'resolved')),
     assigned_to_user_id VARCHAR(64) NULL REFERENCES SECURITY.users(id),
     resolution_note TEXT NULL,
+    notified_at TIMESTAMP_NTZ NULL,
     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
     resolved_at TIMESTAMP_NTZ NULL
 );

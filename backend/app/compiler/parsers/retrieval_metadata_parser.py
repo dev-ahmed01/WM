@@ -2,7 +2,7 @@
 
 Parses AI Retrieval Metadata:
   Keywords, Synonyms, Search Phrases, Search Queries, Business Process,
-  Equipment, Workflow Tags, Embedding Metadata, Vector Metadata, Cortex Search Metadata.
+  Equipment, Workflow Tags, Embedding Metadata, Vector Metadata, Semantic Search Metadata.
 """
 
 import re
@@ -61,5 +61,5 @@ class RetrievalMetadataParser:
             workflow_tags=parse_list(ret_dict.get("workflow_tags")),
             embedding_metadata=ret_dict.get("embedding_metadata", {}),
             vector_metadata=ret_dict.get("vector_metadata", {}),
-            cortex_search_metadata=ret_dict.get("cortex_search_metadata", {}),
+            semantic_search_metadata=ret_dict.get("semantic_search_metadata", {}),
         )

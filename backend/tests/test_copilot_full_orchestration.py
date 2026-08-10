@@ -10,7 +10,9 @@ from app.api.v1.copilot_session import router as session_router
 from app.core.security import create_access_token
 from app.models.workflow_session import WorkflowSession
 from app.services.retrieval import RetrievalService
-from app.integrations.cortex_client import CortexClient
+from app.integrations.ai_gateway import AIGateway
+from app.integrations.ai_provider import GeneratedAnswer
+from app.services.validation import CANONICAL_FALLBACK
 
 app = FastAPI()
 app.include_router(copilot_router, prefix="/api/v1")
@@ -22,9 +24,9 @@ EMP_ENG_TOKEN = create_access_token(user_id="usr_emp001", role="employee", depar
 
 
 @pytest.mark.asyncio
-@patch.object(CortexClient, "detect_intent")
+@patch.object(AIGateway, "detect_intent")
 @patch.object(RetrievalService, "retrieve_chunks")
-@patch.object(CortexClient, "generate_response")
+@patch.object(AIGateway, "generate_response")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -55,13 +57,14 @@ def test_full_copilot_turn_success(
             "document_id": "doc_eng_01",
             "document_title": "Valve Maintenance SOP",
             "version_number": 1,
+            "step_number": 1,
             "department_id": "dept_eng",
             "status": "PUBLISHED",
             "content": "Step 1: Check valve pressure gauge.",
             "score": 0.92,
         }
     ]
-    mock_generate.return_value = "Check the valve pressure gauge before proceeding."
+    mock_generate.return_value = GeneratedAnswer("Check the valve pressure gauge before proceeding.", ["chk_eng_01"], "test")
 
     res = client.post(
         "/api/v1/copilot/message",
@@ -73,14 +76,14 @@ def test_full_copilot_turn_success(
     data = res.json()
     assert data["conversation_id"] == "conv_full_001"
     assert data["requires_escalation"] is False
-    assert data["confidence_score"] == 0.92
+    assert data["confidence_score"] == 0.80
     assert len(data["citations"]) == 1
     assert data["citations"][0]["document_title"] == "Valve Maintenance SOP"
     mock_record_event.assert_called()
 
 
 @pytest.mark.asyncio
-@patch.object(CortexClient, "detect_intent")
+@patch.object(AIGateway, "detect_intent")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.load_history")
@@ -103,8 +106,51 @@ def test_copilot_clarification_short_circuit(
     assert res.status_code == 200
     data = res.json()
     assert "specify which SOP" in data["answer"]
-    assert data["confidence_score"] == 0.50
+    assert data["confidence_score"] == 0.0
+    assert data["is_grounded"] is False
     assert data["requires_escalation"] is False
+
+
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
+@patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
+@patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
+@patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
+@patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
+@patch("app.repositories.conversation_repository.ConversationRepository.get_history")
+@patch("app.services.workflow_state.WorkflowStateService.get_active_session")
+@patch("app.api.v1.copilot.EscalationService.escalate", new_callable=AsyncMock)
+@patch("app.api.v1.copilot.AnalyticsService.record_event")
+def test_grounded_fallback_survives_escalation_and_analytics_failures(
+    mock_record_event,
+    mock_escalate,
+    mock_get_active_session,
+    mock_get_history,
+    mock_persist,
+    mock_session,
+    mock_generate,
+    mock_retrieve,
+    mock_detect_intent,
+):
+    mock_session.return_value = "conv_fallback_001"
+    mock_persist.return_value = "msg_fallback_001"
+    mock_get_history.return_value = []
+    mock_get_active_session.return_value = None
+    mock_detect_intent.return_value = {"needs_clarification": False}
+    mock_retrieve.return_value = []
+    mock_generate.return_value = GeneratedAnswer("", [], "none")
+    mock_escalate.side_effect = RuntimeError("missing escalation grant")
+    mock_record_event.side_effect = RuntimeError("analytics unavailable")
+
+    response = client.post(
+        "/api/v1/copilot/message",
+        headers={"Authorization": f"Bearer {EMP_ENG_TOKEN}"},
+        json={"message": "How do I perform an unknown procedure?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == CANONICAL_FALLBACK
+    assert response.json()["requires_escalation"] is True
+    mock_escalate.assert_awaited_once()
 
 
 @patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")

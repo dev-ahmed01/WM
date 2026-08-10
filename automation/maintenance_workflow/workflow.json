@@ -24,7 +24,7 @@
         "url": "={{$env.FASTAPI_BASE_URL || 'http://backend:8000'}}/api/v1/maintenance/verify-index",
         "options": {}
       },
-      "name": "Verify Cortex Search Index",
+      "name": "Verify Local Semantic Index",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [300, 300],
@@ -87,8 +87,8 @@
     }
   ],
   "connections": {
-    "Cron Trigger (Daily 02:00)": { "main": [[{ "node": "Verify Cortex Search Index", "type": "main", "index": 0 }]] },
-    "Verify Cortex Search Index": { "main": [[{ "node": "Check Embedding Freshness", "type": "main", "index": 0 }]] },
+    "Cron Trigger (Daily 02:00)": { "main": [[{ "node": "Verify Local Semantic Index", "type": "main", "index": 0 }]] },
+    "Verify Local Semantic Index": { "main": [[{ "node": "Check Embedding Freshness", "type": "main", "index": 0 }]] },
     "Check Embedding Freshness": { "main": [[{ "node": "Check Version Consistency", "type": "main", "index": 0 }]] },
     "Check Version Consistency": { "main": [[{ "node": "Refresh Materialized Views", "type": "main", "index": 0 }]] }
   }

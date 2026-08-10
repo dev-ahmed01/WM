@@ -20,7 +20,7 @@ from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowStateService
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
-from app.integrations.cortex_client import CortexClient
+from app.integrations.ai_gateway import AIGateway
 
 copilot_logger = logging.getLogger("copilot_services")
 
@@ -62,7 +62,7 @@ async def copilot_message(
     2. Intent Detection & Ambiguity Check (short-circuit clarifying question if needed)
     3. Active Workflow Session Resolution & Step Progression Check
     4. Scoped Retrieval (Chunks & Active SOP Step Context)
-    5. Cortex LLM Response Generation
+    5. Local grounded response generation
     6. Response Validation Layer Gate (Grounding, Permissions, Citations, Confidence)
     7. Real Escalation Triggering (n8n Webhook) on Validation Failure
     8. Telemetry Recording (analytics_events)
@@ -77,6 +77,7 @@ async def copilot_message(
     # 1. Session Resolution & Persist User Message
     conversation_id = ConversationRepository.get_or_create_session(
         user_id=user_id,
+        department_id=department_id,
         session_id=payload.conversation_id,
     )
     ConversationRepository.persist_message(
@@ -87,27 +88,30 @@ async def copilot_message(
     history = ConversationRepository.get_history(conversation_id)
 
     # 2. Intent Detection & Clarification Check
-    intent_result = await CortexClient.detect_intent(message=payload.message, history=history)
+    intent_result = await AIGateway.detect_intent(message=payload.message, history=history)
     if intent_result.get("needs_clarification"):
         clarification_text = "Could you please specify which SOP or equipment section you are referring to?"
         msg_id = ConversationRepository.persist_message(
             conversation_id=conversation_id,
             sender="ai",
             content=clarification_text,
-            confidence_score=0.50,
+            confidence_score=0.0,
         )
-        AnalyticsService.record_event(
-            event_type="copilot.clarification",
-            conversation_message_id=msg_id,
-            payload={"user_id": user_id, "query": payload.message},
-        )
+        try:
+            AnalyticsService.record_event(
+                event_type="copilot.clarification",
+                conversation_message_id=msg_id,
+                payload={"user_id": user_id, "query": payload.message},
+            )
+        except Exception:
+            copilot_logger.exception("Clarification telemetry write failed")
         return CopilotResponse(
             conversation_id=conversation_id,
             message_id=msg_id,
             answer=clarification_text,
             citations=[],
-            confidence_score=0.50,
-            is_grounded=True,
+            confidence_score=0.0,
+            is_grounded=False,
             requires_escalation=False,
             active_sop_id=None,
             active_step_number=None,
@@ -128,7 +132,7 @@ async def copilot_message(
         department_id=department_id,
     )
 
-    # 5. Context Assembly & Cortex Complete LLM Generation
+    # 5. Context assembly and local grounded generation
     prompt_context = {
         "user": current_user,
         "query": payload.message,
@@ -136,7 +140,7 @@ async def copilot_message(
         "workflow_state": active_session.model_dump() if active_session else None,
         "retrieved_chunks": retrieved_chunks,
     }
-    raw_response = await CortexClient.generate_response(prompt_context)
+    raw_response = await AIGateway.generate_response(prompt_context)
 
     # 6. Response Validation Layer Gate (Mandatory Pre-Delivery Gate)
     validated, requires_escalation = ResponseValidationService.validate_response(
@@ -156,23 +160,31 @@ async def copilot_message(
 
     if requires_escalation:
         escalation_service = EscalationService()
-        await escalation_service.escalate(
-            conversation_message_id=msg_id,
-            reason=f"Low confidence ({validated.confidence_score}) or ungrounded response",
-        )
+        try:
+            await escalation_service.escalate(
+                conversation_message_id=msg_id,
+                reason=f"Low confidence ({validated.confidence_score}) or ungrounded response",
+            )
+        except Exception:
+            # Escalation is an auditable side effect, but failure must not suppress
+            # the mandatory grounded fallback response.
+            copilot_logger.exception("Escalation persistence or notification failed")
 
     # 8. Record Telemetry Event
-    AnalyticsService.record_event(
-        event_type="copilot.turn",
-        conversation_message_id=msg_id,
-        payload={
-            "user_id": user_id,
-            "department_id": department_id,
-            "confidence_score": validated.confidence_score,
-            "requires_escalation": requires_escalation,
-            "workflow_session_id": active_session.id if active_session else None,
-        },
-    )
+    try:
+        AnalyticsService.record_event(
+            event_type="copilot.turn",
+            conversation_message_id=msg_id,
+            payload={
+                "user_id": user_id,
+                "department_id": department_id,
+                "confidence_score": validated.confidence_score,
+                "requires_escalation": requires_escalation,
+                "workflow_session_id": active_session.id if active_session else None,
+            },
+        )
+    except Exception:
+        copilot_logger.exception("Copilot telemetry write failed")
 
     # 9. Return CopilotResponse matching frontend contract
     return CopilotResponse(

@@ -9,7 +9,8 @@ from app.api.v1.copilot import router as copilot_router
 from app.core.security import create_access_token
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService, CANONICAL_FALLBACK
-from app.integrations.cortex_client import CortexClient
+from app.integrations.ai_gateway import AIGateway
+from app.integrations.ai_provider import GeneratedAnswer
 
 app = FastAPI()
 app.include_router(copilot_router, prefix="/api/v1")
@@ -20,7 +21,7 @@ EMPLOYEE_TOKEN = create_access_token(user_id="usr_emp001", role="employee", depa
 
 
 @pytest.mark.asyncio
-@patch.object(CortexClient, "search")
+@patch.object(AIGateway, "search")
 async def test_retrieval_service_filters_published_and_department(mock_search):
     mock_search.return_value = [
         {"chunk_id": "c1", "status": "PUBLISHED", "department_id": "dept_eng", "content": "Valid chunk"},
@@ -35,7 +36,7 @@ async def test_retrieval_service_filters_published_and_department(mock_search):
 
 def test_validation_service_zero_chunks_fallback():
     validated, requires_escalation = ResponseValidationService.validate_response(
-        raw_response="Some guess answer",
+        raw_response=GeneratedAnswer("Some guess answer", [], "test"),
         retrieved_chunks=[],
         user_role="employee",
         user_department_id="dept_eng",
@@ -63,7 +64,7 @@ def test_validation_service_valid_grounding():
     ]
 
     validated, requires_escalation = ResponseValidationService.validate_response(
-        raw_response="Close valve A before valve B.",
+        raw_response=GeneratedAnswer("Close valve A before valve B.", ["chk_1"], "test"),
         retrieved_chunks=chunks,
         user_role="employee",
         user_department_id="dept_eng",
@@ -75,9 +76,9 @@ def test_validation_service_valid_grounding():
     assert validated.citations[0].document_title == "Valve SOP"
 
 
-@patch.object(CortexClient, "detect_intent")
+@patch.object(AIGateway, "detect_intent")
 @patch.object(RetrievalService, "retrieve_chunks")
-@patch.object(CortexClient, "generate_response")
+@patch.object(AIGateway, "generate_response")
 @patch("app.services.workflow_state.WorkflowStateService.get_active_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
@@ -104,13 +105,14 @@ def test_copilot_message_endpoint_standalone_turn(
             "document_id": "doc_1",
             "document_title": "Valve SOP",
             "version_number": 1,
+            "step_number": 1,
             "department_id": "dept_eng",
             "status": "PUBLISHED",
             "content": "Close valve A before B.",
             "score": 0.88,
         }
     ]
-    mock_generate.return_value = "Close valve A before valve B."
+    mock_generate.return_value = GeneratedAnswer("Close valve A before valve B.", ["chk_1"], "test")
 
     response = client.post(
         "/api/v1/copilot/message",

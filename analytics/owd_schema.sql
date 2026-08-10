@@ -162,15 +162,14 @@ CREATE TABLE IF NOT EXISTS KNOWLEDGE_STUDIO.workflow_escalation_policies (
     notification_template TEXT NOT NULL
 );
 
--- Workflow Search Metadata (replaces knowledge_chunks for Cortex Search Indexing)
+-- Workflow Search Metadata (replaces knowledge_chunks for local semantic indexing)
 CREATE TABLE IF NOT EXISTS KNOWLEDGE_STUDIO.workflow_search_metadata (
     id VARCHAR(64) PRIMARY KEY,
     workflow_version_id VARCHAR(64) NOT NULL REFERENCES KNOWLEDGE_STUDIO.workflow_versions(id),
     state_id VARCHAR(64) NOT NULL REFERENCES KNOWLEDGE_STUDIO.workflow_states(id),
     department_id VARCHAR(64) NOT NULL REFERENCES SECURITY.departments(id),
     search_content TEXT NOT NULL,
-    embedding_ref VARCHAR(255) NOT NULL DEFAULT 'cortex_embed_e5_base_v2',
-    vector_embedding VECTOR(FLOAT, 1024) NULL,
+    embedding_ref VARCHAR(255) NOT NULL DEFAULT 'none',
     status VARCHAR(32) NOT NULL CHECK (status IN ('published', 'archived', 'staged'))
 );
 
@@ -244,14 +243,14 @@ CREATE TABLE IF NOT EXISTS KNOWLEDGE_STUDIO.knowledge_document_ai_metadata (
     keywords VARIANT NULL,
     entities VARIANT NULL,
     language_detected VARCHAR(16) NOT NULL DEFAULT 'en-US',
-    embedding_model VARCHAR(128) NOT NULL DEFAULT 'cortex_embed_e5_base_v2',
-    embedding_version VARCHAR(32) NOT NULL DEFAULT '1.0',
+    embedding_model VARCHAR(128) NOT NULL DEFAULT 'none',
+    embedding_version VARCHAR(32) NOT NULL DEFAULT 'none',
     chunk_count INT NOT NULL DEFAULT 0,
     average_chunk_size INT NOT NULL DEFAULT 0,
     last_embedding_time TIMESTAMP_NTZ NULL,
-    embedding_status VARCHAR(32) NOT NULL DEFAULT 'READY',
-    evaluation_score FLOAT NULL DEFAULT 0.95,
-    confidence_score FLOAT NULL DEFAULT 0.95,
+    embedding_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUIRED',
+    evaluation_score FLOAT NULL DEFAULT NULL,
+    confidence_score FLOAT NULL DEFAULT NULL,
     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
 );
 
@@ -265,8 +264,8 @@ CREATE TABLE IF NOT EXISTS KNOWLEDGE_STUDIO.knowledge_document_chunks (
     character_count INT NOT NULL DEFAULT 0,
     token_count INT NOT NULL DEFAULT 0,
     chunk_content TEXT NOT NULL,
-    embedding_ref VARCHAR(128) NOT NULL DEFAULT 'cortex_embed_e5_base_v2',
-    vector_status VARCHAR(32) NOT NULL DEFAULT 'READY',
+    embedding_ref VARCHAR(128) NOT NULL DEFAULT 'none',
+    vector_status VARCHAR(32) NOT NULL DEFAULT 'NOT_REQUIRED',
     chunk_hash VARCHAR(64) NOT NULL,
     chunk_type VARCHAR(64) NOT NULL DEFAULT 'STATE_STEP',
     section_name VARCHAR(255) NULL,

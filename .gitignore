@@ -11,6 +11,9 @@ __pycache__/
 .coverage
 htmlcov/
 *.log
+logs/
+deployment_report.json
+deployment_report.md
 
 # Node dependencies & Next.js build outputs
 node_modules/
@@ -18,6 +21,13 @@ node_modules/
 out/
 build/
 dist/
+*.tsbuildinfo
+
+# Local AI model files and caches
+.ollama/
+models/
+*.gguf
+*.safetensors
 
 # IDE & OS files
 .vscode/

@@ -1,0 +1,226 @@
+"""Hermetic tests for provider-neutral local AI and disposable semantic retrieval."""
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from app.integrations.ai_gateway import AIGateway
+from app.integrations.ai_provider import GeneratedAnswer
+from app.integrations.local_ai_provider import OllamaLocalAIProvider
+from app.integrations.retrieval_providers import CandidateRepository, LocalSemanticIndex
+
+
+@pytest.mark.asyncio
+async def test_local_embedding_batch_request(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(return_value={"embeddings": [[1, 0], [0, 1]]})
+    monkeypatch.setattr(provider, "_request_json", request)
+
+    result = await provider.embed(["one", "two"])
+
+    assert result == [[1.0, 0.0], [0.0, 1.0]]
+    assert request.await_args.args == ("POST", "/api/embed")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "task"),
+    [
+        ("generate_grounded", "grounded_operational_answer"),
+        ("extract_answer", "extract_answer"),
+    ],
+)
+async def test_structured_grounded_generation_and_extraction(monkeypatch, method, task):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(return_value={"message": {"content": '{"answer":"Inspect seal.","source_ids":["chunk-1"]}'}})
+    monkeypatch.setattr(provider, "_request_json", request)
+    sources = [
+        {
+            "chunk_id": "chunk-1", "document_id": "doc-1", "version_number": 1,
+            "step_number": 1, "content": "Inspect seal.",
+        }
+    ]
+
+    result = await getattr(provider, method)("What now?", sources)
+
+    assert result.answer == "Inspect seal."
+    assert result.source_ids == ["chunk-1"]
+    body = request.await_args.kwargs["json"]
+    assert body["format"] == "json"
+    assert body["options"]["temperature"] == 0
+    assert task in body["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_local_runtime_summarization(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    monkeypatch.setattr(
+        provider,
+        "_request_json",
+        AsyncMock(return_value={"message": {"content": '{"answer":"Inspect then unload.","source_ids":["c1"]}'}}),
+    )
+    source = {"chunk_id": "c1", "document_id": "d1", "version_number": 1, "step_number": 1, "content": "Inspect then unload."}
+
+    result = await provider.summarize([source])
+
+    assert result.source_ids == ["c1"]
+    assert result.answer == "Inspect then unload."
+
+
+@pytest.mark.asyncio
+async def test_classification_is_non_authoritative_and_rejects_unknown_label(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    monkeypatch.setattr(
+        provider,
+        "_request_json",
+        AsyncMock(return_value={"message": {"content": '{"label":"secret-admin","confidence":2,"reason":"guess"}'}}),
+    )
+
+    result = await provider.classify_suggestion("document", ["operations", "quality"])
+
+    assert result == {"label": None, "confidence": 1.0, "reason": "guess", "authoritative": False}
+
+
+@pytest.mark.asyncio
+async def test_health_reports_installed_and_missing_models(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    monkeypatch.setattr(
+        provider,
+        "_request_json",
+        AsyncMock(return_value={"models": [{"name": "qwen2.5:3b"}]}),
+    )
+
+    result = await provider.health()
+
+    assert result["reachable"] is True
+    assert result["chat_ready"] is True
+    assert result["embedding_ready"] is False
+    assert result["missing_models"] == ["nomic-embed-text"]
+
+
+@pytest.mark.asyncio
+async def test_index_pages_past_candidate_batch_limit(monkeypatch):
+    provider = MagicMock()
+    provider.embed = AsyncMock(side_effect=[[[1.0, 0.0]], [[0.0, 1.0]], [[0.0, 1.0]]])
+    provider.cosine_similarity = OllamaLocalAIProvider.cosine_similarity
+    index = LocalSemanticIndex(provider)
+    pages = [
+        [{"chunk_id": "first", "content": "first", "department_id": "dept_ops", "status": "published"}],
+        [{"chunk_id": "second", "content": "second", "department_id": "dept_ops", "status": "published"}],
+        [],
+    ]
+    loader = MagicMock(side_effect=pages)
+    monkeypatch.setattr(CandidateRepository, "load_page", loader)
+    monkeypatch.setattr("app.integrations.retrieval_providers.settings.LOCAL_AI_CANDIDATE_LIMIT", 1)
+    monkeypatch.setattr("app.integrations.retrieval_providers.settings.LOCAL_AI_INDEX_MAX_CANDIDATES", 10)
+    monkeypatch.setattr("app.integrations.retrieval_providers.settings.LOCAL_AI_MIN_SIMILARITY", 0.5)
+
+    results = await index.search("relevant", "dept_ops", 5)
+
+    assert loader.call_count == 3
+    assert [result["chunk_id"] for result in results] == ["second"]
+
+
+@pytest.mark.asyncio
+async def test_index_filters_cross_department_and_non_published_after_ranking(monkeypatch):
+    provider = MagicMock()
+    provider.embed = AsyncMock(side_effect=[[[1, 0], [1, 0], [1, 0]], [[1, 0]]])
+    provider.cosine_similarity = OllamaLocalAIProvider.cosine_similarity
+    index = LocalSemanticIndex(provider)
+    monkeypatch.setattr(
+        CandidateRepository,
+        "load_page",
+        MagicMock(
+            side_effect=[
+                [
+                    {"chunk_id": "ok", "content": "ok", "department_id": "dept_ops", "status": "published"},
+                    {"chunk_id": "cross", "content": "cross", "department_id": "dept_hr", "status": "published"},
+                    {"chunk_id": "draft", "content": "draft", "department_id": "dept_ops", "status": "draft"},
+                ],
+                [],
+            ]
+        ),
+    )
+
+    results = await index.search("query", "dept_ops", 10)
+
+    assert [result["chunk_id"] for result in results] == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_unavailable_uses_sql_retrieval(monkeypatch):
+    monkeypatch.setattr(AIGateway.semantic_index, "search", AsyncMock(side_effect=ConnectionError("offline")))
+    monkeypatch.setattr(AIGateway.sql_provider, "search", AsyncMock(return_value=[{"chunk_id": "sql"}]))
+
+    result = await AIGateway.search("query", "dept_ops", 5)
+
+    assert result == [{"chunk_id": "sql"}]
+
+
+def test_index_invalidation_removes_only_published_department_cache():
+    index = LocalSemanticIndex(MagicMock())
+    key_ops = ("dept_ops", ("published",), "nomic-embed-text")
+    key_hr = ("dept_hr", ("published",), "nomic-embed-text")
+    index._entries[key_ops] = MagicMock()
+    index._entries[key_hr] = MagicMock()
+
+    index.invalidate_department("dept_ops")
+
+    assert key_ops not in index._entries
+    assert key_hr in index._entries
+
+
+def test_public_managed_ai_url_is_rejected(monkeypatch):
+    monkeypatch.setattr(
+        "app.integrations.local_ai_provider.settings.LOCAL_AI_BASE_URL",
+        "https://managed-ai.example.com",
+    )
+
+    with pytest.raises(ValueError, match="local or private"):
+        OllamaLocalAIProvider._url("/api/chat")
+
+
+def test_candidate_query_scopes_department_and_status_before_rows_are_returned(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+    cursor.description = []
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    monkeypatch.setattr(
+        "app.integrations.retrieval_providers.get_snowflake_connection",
+        MagicMock(return_value=context),
+    )
+
+    CandidateRepository.load_page("dept_ops", ("published",), 100, 0)
+
+    sql, params = cursor.execute.call_args.args
+    assert "LOWER(wv.status) IN (%s)" in sql
+    assert "sm.department_id = %s" in sql
+    assert params == ["published", "dept_ops", 100, 0]
+
+
+@pytest.mark.asyncio
+async def test_generation_unavailable_uses_extractive_fallback(monkeypatch):
+    monkeypatch.setattr(
+        AIGateway.local_provider,
+        "generate_grounded",
+        AsyncMock(side_effect=ConnectionError("offline")),
+    )
+    source = {
+        "chunk_id": "c1",
+        "document_id": "d1",
+        "document_title": "SOP",
+        "version_number": 1,
+        "step_number": 2,
+        "content": "Inspect the seal.",
+    }
+
+    result = await AIGateway.generate_response(
+        {"query": "What should I inspect?", "retrieved_chunks": [source]}
+    )
+
+    assert isinstance(result, GeneratedAnswer)
+    assert result.provider == "extractive"
+    assert result.source_ids == ["c1"]

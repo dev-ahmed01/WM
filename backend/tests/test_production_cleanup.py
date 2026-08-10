@@ -1,8 +1,5 @@
 """Regression tests for removal of abandoned deployment and ingestion fallbacks."""
 
-import subprocess
-import sys
-
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.compiler.parsers.retrieval_metadata_parser import RetrievalMetadataParser
 from backend.scripts.seed_test_users import SEED_USERS
@@ -23,11 +20,15 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
     metadata = RetrievalMetadataParser.parse("# Operational workflow")
     assert metadata.embedding_metadata == {}
     assert metadata.vector_metadata == {}
-    assert metadata.cortex_search_metadata == {}
+    assert metadata.semantic_search_metadata == {}
 
 
-def test_deployment_includes_cortex_search_and_fails_closed(monkeypatch):
-    assert deploy_owd_schema.MIGRATION_FILES[-1] == "11_cortex_search_service.sql"
+def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
+    assert deploy_owd_schema.MIGRATION_FILES[-2:] == [
+        "12_runtime_alignment.sql",
+        "13_runtime_prerequisites.sql",
+    ]
+    assert deploy_owd_schema.ordered_migrations() == deploy_owd_schema.MIGRATION_FILES
     monkeypatch.setattr(
         deploy_owd_schema.settings,
         "SNOWFLAKE_ACCOUNT",
@@ -41,13 +42,9 @@ def test_deployment_includes_cortex_search_and_fails_closed(monkeypatch):
     assert report["schemas_created"] == []
 
 
-def test_deployment_cli_returns_failure_for_placeholder_credentials():
-    result = subprocess.run(
-        [sys.executable, "scripts/deploy_owd_schema.py"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_ACCOUNT", "your_snowflake_account")
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_USER", "your_snowflake_user")
+    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_PASSWORD", "replace_with_a_local_secret")
 
-    assert result.returncode == 1
-    assert "Status: FAILED" in result.stdout
+    assert deploy_owd_schema.has_placeholder_credentials() is True

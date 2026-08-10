@@ -1,1 +1,1 @@
-# System prompt template driving step-aware operational guidance in Snowflake Cortex Complete.
+# System prompt template for step-aware operational guidance through the local Ollama provider.

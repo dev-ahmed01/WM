@@ -1,7 +1,7 @@
 """Enterprise Document Repository.
 
 Provides data access interfaces for querying canonical Enterprise Knowledge Document entities,
-preserved raw markdown, Cortex AI metadata, first-class chunks, and lineage audit trails.
+preserved raw markdown, local analysis metadata, first-class chunks, and lineage audit trails.
 """
 
 import logging

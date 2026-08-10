@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
-    # Snowflake Persistence & AI Services Connection Settings
+    # Snowflake persistence and source-stage connection settings
     SNOWFLAKE_ACCOUNT: str = "your_snowflake_account_placeholder"
     SNOWFLAKE_USER: str = "your_snowflake_user_placeholder"
     SNOWFLAKE_PASSWORD: str = "your_snowflake_password_placeholder"
@@ -30,14 +30,19 @@ class Settings(BaseSettings):
     SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
     SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
 
-    # Copilot retrieval and generation. Production should keep the allowed
-    # status list restricted to published knowledge only.
-    CORTEX_SEARCH_SERVICE: str = "WORKMATE_AI.KNOWLEDGE_STUDIO.WORKMATE_KNOWLEDGE_SEARCH"
-    CORTEX_COMPLETE_MODEL: str = "mistral-large2"
-    CORTEX_SEARCH_ENABLED: bool = True
-    CORTEX_COMPLETE_ENABLED: bool = True
+    # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
+
+    # Free/self-hosted Ollama runtime. Snowflake is candidate storage only.
+    LOCAL_AI_ENABLED: bool = True
+    LOCAL_AI_BASE_URL: str = "http://ollama:11434"
+    LOCAL_CHAT_MODEL: str = "qwen2.5:3b"
+    LOCAL_EMBEDDING_MODEL: str = "nomic-embed-text"
+    LOCAL_AI_TIMEOUT_SECONDS: float = 30.0
+    LOCAL_AI_CANDIDATE_LIMIT: int = 100
+    LOCAL_AI_INDEX_MAX_CANDIDATES: int = 5000
+    LOCAL_AI_MIN_SIMILARITY: float = 0.35
 
     # Auth & Security Credentials
     JWT_SECRET: str = "test_super_secret_jwt_key_32_bytes_min"

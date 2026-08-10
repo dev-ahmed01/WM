@@ -304,10 +304,6 @@ def write_report_files(
     json_path = output_dir / "deployment_report.json"
     json_path.write_text(json.dumps(summary_data, indent=2), encoding="utf-8")
 
-    # Also write to root directory if output_dir is logs/
-    root_json = ROOT_DIR / "deployment_report.json"
-    root_json.write_text(json.dumps(summary_data, indent=2), encoding="utf-8")
-
     # Markdown report
     md_lines = [
         "# OWD Deployment Report",
@@ -360,7 +356,6 @@ def write_report_files(
 
     md_content = "\n".join(md_lines)
     (output_dir / "deployment_report.md").write_text(md_content, encoding="utf-8")
-    (ROOT_DIR / "deployment_report.md").write_text(md_content, encoding="utf-8")
 
 
 def run_ingestion_pipeline(
@@ -398,7 +393,7 @@ def run_ingestion_pipeline(
 
     logger.info(f"OWD Ingestion Pipeline completed in {round(total_elapsed, 2)}s.")
     logger.info(f"Log file generated: {log_file_path}")
-    logger.info(f"Report files generated: {ROOT_DIR / 'deployment_report.json'}")
+    logger.info(f"Report files generated in: {logs_dir}")
 
     return {
         "total_workflows": len(results),
