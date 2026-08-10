@@ -1,11 +1,20 @@
 # PROJECT_CONTEXT_V2.md — WorkMate AI
 
+<<<<<<< HEAD
 > **Architecture decision (2026-08-09):** Snowflake is the durable database and
 > OWD source stage only. All managed Snowflake AI/search code, settings, migrations,
 > and grants have been removed. Runtime embeddings and grounded generation use
 > self-hosted Ollama; a disposable in-memory semantic index and scoped SQL/extractive
 > fallbacks preserve operation. See `docs/local_ai_runtime.md`. This decision
 > supersedes older historical statements below.
+=======
+> **Architecture decision (2026-08-09):** Snowflake is now the durable database
+> and stage only. Cortex Search and Cortex Complete remain optional compatibility
+> adapters but are disabled by default. The baseline uses department-scoped SQL
+> retrieval and grounded extractive responses. Optional self-hosted providers are
+> described in `docs/cortex_replacement_options.md`. This decision supersedes
+> older statements below that require Cortex for retrieval or generation.
+>>>>>>> origin/main
 
 **Purpose of this document:** The original `PROJECT_CONTEXT.md` describes the
 **intended architecture** from the initial product/vision doc. It was written

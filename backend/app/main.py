@@ -16,7 +16,11 @@ from app.core.database import ping_snowflake_connection
 from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
+<<<<<<< HEAD
 from app.integrations.ai_gateway import AIGateway
+=======
+from app.integrations.local_ai_client import LocalAIClient
+>>>>>>> origin/main
 
 # Initialize structured logging subsystem
 setup_logging()
@@ -126,6 +130,7 @@ async def health_check() -> Dict[str, Any]:
 
 @app.get("/health/ai", tags=["Health"])
 async def ai_health_check() -> Dict[str, Any]:
+<<<<<<< HEAD
     """Report local provider readiness without contacting any managed AI service."""
     local = await AIGateway.health()
     provider_ready = (
@@ -138,9 +143,20 @@ async def ai_health_check() -> Dict[str, Any]:
     )
     return {
         "status": "ok" if provider_ready else "degraded",
+=======
+    """Report local provider readiness without making managed Cortex calls."""
+    local = await LocalAIClient.health()
+    return {
+        "status": "ok" if (not local["enabled"] or local["reachable"]) else "degraded",
+>>>>>>> origin/main
         "provider": "ollama",
         "local": local,
         "chat_model": settings.LOCAL_CHAT_MODEL,
         "embedding_model": settings.LOCAL_EMBEDDING_MODEL,
+<<<<<<< HEAD
         "fallback_ready": True,
+=======
+        "cortex_search_enabled": settings.CORTEX_SEARCH_ENABLED,
+        "cortex_complete_enabled": settings.CORTEX_COMPLETE_ENABLED,
+>>>>>>> origin/main
     }

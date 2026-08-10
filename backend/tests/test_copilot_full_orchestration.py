@@ -10,8 +10,12 @@ from app.api.v1.copilot_session import router as session_router
 from app.core.security import create_access_token
 from app.models.workflow_session import WorkflowSession
 from app.services.retrieval import RetrievalService
+<<<<<<< HEAD
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
+=======
+from app.integrations.cortex_client import CortexClient
+>>>>>>> origin/main
 from app.services.validation import CANONICAL_FALLBACK
 
 app = FastAPI()
@@ -111,9 +115,15 @@ def test_copilot_clarification_short_circuit(
     assert data["requires_escalation"] is False
 
 
+<<<<<<< HEAD
 @patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
 @patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
 @patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
+=======
+@patch.object(CortexClient, "detect_intent", new_callable=AsyncMock)
+@patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
+@patch.object(CortexClient, "generate_response", new_callable=AsyncMock)
+>>>>>>> origin/main
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_history")
@@ -137,7 +147,11 @@ def test_grounded_fallback_survives_escalation_and_analytics_failures(
     mock_get_active_session.return_value = None
     mock_detect_intent.return_value = {"needs_clarification": False}
     mock_retrieve.return_value = []
+<<<<<<< HEAD
     mock_generate.return_value = GeneratedAnswer("", [], "none")
+=======
+    mock_generate.return_value = "No knowledge found."
+>>>>>>> origin/main
     mock_escalate.side_effect = RuntimeError("missing escalation grant")
     mock_record_event.side_effect = RuntimeError("analytics unavailable")
 

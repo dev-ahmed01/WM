@@ -5,8 +5,12 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 ## Technology
 
 - **Backend:** FastAPI on Python 3.11+
+<<<<<<< HEAD
 - **Data:** Snowflake relational storage and OWD source Stage only
 - **Local AI:** self-hosted Ollama embeddings and grounded generation, with SQL/extractive fallbacks
+=======
+- **Data and AI:** Snowflake Stage, Cortex Search, and Cortex Complete
+>>>>>>> origin/main
 - **Frontend:** Next.js, React, TypeScript, and Tailwind CSS
 - **Orchestration:** n8n for triggers, retries, approvals, and notifications only
 - **Security:** JWT authentication with role- and department-scoped access
@@ -35,8 +39,12 @@ Generated deployment reports belong in the ignored `logs/` directory. TypeScript
 - Docker with Docker Compose
 - Node.js 18+ and npm
 - Python 3.11+
+<<<<<<< HEAD
 - A Snowflake account with database, stage, and least-privilege runtime access
 - Enough local disk/RAM for the configured Ollama models
+=======
+- A Snowflake account with the required database, stage, runtime-role, and Cortex privileges
+>>>>>>> origin/main
 
 ## Environment setup
 
@@ -52,6 +60,7 @@ For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env
 
 ## Run locally
 
+<<<<<<< HEAD
 ### Self-hosted local AI
 
 The normal Compose startup launches Ollama, health-checks it, idempotently installs the configured
@@ -91,6 +100,25 @@ python -m pip install -r backend/requirements.txt
 PYTHONPATH=backend uvicorn app.main:app --reload --port 8000
 ```
 
+=======
+### Docker Compose
+
+```bash
+docker compose up --build
+```
+
+### Backend without Docker
+
+Run from the repository root so scripts and tests resolve their root-relative imports consistently:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+PYTHONPATH=backend uvicorn app.main:app --reload --port 8000
+```
+
+>>>>>>> origin/main
 API documentation is available at <http://localhost:8000/docs>.
 
 ### Frontend
@@ -123,7 +151,11 @@ npm run lint
 npm run build
 ```
 
+<<<<<<< HEAD
 See [`docs/local_ai_runtime.md`](docs/local_ai_runtime.md) for provider, index, grounding, model,
 health, hardware, and fallback behavior. Use the
 [`Snowflake runtime runbook`](docs/snowflake_runtime_runbook.md) for database/stage and live
 same-/cross-department validation.
+=======
+See [`docs/repository_remediation_plan.md`](docs/repository_remediation_plan.md) for the audited cleanup target and the separate ingestion/Copilot restoration assignment.
+>>>>>>> origin/main

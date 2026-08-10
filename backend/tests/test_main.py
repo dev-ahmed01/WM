@@ -28,15 +28,22 @@ def test_health_check_unreachable_graceful(mock_ping):
     assert data["database"] == "unreachable"
 
 
+<<<<<<< HEAD
 @patch("app.main.AIGateway.health", new_callable=AsyncMock)
 def test_ai_health_reports_local_provider(mock_health):
     mock_health.return_value = {"enabled": True, "reachable": True, "required_models": ["qwen2.5:3b", "nomic-embed-text"], "installed_models": ["qwen2.5:3b", "nomic-embed-text"], "missing_models": [], "chat_ready": True, "embedding_ready": True}
+=======
+@patch("app.main.LocalAIClient.health", new_callable=AsyncMock)
+def test_ai_health_reports_local_provider(mock_health):
+    mock_health.return_value = {"enabled": True, "reachable": True, "models": ["qwen2.5:3b"]}
+>>>>>>> origin/main
 
     response = client.get("/health/ai")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert response.json()["provider"] == "ollama"
+<<<<<<< HEAD
 
 
 @patch("app.main.AIGateway.health", new_callable=AsyncMock)
@@ -56,3 +63,5 @@ def test_ai_health_is_degraded_when_required_model_is_missing(mock_health):
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
     assert response.json()["local"]["missing_models"] == ["nomic-embed-text"]
+=======
+>>>>>>> origin/main

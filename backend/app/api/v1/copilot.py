@@ -95,7 +95,11 @@ async def copilot_message(
             conversation_id=conversation_id,
             sender="ai",
             content=clarification_text,
+<<<<<<< HEAD
             confidence_score=0.0,
+=======
+            confidence_score=0.50,
+>>>>>>> origin/main
         )
         try:
             AnalyticsService.record_event(

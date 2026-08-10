@@ -5,6 +5,7 @@ seeds initial SECURITY departments and roles, and runs INFORMATION_SCHEMA verifi
 Deployment fails closed when live Snowflake credentials are unavailable.
 """
 
+import argparse
 import sys
 import logging
 from pathlib import Path
@@ -22,6 +23,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("owd_deployer")
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "analytics" / "migrations"
+<<<<<<< HEAD
+=======
+CORTEX_SEARCH_MIGRATION = "11_cortex_search_service.sql"
+>>>>>>> origin/main
 MIGRATION_FILES = [
     "01_schemas.sql",
     "02_security.sql",
@@ -37,9 +42,18 @@ MIGRATION_FILES = [
 ]
 
 
+<<<<<<< HEAD
 def ordered_migrations() -> List[str]:
     """Return the deterministic database-only migration order."""
     return list(MIGRATION_FILES)
+=======
+def ordered_migrations(include_cortex: bool = False) -> List[str]:
+    """Return core migrations, optionally inserting Cortex creation in numeric order."""
+    migrations = list(MIGRATION_FILES)
+    if include_cortex:
+        migrations.insert(migrations.index("12_runtime_alignment.sql"), CORTEX_SEARCH_MIGRATION)
+    return migrations
+>>>>>>> origin/main
 
 
 def has_placeholder_credentials() -> bool:
@@ -82,7 +96,7 @@ def split_sql_statements(sql_text: str) -> List[str]:
     return statements
 
 
-def deploy_migrations() -> Dict[str, Any]:
+def deploy_migrations(include_cortex: bool = False) -> Dict[str, Any]:
     """Run ordered SQL migrations against live Snowflake, failing closed."""
     if has_placeholder_credentials():
         return {
@@ -107,7 +121,11 @@ def deploy_migrations() -> Dict[str, Any]:
     try:
         with get_snowflake_connection() as conn:
             with conn.cursor() as cur:
+<<<<<<< HEAD
                 for mig_file in ordered_migrations():
+=======
+                for mig_file in ordered_migrations(include_cortex=include_cortex):
+>>>>>>> origin/main
                     file_path = MIGRATIONS_DIR / mig_file
                     if not file_path.exists():
                         msg = f"Migration file not found: {file_path}"
@@ -187,7 +205,14 @@ def deploy_migrations() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    result = deploy_migrations()
+    parser = argparse.ArgumentParser(description="Deploy WorkMate Snowflake migrations.")
+    parser.add_argument(
+        "--include-cortex",
+        action="store_true",
+        help="Create the Cortex Search service; requires a separately privileged deployment role.",
+    )
+    args = parser.parse_args()
+    result = deploy_migrations(include_cortex=args.include_cortex)
     print("\n" + "=" * 80)
     print("OWD SNOWFLAKE DATABASE DEPLOYMENT REPORT")
     print("=" * 80)

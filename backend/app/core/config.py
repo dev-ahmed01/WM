@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
     SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
 
+<<<<<<< HEAD
     # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
@@ -37,11 +38,31 @@ class Settings(BaseSettings):
     # Free/self-hosted Ollama runtime. Snowflake is candidate storage only.
     LOCAL_AI_ENABLED: bool = True
     LOCAL_AI_BASE_URL: str = "http://ollama:11434"
+=======
+    # Copilot retrieval and generation. Production should keep the allowed
+    # status list restricted to published knowledge only.
+    CORTEX_SEARCH_SERVICE: str = "WORKMATE_AI.KNOWLEDGE_STUDIO.WORKMATE_KNOWLEDGE_SEARCH"
+    CORTEX_COMPLETE_MODEL: str = "mistral-large2"
+    # Cortex is opt-in. By default Snowflake is persistence only; retrieval
+    # uses scoped SQL and answers use the grounded extractive fallback.
+    CORTEX_SEARCH_ENABLED: bool = False
+    CORTEX_COMPLETE_ENABLED: bool = False
+    COPILOT_RETRIEVAL_LIMIT: int = 5
+    COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
+
+    # Free/self-hosted AI provider. Ollama is attempted first and every failure
+    # safely falls back to scoped SQL retrieval or an extractive response.
+    LOCAL_AI_ENABLED: bool = True
+    LOCAL_AI_BASE_URL: str = "http://127.0.0.1:11434"
+>>>>>>> origin/main
     LOCAL_CHAT_MODEL: str = "qwen2.5:3b"
     LOCAL_EMBEDDING_MODEL: str = "nomic-embed-text"
     LOCAL_AI_TIMEOUT_SECONDS: float = 30.0
     LOCAL_AI_CANDIDATE_LIMIT: int = 100
+<<<<<<< HEAD
     LOCAL_AI_INDEX_MAX_CANDIDATES: int = 5000
+=======
+>>>>>>> origin/main
     LOCAL_AI_MIN_SIMILARITY: float = 0.35
 
     # Auth & Security Credentials

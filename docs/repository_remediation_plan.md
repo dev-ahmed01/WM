@@ -1,7 +1,10 @@
 # WorkMate AI repository remediation plan
 
+<<<<<<< HEAD
 > Historical cleanup plan. Managed Snowflake AI/search was subsequently removed; use `local_ai_runtime.md` and `snowflake_runtime_runbook.md` for current deployment.
 
+=======
+>>>>>>> origin/main
 ## Decision summary
 
 - **Original audited count:** 169 application-repository files; committing this plan made the
@@ -53,7 +56,12 @@ until the bootstrap and migration strategies are deliberately unified.
 ### Why connectivity can pass while upload and Copilot fail
 
 The `/health` database check runs only a simple Snowflake query. It does not prove that the
+<<<<<<< HEAD
 runtime role can use the warehouse, stage, knowledge tables, local AI provider and semantic index, conversation tables, or escalation tables.
+=======
+runtime role can use the warehouse, stage, knowledge tables, Cortex Search service, Cortex
+model, conversation tables, or escalation tables.
+>>>>>>> origin/main
 
 The audited request chain exposes several concrete risks:
 
@@ -66,7 +74,12 @@ The audited request chain exposes several concrete risks:
 4. Retrieval accepts published rows only and applies exact department filtering. An upload
    failure, unrefreshed search service, status mismatch, or JWT department mismatch produces
    no eligible evidence.
+<<<<<<< HEAD
 5. The historical managed search/generation dependency was removed; local model readiness is now independently observable.
+=======
+5. The Cortex Search migration has a one-hour target lag and requires separate service and
+   Cortex privileges. Model completion has its own role/model availability requirements.
+>>>>>>> origin/main
 6. Empty retrieval correctly selects the grounded fallback, but fallback handling synchronously
    writes an escalation row. A missing table or DML grant can turn a safe no-evidence response
    into HTTP 500.
@@ -175,6 +188,7 @@ still pass; tracked count is 163/162. Merge and deploy before Person 2 begins.
 **Effort:** approximately three person-days. **Scope:** runtime functionality and its tests/runbook.
 Start from Person 1's merged commit; do not reintroduce reports, credentials, or duplicate scripts.
 
+<<<<<<< HEAD
 ### Implementation status
 
 Repository-side Person 2 work is complete: core deployment now includes runtime alignment and
@@ -185,6 +199,8 @@ role grants, upload smoke test, Search refresh, model probe, and two-department 
 environment-owner steps because this repository contains no live credentials. Follow
 [`snowflake_runtime_runbook.md`](snowflake_runtime_runbook.md) against the target account.
 
+=======
+>>>>>>> origin/main
 ### 1. Reproduce each boundary independently (quarter day)
 
 Capture the browser request ID, URL, response status, structured `error_code`, and matching backend
@@ -230,9 +246,20 @@ For success, assert the staged object exists and the workflow/version is `PUBLIS
 state, step, and search-metadata counts. Force a loader error once and verify the database
 transaction rolls back without claiming publication.
 
+<<<<<<< HEAD
 ### 7. Prove local semantic retrieval and generation separately (half day)
 
 Verify both Ollama models, index rebuild/refresh, scoped SQL fallback, structured source IDs, and extractive fallback as documented in `local_ai_runtime.md`.
+=======
+### 7. Prove Cortex Search and completion separately (half day)
+
+1. Deploy the Search-service migration with the required privileged role; grant runtime service
+   usage and `SNOWFLAKE.CORTEX_USER` as appropriate for the account.
+2. Inspect service status and query it directly with the uploaded document's exact published status
+   and department. Account for the one-hour target lag or use an intentionally shorter test lag.
+3. Call the configured completion model independently. Distinguish model authorization/region
+   failure from retrieval failure, and verify the disabled/unavailable fallback path.
+>>>>>>> origin/main
 
 ### 8. Make fallback incapable of becoming HTTP 500 (half day)
 

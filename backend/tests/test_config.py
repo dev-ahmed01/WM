@@ -27,7 +27,15 @@ def test_settings_fields_present():
     assert hasattr(settings, "LOG_LEVEL")
 
 
+<<<<<<< HEAD
 def test_local_ai_is_default_provider():
     defaults = Settings(_env_file=None)
 
+=======
+def test_cortex_is_opt_in_by_default():
+    defaults = Settings(_env_file=None)
+
+    assert defaults.CORTEX_SEARCH_ENABLED is False
+    assert defaults.CORTEX_COMPLETE_ENABLED is False
+>>>>>>> origin/main
     assert defaults.LOCAL_AI_ENABLED is True

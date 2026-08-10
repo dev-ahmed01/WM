@@ -23,12 +23,25 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
     assert metadata.semantic_search_metadata == {}
 
 
+<<<<<<< HEAD
 def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
+=======
+def test_deployment_orders_runtime_prerequisites_and_separates_cortex(monkeypatch):
+>>>>>>> origin/main
     assert deploy_owd_schema.MIGRATION_FILES[-2:] == [
         "12_runtime_alignment.sql",
         "13_runtime_prerequisites.sql",
     ]
+<<<<<<< HEAD
     assert deploy_owd_schema.ordered_migrations() == deploy_owd_schema.MIGRATION_FILES
+=======
+    assert "11_cortex_search_service.sql" not in deploy_owd_schema.ordered_migrations()
+    assert deploy_owd_schema.ordered_migrations(include_cortex=True)[-3:] == [
+        "11_cortex_search_service.sql",
+        "12_runtime_alignment.sql",
+        "13_runtime_prerequisites.sql",
+    ]
+>>>>>>> origin/main
     monkeypatch.setattr(
         deploy_owd_schema.settings,
         "SNOWFLAKE_ACCOUNT",
@@ -46,5 +59,19 @@ def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_ACCOUNT", "your_snowflake_account")
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_USER", "your_snowflake_user")
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_PASSWORD", "replace_with_a_local_secret")
+<<<<<<< HEAD
+=======
+
+    assert deploy_owd_schema.has_placeholder_credentials() is True
+
+
+def test_deployment_cli_returns_failure_for_placeholder_credentials():
+    result = subprocess.run(
+        [sys.executable, "scripts/deploy_owd_schema.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+>>>>>>> origin/main
 
     assert deploy_owd_schema.has_placeholder_credentials() is True
