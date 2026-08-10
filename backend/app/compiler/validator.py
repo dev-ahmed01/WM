@@ -117,6 +117,8 @@ class OWDValidator:
         # 6. Check graph transitions and broken target references
         all_transitions: List[Dict[str, str]] = []
         for s in states:
+            transition_conditions: Set[tuple[str, str]] = set()
+            always_count = 0
             for t in s.transitions:
                 all_transitions.append({
                     "from_state_key": t.from_state_key,
@@ -129,6 +131,24 @@ class OWDValidator:
 
                 if t.to_state_key not in seen_state_keys:
                     errors.append(f"State '{s.state_key}' has broken transition target '{t.to_state_key}' which does not exist in workflow.")
+
+                condition_key = (
+                    str(t.condition_type or "ALWAYS").upper(),
+                    str(t.condition_expression or "").strip().upper(),
+                )
+                if condition_key[0] == "ALWAYS":
+                    always_count += 1
+                if condition_key in transition_conditions:
+                    errors.append(
+                        f"State '{s.state_key}' has duplicate transition condition "
+                        f"{condition_key[0]}:{condition_key[1] or '<empty>'}."
+                    )
+                transition_conditions.add(condition_key)
+
+            if always_count > 1:
+                errors.append(
+                    f"State '{s.state_key}' has multiple unconditional transitions; the branch is ambiguous."
+                )
 
             # Check decision option target state references
             for d in s.decisions:

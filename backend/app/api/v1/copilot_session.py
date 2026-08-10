@@ -1,62 +1,96 @@
-"""FastAPI Router for Copilot Session State Operations."""
+"""Authenticated, owner-scoped workflow session lifecycle endpoints."""
+
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.models.workflow_session import WorkflowSession, AbandonSessionRequest
+
+from app.core.security import normalize_role
+from app.middleware.rbac_middleware import require_role
+from app.models.workflow_session import (
+    AbandonSessionRequest,
+    AdvanceSessionRequest,
+    WorkflowSession,
+)
 from app.repositories.workflow_session_repository import WorkflowSessionRepository
 from app.services.workflow_state import WorkflowStateService
-from app.middleware.rbac_middleware import require_role
 
 router = APIRouter(prefix="/copilot/session", tags=["Copilot Session State"])
 
+_authorized_user = require_role("employee", "admin", "manager")
 
-@router.get(
-    "/{id}",
-    response_model=WorkflowSession,
-    summary="Get workflow session details",
-    dependencies=[Depends(require_role("employee", "admin", "manager"))],
-)
-async def get_session_endpoint(id: str) -> WorkflowSession:
-    """Retrieves current details and step position of a workflow session."""
-    session_dict = WorkflowSessionRepository.get_by_id(id)
-    if not session_dict:
+
+def _owned_session(session_id: str, current_user: Dict[str, Any]) -> Dict[str, Any]:
+    session = WorkflowSessionRepository.get_by_id(session_id)
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error_code": "NOT_FOUND", "message": f"Workflow session '{id}' not found.", "details": None},
+            detail={
+                "error_code": "NOT_FOUND",
+                "message": f"Workflow session '{session_id}' not found.",
+                "details": None,
+            },
         )
-    return WorkflowSession(**session_dict)
+    is_admin = normalize_role(current_user.get("role", "")) == "admin"
+    if not is_admin and session.get("user_id") != current_user.get("sub"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "AUTH_FORBIDDEN",
+                "message": "You do not own this workflow session.",
+                "details": None,
+            },
+        )
+    return session
 
 
-@router.post(
-    "/{id}/resume",
-    response_model=WorkflowSession,
-    summary="Resume a paused workflow session",
-    dependencies=[Depends(require_role("employee", "admin", "manager"))],
-)
-async def resume_session_endpoint(id: str) -> WorkflowSession:
-    """Resumes a paused workflow session back to active status."""
-    return WorkflowStateService.resume_session(session_id=id)
+@router.get("/{id}", response_model=WorkflowSession, summary="Get workflow session details")
+async def get_session_endpoint(
+    id: str,
+    current_user: Dict[str, Any] = Depends(_authorized_user),
+) -> WorkflowSession:
+    return WorkflowSession(**_owned_session(id, current_user))
 
 
-@router.post(
-    "/{id}/pause",
-    response_model=WorkflowSession,
-    summary="Pause an active workflow session",
-    dependencies=[Depends(require_role("employee", "admin", "manager"))],
-)
-async def pause_session_endpoint(id: str) -> WorkflowSession:
-    """Pauses an active workflow session."""
-    return WorkflowStateService.pause_session(session_id=id)
+@router.post("/{id}/resume", response_model=WorkflowSession)
+async def resume_session_endpoint(
+    id: str,
+    current_user: Dict[str, Any] = Depends(_authorized_user),
+) -> WorkflowSession:
+    _owned_session(id, current_user)
+    return WorkflowStateService.resume_session(id)
 
 
-@router.post(
-    "/{id}/abandon",
-    response_model=WorkflowSession,
-    summary="Abandon an active workflow session",
-    dependencies=[Depends(require_role("employee", "admin", "manager"))],
-)
+@router.post("/{id}/pause", response_model=WorkflowSession)
+async def pause_session_endpoint(
+    id: str,
+    current_user: Dict[str, Any] = Depends(_authorized_user),
+) -> WorkflowSession:
+    _owned_session(id, current_user)
+    return WorkflowStateService.pause_session(id)
+
+
+@router.post("/{id}/advance", response_model=WorkflowSession)
+async def advance_session_endpoint(
+    id: str,
+    payload: AdvanceSessionRequest,
+    current_user: Dict[str, Any] = Depends(_authorized_user),
+) -> WorkflowSession:
+    _owned_session(id, current_user)
+    context: Dict[str, Any] = {
+        "values": payload.values,
+        "rule_results": payload.rule_results,
+        "use_fallback": payload.use_fallback,
+    }
+    if payload.decision_option:
+        context["decision_option"] = payload.decision_option
+    return WorkflowStateService.mark_step_complete(id, context)
+
+
+@router.post("/{id}/abandon", response_model=WorkflowSession)
 async def abandon_session_endpoint(
     id: str,
     payload: AbandonSessionRequest,
+    current_user: Dict[str, Any] = Depends(_authorized_user),
 ) -> WorkflowSession:
-    """Abandons an active workflow session with an audit reason."""
-    return WorkflowStateService.abandon_session(session_id=id, reason=payload.reason)
+    _owned_session(id, current_user)
+    return WorkflowStateService.abandon_session(id, payload.reason)

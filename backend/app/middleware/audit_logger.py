@@ -14,14 +14,12 @@ logger = logging.getLogger("workmate.audit")
 
 
 def _record_audit_entry_sync(audit_entry: Dict[str, Any]) -> None:
-    """Synchronous database helper executing insertion into AUDIT_LOG table in Snowflake."""
-
-
+    """Insert against the SHARED.audit_logs schema provisioned by migrations."""
     try:
         with get_db_cursor() as cursor:
             query = """
-                INSERT INTO AUDIT_LOG (
-                    LOG_ID,
+                INSERT INTO SHARED.audit_logs (
+                    ID,
                     USER_ID,
                     ROLE,
                     ACTION,

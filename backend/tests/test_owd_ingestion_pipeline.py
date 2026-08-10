@@ -72,6 +72,17 @@ class TestOWDIngestionPipeline(unittest.TestCase):
         self.template_file.write_text(VALID_OWD_MARKDOWN, encoding="utf-8")
 
         self.logger_mock = MagicMock()
+        self.department_patcher = patch(
+            "scripts.load_owd.KnowledgeRepository.department_exists", return_value=True
+        )
+        self.stage_patcher = patch(
+            "scripts.load_owd.IngestionService.stage_file",
+            return_value="@RAW_OWD_STAGE/SOP_TEST_001/v1/hash/receive_test.md",
+        )
+        self.department_patcher.start()
+        self.stage_patcher.start()
+        self.addCleanup(self.department_patcher.stop)
+        self.addCleanup(self.stage_patcher.stop)
 
     def tearDown(self):
         """Cleans up temporary files."""
@@ -99,12 +110,12 @@ class TestOWDIngestionPipeline(unittest.TestCase):
         self.assertEqual(derive_department_from_path(self.test_root / "unknown" / "doc.md"), "dept_operations")
 
     @patch("scripts.load_owd.OWDLoader.get_workflow_version_by_hash")
-    @patch("scripts.load_owd.OWDLoader.get_latest_version_number")
+    @patch("scripts.load_owd.KnowledgeRepository.get_next_version_number")
     @patch("scripts.load_owd.OWDLoader.load")
     def test_single_workflow_load_success(self, mock_load, mock_get_ver, mock_get_hash):
         """Tests end-to-end processing of a valid single OWD specification."""
         mock_get_hash.return_value = None
-        mock_get_ver.return_value = 0
+        mock_get_ver.return_value = 1
         mock_load.return_value = MagicMock(success=True, tables_updated=["KNOWLEDGE_STUDIO.workflows"])
 
         res = process_single_owd(self.valid_file, logger=self.logger_mock, skip_loader=False)
@@ -129,12 +140,12 @@ class TestOWDIngestionPipeline(unittest.TestCase):
         self.assertEqual(res["version"], 1)
 
     @patch("scripts.load_owd.OWDLoader.get_workflow_version_by_hash")
-    @patch("scripts.load_owd.OWDLoader.get_latest_version_number")
+    @patch("scripts.load_owd.KnowledgeRepository.get_next_version_number")
     @patch("scripts.load_owd.OWDLoader.load")
     def test_version_increment_on_hash_change(self, mock_load, mock_get_ver, mock_get_hash):
         """Tests that content modification increments version_number from 1 to 2."""
         mock_get_hash.return_value = None  # New hash
-        mock_get_ver.return_value = 1       # Existing max version = 1
+        mock_get_ver.return_value = 2       # Repository resolves the next server-side version
         mock_load.return_value = MagicMock(success=True)
 
         res = process_single_owd(self.valid_file, logger=self.logger_mock, skip_loader=False)
@@ -147,16 +158,16 @@ class TestOWDIngestionPipeline(unittest.TestCase):
         res = process_single_owd(self.invalid_file, logger=self.logger_mock, skip_loader=True)
 
         self.assertEqual(res["status"], "FAILED")
-        self.assertIn("Validation checks failed", res["reason"])
+        self.assertIn("broken transition target", res["reason"])
         self.assertGreaterEqual(len(res["validation_errors"]), 1)
 
     @patch("scripts.load_owd.OWDLoader.get_workflow_version_by_hash")
-    @patch("scripts.load_owd.OWDLoader.get_latest_version_number")
+    @patch("scripts.load_owd.KnowledgeRepository.get_next_version_number")
     @patch("scripts.load_owd.OWDLoader.load")
     def test_snowflake_rollback_error_handling(self, mock_load, mock_get_ver, mock_get_hash):
         """Tests that Snowflake database loading errors trigger rollback handling and record error details."""
         mock_get_hash.return_value = None
-        mock_get_ver.return_value = 0
+        mock_get_ver.return_value = 1
         mock_load.side_effect = OWDLoaderException("Snowflake connection timeout or constraint error.")
 
         res = process_single_owd(self.valid_file, logger=self.logger_mock, skip_loader=False)

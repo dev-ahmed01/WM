@@ -1,6 +1,7 @@
 # Snowflake SQL Persistence Layer for Conversations & Conversation Messages
 
 import uuid
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -22,11 +23,14 @@ class ConversationRepository:
     ) -> str:
         now = datetime.now(timezone.utc)
         if session_id:
-            query = "SELECT id FROM WORKMATE_COPILOT.conversations WHERE id = %s AND user_id = %s"
+            query = """
+                SELECT id FROM WORKMATE_COPILOT.conversations
+                WHERE id = %s AND user_id = %s AND department_id = %s
+            """
             try:
                 with get_snowflake_connection() as conn:
                     with conn.cursor() as cur:
-                        cur.execute(query, (session_id, user_id))
+                        cur.execute(query, (session_id, user_id, department_id))
                         row = cur.fetchone()
                         if row:
                             return row[0]
@@ -71,28 +75,77 @@ class ConversationRepository:
     get_history = load_history
 
     @staticmethod
+    def belongs_to_user(conversation_id: str, user_id: str) -> bool:
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT 1 FROM WORKMATE_COPILOT.conversations WHERE id = %s AND user_id = %s",
+                        (conversation_id, user_id),
+                    )
+                    return cur.fetchone() is not None
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to authorize conversation history: {exc}") from exc
+
+    @staticmethod
     def persist_message(
         conversation_id: str,
         sender: str,
         content: str,
-        confidence_score: float = 1.0,
-        metadata: Optional[Dict[str, Any]] = None
+        confidence_score: float = 0.0,
+        intent: Optional[str] = None,
+        retrieved_state_ids: Optional[List[str]] = None,
+        citations: Optional[List[Dict[str, Any]]] = None,
+        escalated: bool = False,
     ) -> str:
         msg_id = f"msg_{uuid.uuid4().hex[:12]}"
         now = datetime.now(timezone.utc)
 
         query = """
             INSERT INTO WORKMATE_COPILOT.conversation_messages (
-                id, conversation_id, sender, message_text, confidence_score, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                id, conversation_id, sender, message_text, intent,
+                retrieved_state_ids, citations, confidence_score, escalated, created_at
+            ) SELECT %s, %s, %s, %s, %s, TO_ARRAY(PARSE_JSON(%s)),
+                     PARSE_JSON(%s), %s, %s, %s
         """
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(query, (msg_id, conversation_id, sender, content, confidence_score, now))
+                    cur.execute(
+                        query,
+                        (
+                            msg_id,
+                            conversation_id,
+                            sender,
+                            content,
+                            intent,
+                            json.dumps(retrieved_state_ids or []),
+                            json.dumps(citations or []),
+                            confidence_score,
+                            escalated,
+                            now,
+                        ),
+                    )
             return msg_id
         except Exception as e:
             raise DatabaseException(message=f"Failed to persist conversation message: {str(e)}")
+
+    @staticmethod
+    def update_message_intent(message_id: str, intent: str) -> bool:
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE WORKMATE_COPILOT.conversation_messages
+                        SET intent = %s
+                        WHERE id = %s AND sender = 'employee'
+                        """,
+                        (intent, message_id),
+                    )
+                    return cur.rowcount == 1
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to persist message intent: {exc}") from exc
 
     @staticmethod
     def list_user_conversations(user_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
@@ -102,10 +155,19 @@ class ConversationRepository:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
                     query = """
-                        SELECT id, user_id, started_at AS created_at, ended_at AS updated_at
-                        FROM WORKMATE_COPILOT.conversations
-                        WHERE user_id = %s
-                        ORDER BY started_at DESC
+                        SELECT c.id, c.user_id, c.started_at AS created_at,
+                               c.ended_at AS updated_at,
+                               COALESCE(ws.status, IFF(c.ended_at IS NULL, 'active', 'completed')) AS status
+                        FROM WORKMATE_COPILOT.conversations c
+                        LEFT JOIN (
+                            SELECT conversation_id, status
+                            FROM WORKMATE_COPILOT.workflow_sessions
+                            QUALIFY ROW_NUMBER() OVER (
+                                PARTITION BY conversation_id ORDER BY started_at DESC
+                            ) = 1
+                        ) ws ON ws.conversation_id = c.id
+                        WHERE c.user_id = %s
+                        ORDER BY c.started_at DESC
                         LIMIT %s OFFSET %s
                     """
                     cur.execute(query, (user_id, limit, offset))
@@ -123,10 +185,18 @@ class ConversationRepository:
             first_emp_msg = next((m for m in messages if m.get("sender") == "employee"), None)
             last_msg = messages[-1] if messages else None
 
-            raw_title = first_emp_msg.get("content") or first_emp_msg.get("message_text") if first_emp_msg else "Copilot Operational Query"
+            raw_title_value = (
+                first_emp_msg.get("content") or first_emp_msg.get("message_text")
+                if first_emp_msg
+                else "Copilot Operational Query"
+            )
+            raw_title = str(raw_title_value or "Copilot Operational Query")
             title = raw_title[:57] + "..." if len(raw_title) > 60 else raw_title
 
-            raw_preview = last_msg.get("content") or last_msg.get("message_text") if last_msg else ""
+            raw_preview_value = (
+                last_msg.get("content") or last_msg.get("message_text") if last_msg else ""
+            )
+            raw_preview = str(raw_preview_value or "")
             preview = raw_preview[:77] + "..." if len(raw_preview) > 80 else raw_preview
 
             started_at = conv.get("created_at") or conv.get("started_at")
@@ -138,7 +208,7 @@ class ConversationRepository:
             results.append({
                 "id": conv_id,
                 "title": title,
-                "status": "completed" if conv.get("updated_at") or conv.get("ended_at") else "active",
+                "status": conv.get("status") or ("completed" if conv.get("updated_at") else "active"),
                 "started_at": started_at_str,
                 "last_message_preview": preview,
             })
@@ -156,5 +226,5 @@ class ConversationRepository:
                     )
                     row = cur.fetchone()
                     return row[0] if row else 0
-        except Exception:
-            return 0
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to count user conversations: {exc}") from exc

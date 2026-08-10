@@ -1,7 +1,5 @@
 """FastAPI Router for WorkMate Copilot Message Endpoint."""
 
-# Assumption: Step completion confirmation is detected via employee keywords ('done', 'complete', 'next') when in an active workflow session.
-
 import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -13,6 +11,8 @@ from app.models.copilot import (
     CopilotResponse,
     CopilotSessionSummary,
     CopilotHistoryResponse,
+    CopilotConversationDetail,
+    CopilotHistoryMessage,
 )
 from app.repositories.conversation_repository import ConversationRepository
 from app.services.retrieval import RetrievalService
@@ -47,6 +47,42 @@ async def get_copilot_history(
     return CopilotHistoryResponse(sessions=sessions, total=total)
 
 
+@router.get(
+    "/history/{conversation_id}",
+    response_model=CopilotConversationDetail,
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def get_copilot_conversation(
+    conversation_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> CopilotConversationDetail:
+    if not ConversationRepository.belongs_to_user(conversation_id, current_user.get("sub", "")):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "NOT_FOUND",
+                "message": f"Conversation '{conversation_id}' was not found.",
+                "details": None,
+            },
+        )
+    messages = [
+        CopilotHistoryMessage(**message)
+        for message in ConversationRepository.load_history(conversation_id, limit=200)
+    ]
+    active_session = WorkflowStateService.get_current_session(conversation_id)
+    position = WorkflowStateService.get_position(active_session) if active_session else None
+    return CopilotConversationDetail(
+        conversation_id=conversation_id,
+        messages=messages,
+        active_session_id=active_session.id if active_session else None,
+        active_session_status=active_session.status if active_session else None,
+        active_sop_id=active_session.workflow_version_id if active_session else None,
+        active_step_number=position.step_number if position else None,
+        active_step_title=position.step_title if position else None,
+        active_decision_options=position.decision_options if position else [],
+    )
+
+
 @router.post(
     "/message",
     response_model=CopilotResponse,
@@ -70,7 +106,7 @@ async def copilot_message(
     """
     user_id = current_user.get("sub", "")
     role = current_user.get("role", "employee")
-    department_id = current_user.get("department_id", "GENERAL")
+    department_id = current_user["department_id"]
 
     copilot_logger.info(f"Processing Copilot message for user '{user_id}' in department '{department_id}'")
 
@@ -80,16 +116,21 @@ async def copilot_message(
         department_id=department_id,
         session_id=payload.conversation_id,
     )
-    ConversationRepository.persist_message(
+    user_message_id = ConversationRepository.persist_message(
         conversation_id=conversation_id,
         sender="employee",
         content=payload.message,
+        confidence_score=0.0,
     )
     history = ConversationRepository.get_history(conversation_id)
+    active_session = WorkflowStateService.get_current_session(conversation_id)
 
     # 2. Intent Detection & Clarification Check
     intent_result = await AIGateway.detect_intent(message=payload.message, history=history)
+    detected_intent = str(intent_result.get("intent") or "GENERAL_QUERY")
+    ConversationRepository.update_message_intent(user_message_id, detected_intent)
     if intent_result.get("needs_clarification"):
+        position = WorkflowStateService.get_position(active_session) if active_session else None
         clarification_text = "Could you please specify which SOP or equipment section you are referring to?"
         msg_id = ConversationRepository.persist_message(
             conversation_id=conversation_id,
@@ -113,24 +154,39 @@ async def copilot_message(
             confidence_score=0.0,
             is_grounded=False,
             requires_escalation=False,
-            active_sop_id=None,
-            active_step_number=None,
-            active_step_title=None,
+            active_session_id=active_session.id if active_session else None,
+            active_session_status=active_session.status if active_session else None,
+            active_sop_id=active_session.workflow_version_id if active_session else None,
+            active_step_number=position.step_number if position else None,
+            active_step_title=position.step_title if position else None,
+            active_decision_options=position.decision_options if position else [],
         )
 
-    # 3. Active Workflow Session State & Step Confirmation Check
-    active_session = WorkflowStateService.get_active_session(conversation_id)
-    if active_session:
-        # Check if employee confirmed step completion
-        msg_lower = payload.message.lower()
-        if any(kw in msg_lower for kw in ["done", "complete", "finished", "completed", "next step"]):
-            active_session = WorkflowStateService.mark_step_complete(active_session.id)
+    # 3. Resolve the workflow state. A chat message may select an exact persisted
+    # decision option, but it never marks an operational step complete implicitly.
+    if active_session and active_session.status == "active":
+        active_session = WorkflowStateService.advance_if_transition_matches(
+            active_session.id,
+            {
+                "decision_option": payload.message.strip(),
+                "values": {"message": payload.message.strip()},
+            },
+        )
 
     # 4. Scoped Retrieval (Published Chunks & Department Scoped)
     retrieved_chunks = await RetrievalService.retrieve_chunks(
         query=payload.message,
         department_id=department_id,
     )
+
+    if not active_session and detected_intent == "SOP_GUIDANCE" and retrieved_chunks:
+        workflow_version_id = retrieved_chunks[0].get("workflow_version_id")
+        if workflow_version_id:
+            active_session = WorkflowStateService.start_session(
+                conversation_id=conversation_id,
+                workflow_version_id=str(workflow_version_id),
+                user_id=user_id,
+            )
 
     # 5. Context assembly and local grounded generation
     prompt_context = {
@@ -156,6 +212,13 @@ async def copilot_message(
         sender="ai",
         content=validated.answer,
         confidence_score=validated.confidence_score,
+        retrieved_state_ids=[
+            str(chunk["state_id"])
+            for chunk in retrieved_chunks
+            if chunk.get("state_id")
+        ],
+        citations=[citation.model_dump() for citation in validated.citations],
+        escalated=requires_escalation,
     )
 
     if requires_escalation:
@@ -187,6 +250,7 @@ async def copilot_message(
         copilot_logger.exception("Copilot telemetry write failed")
 
     # 9. Return CopilotResponse matching frontend contract
+    position = WorkflowStateService.get_position(active_session) if active_session else None
     return CopilotResponse(
         conversation_id=conversation_id,
         message_id=msg_id,
@@ -195,7 +259,10 @@ async def copilot_message(
         confidence_score=validated.confidence_score,
         is_grounded=validated.is_grounded,
         requires_escalation=requires_escalation,
+        active_session_id=active_session.id if active_session else None,
+        active_session_status=active_session.status if active_session else None,
         active_sop_id=active_session.workflow_version_id if active_session else None,
-        active_step_number=active_session.current_step if active_session else None,
-        active_step_title=f"Step {active_session.current_step}" if active_session else None,
+        active_step_number=position.step_number if position else None,
+        active_step_title=position.step_title if position else None,
+        active_decision_options=position.decision_options if position else [],
     )

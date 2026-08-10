@@ -3,8 +3,6 @@
 CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.conversations (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL REFERENCES SECURITY.users(id),
-    current_step INT NOT NULL DEFAULT 0,
-    abandon_reason TEXT NULL,
     department_id VARCHAR(64) NOT NULL REFERENCES SECURITY.departments(id),
     started_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
     ended_at TIMESTAMP_NTZ NULL

@@ -36,11 +36,17 @@ def create_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
 @contextlib.contextmanager
 def get_snowflake_connection() -> Generator[snowflake.connector.SnowflakeConnection, None, None]:
     """Context manager yielding an active Snowflake database connection with reconnect handling."""
-    conn = None
+    conn: Any = None
     try:
         conn = create_snowflake_connection()
         yield conn
     except Exception as exc:
+        if conn is not None:
+            try:
+                with conn.cursor() as rollback_cursor:
+                    rollback_cursor.execute("ROLLBACK")
+            except Exception as rollback_exc:
+                logger.error("Snowflake rollback failed: %s", rollback_exc)
         logger.warning(f"Snowflake database connection error: {str(exc)}")
         raise
     finally:

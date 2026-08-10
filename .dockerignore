@@ -1,0 +1,12 @@
+.git
+.agents
+**/.env
+**/.env.local
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+frontend/node_modules
+frontend/.next
+logs
+*.log
+Workmate-ai demo.mp4

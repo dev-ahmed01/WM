@@ -7,6 +7,7 @@ preserved raw markdown, local analysis metadata, first-class chunks, and lineage
 import logging
 from typing import Optional, Dict, Any, List
 from app.core.database import get_snowflake_connection
+from app.exceptions.custom_exceptions import DatabaseException
 
 logger = logging.getLogger("repositories.document")
 
@@ -17,8 +18,6 @@ class DocumentRepository:
     @staticmethod
     def get_document_by_id(document_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a document entity record by document_id."""
-        if get_snowflake_connection is None:
-            return None
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -38,14 +37,12 @@ class DocumentRepository:
                         cols = [c[0].lower() for c in cur.description]
                         return dict(zip(cols, row))
         except Exception as exc:
-            logger.warning(f"Error fetching document by id '{document_id}': {exc}")
+            raise DatabaseException(message=f"Failed to fetch document '{document_id}': {exc}") from exc
         return None
 
     @staticmethod
     def get_document_by_version_id(workflow_version_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a document entity record by workflow_version_id."""
-        if get_snowflake_connection is None:
-            return None
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -65,14 +62,12 @@ class DocumentRepository:
                         cols = [c[0].lower() for c in cur.description]
                         return dict(zip(cols, row))
         except Exception as exc:
-            logger.warning(f"Error fetching document by version_id '{workflow_version_id}': {exc}")
+            raise DatabaseException(message=f"Failed to fetch document version '{workflow_version_id}': {exc}") from exc
         return None
 
     @staticmethod
     def get_document_content(document_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves preserved raw markdown, frontmatter, and structural elements."""
-        if get_snowflake_connection is None:
-            return None
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -90,14 +85,12 @@ class DocumentRepository:
                         cols = [c[0].lower() for c in cur.description]
                         return dict(zip(cols, row))
         except Exception as exc:
-            logger.warning(f"Error fetching document content for '{document_id}': {exc}")
+            raise DatabaseException(message=f"Failed to fetch document content '{document_id}': {exc}") from exc
         return None
 
     @staticmethod
     def get_document_chunks(document_id: str) -> List[Dict[str, Any]]:
         """Retrieves first-class vector chunk objects associated with a document."""
-        if get_snowflake_connection is None:
-            return []
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -116,14 +109,11 @@ class DocumentRepository:
                     cols = [c[0].lower() for c in cur.description]
                     return [dict(zip(cols, r)) for r in rows]
         except Exception as exc:
-            logger.warning(f"Error fetching document chunks for '{document_id}': {exc}")
-            return []
+            raise DatabaseException(message=f"Failed to fetch document chunks '{document_id}': {exc}") from exc
 
     @staticmethod
     def get_document_lineage(document_id: str) -> List[Dict[str, Any]]:
         """Retrieves audit lineage records for a document."""
-        if get_snowflake_connection is None:
-            return []
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -141,5 +131,4 @@ class DocumentRepository:
                     cols = [c[0].lower() for c in cur.description]
                     return [dict(zip(cols, r)) for r in rows]
         except Exception as exc:
-            logger.warning(f"Error fetching document lineage for '{document_id}': {exc}")
-            return []
+            raise DatabaseException(message=f"Failed to fetch document lineage '{document_id}': {exc}") from exc

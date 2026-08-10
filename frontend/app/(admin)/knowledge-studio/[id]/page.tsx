@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import { useRequireRole } from '@/lib/auth';
 import { apiClient, KnowledgeItemDetail, KnowledgeVersionHistory, KnowledgeVersion } from '@/lib/api-client';
 import Link from 'next/link';
@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Save, Trash2, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function DocumentDetailsPage({ params }: { params: { id: string } }) {
+export default function DocumentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { loading: authLoading } = useRequireRole(['admin']);
   const [detail, setDetail] = useState<KnowledgeItemDetail | null>(null);
@@ -18,7 +19,8 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
 
   // Edit form state
   const [title, setTitle] = useState('');
-  const [departmentId, setDepartmentId] = useState('dept_eng');
+  const [departmentId, setDepartmentId] = useState('');
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -28,14 +30,16 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
       try {
         setLoadingData(true);
         setError(null);
-        const [itemDetail, history] = await Promise.all([
-          apiClient<KnowledgeItemDetail>(`/knowledge/${params.id}`),
-          apiClient<KnowledgeVersionHistory>(`/knowledge/${params.id}/versions`),
+        const [itemDetail, history, activeDepartments] = await Promise.all([
+          apiClient<KnowledgeItemDetail>(`/knowledge/${id}`),
+          apiClient<KnowledgeVersionHistory>(`/knowledge/${id}/versions`),
+          apiClient<Array<{ id: string; name: string }>>('/knowledge/departments'),
         ]);
         setDetail(itemDetail);
         setVersionHistory(history);
         setTitle(itemDetail.item.title);
-        setDepartmentId(itemDetail.item.department_id || 'dept_eng');
+        setDepartments(activeDepartments);
+        setDepartmentId(itemDetail.item.department_id);
       } catch (err: any) {
         console.error('Failed to load document details:', err);
         setError(err?.message || 'Failed to load document details.');
@@ -44,10 +48,10 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
       }
     }
 
-    if (!authLoading && params.id) {
+    if (!authLoading && id) {
       fetchDocumentData();
     }
-  }, [authLoading, params.id]);
+  }, [authLoading, id]);
 
   const handleUpdateMetadata = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +61,7 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
     setFeedback(null);
 
     try {
-      const updatedItem = await apiClient<any>(`/knowledge/${params.id}`, {
+      const updatedItem = await apiClient<any>(`/knowledge/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
           title: title.trim(),
@@ -91,7 +95,7 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
     setFeedback(null);
 
     try {
-      await apiClient(`/knowledge/${params.id}`, {
+      await apiClient(`/knowledge/${id}`, {
         method: 'DELETE',
       });
 
@@ -117,7 +121,7 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
         </Link>
         <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
           <p className="font-semibold">Document Not Found</p>
-          <p className="text-sm">{error || `Could not find document with ID '${params.id}'.`}</p>
+          <p className="text-sm">{error || `Could not find document with ID '${id}'.`}</p>
         </div>
       </div>
     );
@@ -228,10 +232,11 @@ export default function DocumentDetailsPage({ params }: { params: { id: string }
               disabled={isSaving}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="dept_eng">Engineering (dept_eng)</option>
-              <option value="dept_ops">Operations (dept_ops)</option>
-              <option value="dept_hr">Human Resources (dept_hr)</option>
-              <option value="dept_safety">Safety & Compliance (dept_safety)</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name} ({department.id})
+                </option>
+              ))}
             </select>
           </div>
           <Button type="submit" disabled={isSaving} className="flex items-center gap-2">

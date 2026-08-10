@@ -141,6 +141,7 @@ async def upload_knowledge(
             stage_file_uri=stage_file_uri,
             version_number=version_number,
             prepared_document=prepared_document,
+            source_filename=(file.filename or f"{workflow_code}.md").rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
         )
     except OWDLoaderException as loader_err:
         ingestion_logger.error(f"[UPLOAD FAILURE] Snowflake database load failed: {loader_err.message}")
@@ -352,6 +353,23 @@ async def update_knowledge_metadata(
     payload: UpdateKnowledgeItemRequest,
 ) -> KnowledgeItemResponse:
     """Updates title or department_id metadata of an OWD workflow."""
+    if payload.department_id is not None:
+        try:
+            department_is_active = KnowledgeRepository.department_exists(payload.department_id)
+        except WorkMateException as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={"error_code": "SNOWFLAKE_LOOKUP_FAILED", "message": exc.message, "details": None},
+            ) from exc
+        if not department_is_active:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "INVALID_DEPARTMENT",
+                    "message": f"Unknown or inactive department '{payload.department_id}'.",
+                    "details": None,
+                },
+            )
     updated = KnowledgeRepository.update_item_metadata(
         item_id=id,
         title=payload.title,

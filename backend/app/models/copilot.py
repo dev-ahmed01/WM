@@ -1,8 +1,10 @@
 # Pydantic Schemas for Copilot Messaging & Response Validation Layer
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field
+
+from app.models.workflow_session import WorkflowDecisionOption
 
 class Citation(BaseModel):
     document_id: str
@@ -26,10 +28,13 @@ class CopilotResponse(BaseModel):
     confidence_score: float
     is_grounded: bool
     requires_escalation: bool
+    active_session_id: Optional[str] = None
+    active_session_status: Optional[str] = None
     active_sop_id: Optional[str] = None
     active_step_number: Optional[int] = None
     active_step_title: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    active_decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ValidatedResponse(BaseModel):
     answer: str
@@ -54,3 +59,22 @@ class CopilotSessionSummary(BaseModel):
 class CopilotHistoryResponse(BaseModel):
     sessions: List[CopilotSessionSummary]
     total: int
+
+
+class CopilotHistoryMessage(BaseModel):
+    id: str
+    sender: str
+    content: str
+    confidence_score: float
+    created_at: datetime
+
+
+class CopilotConversationDetail(BaseModel):
+    conversation_id: str
+    messages: List[CopilotHistoryMessage]
+    active_session_id: Optional[str] = None
+    active_session_status: Optional[str] = None
+    active_sop_id: Optional[str] = None
+    active_step_number: Optional[int] = None
+    active_step_title: Optional[str] = None
+    active_decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)

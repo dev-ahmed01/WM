@@ -106,8 +106,8 @@ class TestOWDv11Compiler(unittest.TestCase):
         self.assertGreaterEqual(len(compiled.role_permissions_payload), 3)
         self.assertGreaterEqual(len(compiled.search_metadata_payload), 5)
 
-    def test_legacy_owd_backward_compatibility(self):
-        """Tests 100% backward compatibility with Legacy OWD (v1.0) specification files."""
+    def test_ambiguous_legacy_decision_is_rejected(self):
+        """Legacy documents still parse, but ambiguous decision edges fail validation."""
         self.assertTrue(LEGACY_FILE.exists(), f"Legacy test file missing: {LEGACY_FILE}")
         raw_text = LEGACY_FILE.read_text(encoding="utf-8")
 
@@ -118,11 +118,10 @@ class TestOWDv11Compiler(unittest.TestCase):
         self.assertGreaterEqual(len(ast.workflow.states), 4)
 
         val_report = OWDValidator.validate(ast)
-        self.assertTrue(val_report.is_valid)
-
-        compiled = OWDCompiler.compile(ast)
-        self.assertIn("workflow_payload", compiled.__dict__)
-        self.assertGreaterEqual(len(compiled.states_payload), 4)
+        self.assertFalse(val_report.is_valid)
+        self.assertTrue(
+            any("duplicate transition condition" in error for error in val_report.errors)
+        )
 
     def test_validator_detects_broken_references(self):
         """Tests that OWDValidator flags broken state targets and circular loops."""

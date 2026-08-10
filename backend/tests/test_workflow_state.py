@@ -1,137 +1,232 @@
-"""Unit tests for WorkflowStateService and copilot session state routes."""
+"""Workflow engine tests against the migration-backed state cursor contract."""
 
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import patch
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.v1.copilot_session import router as session_router
+from app.api.v1.copilot_session import router
 from app.core.security import create_access_token
-from app.services.workflow_state import WorkflowStateService
 from app.models.workflow_session import WorkflowSession
-
-app = FastAPI()
-app.include_router(session_router, prefix="/api/v1")
-
-client = TestClient(app)
-
-EMP_TOKEN = create_access_token(user_id="usr_emp001", role="employee", department_id="dept_eng")
-
-DUMMY_SOP = {
-    "id": "sop_valve_101",
-    "title": "Safety Valve SOP",
-    "steps": [
-        {"step_number": 0, "title": "Inspection", "requires_explanation": False, "requires_document": False},
-        {"step_number": 1, "title": "Valve Shutdown", "requires_explanation": True, "requires_document": False},
-        {"step_number": 2, "title": "Pressure Test", "requires_explanation": False, "requires_document": True},
-    ],
-}
+from app.repositories.owd_repository import OWDRepository
+from app.services.workflow_state import WorkflowStateService
 
 
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_active_by_conversation")
-def test_get_active_session(mock_get):
-    mock_get.return_value = {
-        "id": "sess_100",
+def session_row(**overrides):
+    now = datetime.now(timezone.utc)
+    row = {
+        "id": "sess_1",
         "conversation_id": "conv_1",
         "workflow_version_id": "ver_1",
-        "knowledge_version_id": "ver_1",
-        "current_step": 0,
+        "current_state_id": "state_1",
+        "previous_state_id": None,
+        "user_id": "usr_owner",
         "status": "active",
-        "abandon_reason": None,
-        "created_at": "2026-08-04T00:00:00",
-        "updated_at": "2026-08-04T00:00:00",
+        "session_context": {},
+        "started_at": now,
+        "updated_at": now,
+        "completed_at": None,
     }
+    row.update(overrides)
+    return row
 
+
+@patch("app.services.workflow_state.WorkflowSessionRepository.get_active_by_conversation")
+def test_get_active_session_uses_state_schema(mock_get):
+    mock_get.return_value = session_row()
     session = WorkflowStateService.get_active_session("conv_1")
-    assert session is not None
-    assert session.id == "sess_100"
+    assert session.current_state_id == "state_1"
     assert session.status == "active"
 
 
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.create")
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
-@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
-@patch("app.services.workflow_state.OWDRepository.get_initial_state")
-def test_start_session(mock_initial, mock_event, mock_get_by_id, mock_create):
-    mock_initial.return_value = {"id": "state_initial"}
-    mock_create.return_value = "sess_101"
-    mock_get_by_id.return_value = {
-        "id": "sess_101",
-        "conversation_id": "conv_2",
-        "workflow_version_id": "ver_2",
-        "knowledge_version_id": "ver_2",
-        "current_step": 0,
-        "status": "active",
-        "created_at": "2026-08-04T00:00:00",
-        "updated_at": "2026-08-04T00:00:00",
+@patch("app.services.workflow_state.OWDRepository.get_decision_options")
+@patch("app.services.workflow_state.OWDRepository.get_next_pending_step", return_value=None)
+@patch("app.services.workflow_state.OWDRepository.get_state_by_id")
+def test_position_exposes_only_persisted_decision_options(mock_state, _mock_step, mock_options):
+    mock_state.return_value = {
+        "id": "state_1",
+        "workflow_version_id": "ver_1",
+        "title": "Inspect result",
+        "state_type": "DECISION",
     }
-
-    session = WorkflowStateService.start_session("conv_2", "ver_2")
-    assert session.id == "sess_101"
-    assert session.current_step == 0
-
-
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.update_step_and_status")
-def test_mark_step_complete(mock_update, mock_get_by_id):
-    mock_get_by_id.side_effect = [
-        {"id": "sess_101", "current_step": 0, "status": "active", "conversation_id": "c", "workflow_version_id": "v", "knowledge_version_id": "v", "created_at": "2026-08-04T00:00:00", "updated_at": "2026-08-04T00:00:00"},
-        {"id": "sess_101", "current_step": 1, "status": "active", "conversation_id": "c", "workflow_version_id": "v", "knowledge_version_id": "v", "created_at": "2026-08-04T00:00:00", "updated_at": "2026-08-04T00:00:00"},
+    mock_options.return_value = [
+        {"option_code": "OPT_ACCEPT", "option_label": "Accept shipment"}
     ]
 
-    session = WorkflowStateService.mark_step_complete("sess_101", total_steps=3)
-    assert session.current_step == 1
-    mock_update.assert_called_once_with("sess_101", 1, "active")
+    position = WorkflowStateService.get_position(WorkflowSession(**session_row()))
+
+    assert position.decision_options[0].option_code == "OPT_ACCEPT"
+    mock_options.assert_called_once_with("state_1")
 
 
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.WorkflowSessionRepository.get_by_id")
+@patch("app.services.workflow_state.WorkflowSessionRepository.create")
+@patch("app.services.workflow_state.OWDRepository.get_initial_state")
+def test_start_session_persists_initial_state_and_user(mock_initial, mock_create, mock_get, mock_event):
+    mock_initial.return_value = {"id": "state_initial"}
+    mock_create.return_value = "sess_1"
+    mock_get.return_value = session_row(current_state_id="state_initial")
 
-def test_deterministic_get_next_action(mock_get_by_id):
-    # Test Step 0: proceed_to_step
-    mock_get_by_id.return_value = {"id": "sess_101", "current_step": 0, "status": "active"}
-    action0 = WorkflowStateService.get_next_action("sess_101", DUMMY_SOP)
-    assert action0["action"] == "proceed_to_step"
-    assert action0["step_number"] == 0
+    session = WorkflowStateService.start_session("conv_1", "ver_1", "usr_owner")
 
-    # Test Step 1: needs_explanation
-    mock_get_by_id.return_value = {"id": "sess_101", "current_step": 1, "status": "active"}
-    action1 = WorkflowStateService.get_next_action("sess_101", DUMMY_SOP)
-    assert action1["action"] == "needs_explanation"
-    assert action1["step_number"] == 1
-
-    # Test Step 2: needs_document
-    mock_get_by_id.return_value = {"id": "sess_101", "current_step": 2, "status": "active"}
-    action2 = WorkflowStateService.get_next_action("sess_101", DUMMY_SOP)
-    assert action2["action"] == "needs_document"
-    assert action2["step_number"] == 2
-
-    # Test Step 3 (out of bounds): workflow_complete
-    mock_get_by_id.return_value = {"id": "sess_101", "current_step": 3, "status": "active"}
-    action3 = WorkflowStateService.get_next_action("sess_101", DUMMY_SOP)
-    assert action3["action"] == "workflow_complete"
-    assert action3["step_number"] is None
-
-
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.get_by_id")
-@patch("app.repositories.workflow_session_repository.WorkflowSessionRepository.update_status")
-def test_resume_session_endpoint(mock_update_status, mock_get_by_id):
-    mock_get_by_id.return_value = {
-        "id": "sess_paused_01",
-        "conversation_id": "conv_1",
-        "knowledge_version_id": "ver_1",
-        "current_step": 1,
-        "status": "active",
-        "created_at": "2026-08-04T00:00:00",
-        "updated_at": "2026-08-04T00:00:00",
-    }
-
-    res = client.post(
-        "/api/v1/copilot/session/sess_paused_01/resume",
-        headers={"Authorization": f"Bearer {EMP_TOKEN}"},
+    assert session.current_state_id == "state_initial"
+    mock_create.assert_called_once_with(
+        conversation_id="conv_1",
+        workflow_version_id="ver_1",
+        current_state_id="state_initial",
+        user_id="usr_owner",
+        session_context={},
     )
 
-    assert res.status_code == 200
-    data = res.json()
-    assert data["id"] == "sess_paused_01"
-    assert data["status"] == "active"
-    mock_update_status.assert_called_once_with("sess_paused_01", "active")
+
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.WorkflowSessionRepository.apply_progress")
+@patch("app.services.workflow_state.OWDRepository.count_pending_steps", return_value=2)
+@patch("app.services.workflow_state.OWDRepository.get_next_pending_step")
+@patch("app.services.workflow_state.OWDRepository.get_state_by_id")
+@patch("app.services.workflow_state.WorkflowSessionRepository.get_by_id")
+def test_step_completion_records_real_step_without_leaving_state(
+    mock_get, mock_state, mock_step, _mock_count, mock_apply, _mock_event
+):
+    mock_get.side_effect = [session_row(), session_row()]
+    mock_state.return_value = {"id": "state_1", "is_terminal": False}
+    mock_step.return_value = {"id": "step_1"}
+
+    session = WorkflowStateService.mark_step_complete("sess_1")
+
+    assert session.current_state_id == "state_1"
+    assert mock_apply.call_args.kwargs["step_id"] == "step_1"
+    assert mock_apply.call_args.kwargs["next_state_id"] is None
+    assert isinstance(mock_apply.call_args.kwargs["expected_updated_at"], datetime)
+
+
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.WorkflowSessionRepository.apply_progress")
+@patch("app.services.workflow_state.OWDRepository.get_steps_for_state")
+@patch("app.services.workflow_state.OWDRepository.get_next_state_transition")
+@patch("app.services.workflow_state.OWDRepository.count_pending_steps", return_value=1)
+@patch("app.services.workflow_state.OWDRepository.get_next_pending_step")
+@patch("app.services.workflow_state.OWDRepository.get_state_by_id")
+@patch("app.services.workflow_state.WorkflowSessionRepository.get_by_id")
+def test_terminal_target_with_steps_remains_active_until_its_steps_run(
+    mock_get,
+    mock_state,
+    mock_step,
+    _mock_count,
+    mock_transition,
+    mock_target_steps,
+    mock_apply,
+    _mock_event,
+):
+    mock_get.side_effect = [session_row(), session_row(current_state_id="state_end")]
+    mock_state.return_value = {"id": "state_1", "is_terminal": False}
+    mock_step.return_value = {"id": "step_1"}
+    mock_transition.return_value = {"to_state_id": "state_end", "is_terminal": True}
+    mock_target_steps.return_value = [{"id": "final_step"}]
+
+    session = WorkflowStateService.mark_step_complete("sess_1")
+
+    assert session.current_state_id == "state_end"
+    assert mock_apply.call_args.kwargs["new_status"] == "active"
+
+
+@patch("app.services.workflow_state.OWDRepository.record_analytics_event")
+@patch("app.services.workflow_state.WorkflowSessionRepository.apply_progress")
+@patch("app.services.workflow_state.OWDRepository.get_steps_for_state", return_value=[])
+@patch("app.services.workflow_state.OWDRepository.get_next_state_transition")
+@patch("app.services.workflow_state.OWDRepository.count_pending_steps", return_value=1)
+@patch("app.services.workflow_state.OWDRepository.get_next_pending_step")
+@patch("app.services.workflow_state.OWDRepository.get_state_by_id")
+@patch("app.services.workflow_state.WorkflowSessionRepository.get_by_id")
+def test_empty_terminal_target_completes_on_entry(
+    mock_get,
+    mock_state,
+    mock_step,
+    _mock_count,
+    mock_transition,
+    _mock_target_steps,
+    mock_apply,
+    _mock_event,
+):
+    mock_get.side_effect = [session_row(), session_row(current_state_id="state_end", status="completed")]
+    mock_state.return_value = {"id": "state_1", "is_terminal": False}
+    mock_step.return_value = {"id": "step_1"}
+    mock_transition.return_value = {"to_state_id": "state_end", "is_terminal": True}
+
+    session = WorkflowStateService.mark_step_complete("sess_1")
+
+    assert session.status == "completed"
+    assert mock_apply.call_args.kwargs["new_status"] == "completed"
+
+
+def test_transition_conditions_are_deterministic_and_do_not_eval_code():
+    transitions = [
+        {
+            "id": "t1",
+            "condition_type": "DECISION_OPTION",
+            "condition_expression": "OPT_DAMAGED",
+            "option_code": "OPT_DAMAGED",
+            "option_label": "Damaged",
+        },
+        {"id": "fallback", "condition_type": "FALLBACK", "condition_expression": ""},
+    ]
+    selected = OWDRepository._select_transition(transitions, {"decision_option": "Damaged"})
+    assert selected["id"] == "t1"
+    assert OWDRepository._select_transition(transitions, {}) is None
+    assert OWDRepository._select_transition(transitions, {"use_fallback": True})["id"] == "fallback"
+    assert OWDRepository._expression_matches("approved == true", {"approved": "true"})
+    assert not OWDRepository._expression_matches("__import__('os').system('id')", {})
+
+
+app = FastAPI()
+app.include_router(router, prefix="/api/v1")
+client = TestClient(app)
+OWNER_TOKEN = create_access_token("usr_owner", "employee", "dept_ops")
+OTHER_TOKEN = create_access_token("usr_other", "employee", "dept_ops")
+
+
+@patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
+def test_employee_cannot_read_another_users_session(mock_get):
+    mock_get.return_value = session_row()
+    response = client.get(
+        "/api/v1/copilot/session/sess_1",
+        headers={"Authorization": f"Bearer {OTHER_TOKEN}"},
+    )
+    assert response.status_code == 403
+
+
+@patch("app.api.v1.copilot_session.WorkflowStateService.pause_session")
+@patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
+def test_owner_can_pause_session(mock_get, mock_pause):
+    mock_get.return_value = session_row()
+    mock_pause.return_value = WorkflowSession(**session_row(status="paused"))
+    response = client.post(
+        "/api/v1/copilot/session/sess_1/pause",
+        headers={"Authorization": f"Bearer {OWNER_TOKEN}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "paused"
+
+
+@patch("app.api.v1.copilot_session.WorkflowStateService.mark_step_complete")
+@patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
+def test_owner_advance_completes_real_step_explicitly(mock_get, mock_advance):
+    mock_get.return_value = session_row()
+    mock_advance.return_value = WorkflowSession(**session_row())
+    response = client.post(
+        "/api/v1/copilot/session/sess_1/advance",
+        headers={"Authorization": f"Bearer {OWNER_TOKEN}"},
+        json={"decision_option": "Damaged", "use_fallback": False},
+    )
+    assert response.status_code == 200
+    mock_advance.assert_called_once_with(
+        "sess_1",
+        {
+            "values": {},
+            "rule_results": {},
+            "use_fallback": False,
+            "decision_option": "Damaged",
+        },
+    )

@@ -54,6 +54,7 @@ class DocumentParser:
                     has_checkbox = bool(list_match.group(1))
                     content = list_match.group(2)
                 else:
+                    assert num_list_match is not None
                     content = num_list_match.group(1)
                 
                 directive_match = re.search(r"::step\[(.*?)\]", content)

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
@@ -35,6 +36,17 @@ def search_terms(query: str) -> List[str]:
         if term not in _STOP_WORDS and term not in result:
             result.append(term)
     return result[:8]
+
+
+def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    """Compute similarity independently of the configured embedding provider."""
+    if not left or len(left) != len(right):
+        return 0.0
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return sum(a * b for a, b in zip(left, right)) / (left_norm * right_norm)
 
 
 class CandidateRepository:
@@ -159,7 +171,7 @@ class LocalSemanticIndex:
                 continue
             if str(candidate.get("status", "")).lower() not in valid_statuses:
                 continue
-            score = self.provider.cosine_similarity(query_vector, vector)
+            score = cosine_similarity(query_vector, vector)
             if score >= settings.LOCAL_AI_MIN_SIMILARITY:
                 ranked.append({**candidate, "score": round(float(score), 6)})
         ranked.sort(key=lambda item: item["score"], reverse=True)

@@ -38,6 +38,9 @@ from app.compiler.loader import OWDLoader
 from app.compiler.models import OWDDocument, ValidationReport, CompiledWorkflow, LoadResult
 from app.compiler.utils import calculate_source_hash, sanitize_code
 from app.compiler.exceptions import OWDParsingException, OWDValidationException, OWDCompilationException, OWDLoaderException
+from app.compiler.utils import generate_deterministic_uuid
+from app.repositories.knowledge_repository import KnowledgeRepository
+from app.services.ingestion import IngestionService
 
 
 def setup_deployment_logger() -> Tuple[logging.Logger, Path]:
@@ -136,30 +139,101 @@ def process_single_owd(
 
     source_hash = calculate_source_hash(raw_text)
     department_id = derive_department_from_path(file_path)
+    prepared_document: Optional[OWDDocument] = None
+    validation: Optional[ValidationReport] = None
 
-    # --- Duplicate hash check (idempotency guard) ---
-    if not skip_loader:
-        existing = OWDLoader.get_workflow_version_by_hash("", source_hash)
-        if existing:
-            logger.info(f"Duplicate source hash detected for '{relative_path}'. Skipping deployment.")
-            return {
-                "file_path": relative_path,
-                "title": file_path.stem.replace("_", " ").title(),
-                "workflow_code": "",
-                "states": 0, "steps": 0, "rules": 0, "decisions": 0, "warnings": 0,
-                "version": existing.get("version_number", 1),
-                "hash": source_hash,
-                "status": "SKIPPED",
-                "reason": f"Duplicate source hash: content identical to version {existing.get('version_number', 1)}.",
-                "validation_errors": [], "compilation_errors": [], "snowflake_errors": [],
-                "elapsed_sec": round(time.time() - start_time, 3),
-            }
+    try:
+        prepared_document = OWDParser.parse(
+            markdown_text=raw_text,
+            title=file_path.stem.replace("_", " ").title(),
+            department_id=department_id,
+            default_version=1,
+        )
+        validation = OWDValidator.validate(prepared_document)
+    except OWDParsingException as exc:
+        validation = None
+        parse_error = exc.message
+    else:
+        parse_error = ""
 
-    # --- Determine version number ---
+    if parse_error or not validation or not validation.is_valid:
+        errors = [parse_error] if parse_error else (validation.errors if validation else [])
+        return {
+            "file_path": relative_path,
+            "title": file_path.stem.replace("_", " ").title(),
+            "workflow_code": (
+                prepared_document.workflow.workflow_code if prepared_document else ""
+            ),
+            "states": validation.states_count if validation else 0,
+            "steps": validation.steps_count if validation else 0,
+            "rules": 0,
+            "decisions": validation.decisions_count if validation else 0,
+            "warnings": len(validation.warnings) if validation else 0,
+            "version": 1,
+            "hash": source_hash,
+            "status": "FAILED",
+            "reason": "; ".join(errors),
+            "validation_errors": errors,
+            "compilation_errors": [],
+            "snowflake_errors": [],
+            "elapsed_sec": round(time.time() - start_time, 3),
+        }
+
+    assert prepared_document is not None
+    assert validation is not None
+    workflow_code = prepared_document.workflow.workflow_code
+    workflow_id = generate_deterministic_uuid("workflow", workflow_code)
+
+    # --- Resolve all database identity/version/staging inputs before compilation ---
     version_number = 1
-    if not skip_loader:
-        max_ver = OWDLoader.get_latest_version_number("")
-        version_number = (max_ver or 0) + 1
+    stage_file_uri = ""
+    try:
+        if not skip_loader:
+            if not KnowledgeRepository.department_exists(department_id):
+                raise OWDLoaderException(f"Unknown or inactive department '{department_id}'.")
+            existing = OWDLoader.get_workflow_version_by_hash(workflow_code, source_hash)
+            if existing:
+                logger.info(f"Duplicate source hash detected for '{relative_path}'. Skipping deployment.")
+                return {
+                    "file_path": relative_path,
+                    "title": file_path.stem.replace("_", " ").title(),
+                    "workflow_code": workflow_code,
+                    "states": 0, "steps": 0, "rules": 0, "decisions": 0, "warnings": 0,
+                    "version": existing.get("version_number", 1),
+                    "hash": source_hash,
+                    "status": "SKIPPED",
+                    "reason": f"Duplicate source hash: content identical to version {existing.get('version_number', 1)}.",
+                    "validation_errors": [], "compilation_errors": [], "snowflake_errors": [],
+                    "elapsed_sec": round(time.time() - start_time, 3),
+                }
+            version_number = KnowledgeRepository.get_next_version_number(workflow_id)
+            stage_file_uri = IngestionService.stage_file(
+                file_path.read_bytes(),
+                file_path.name,
+                f"{workflow_code}/v{version_number}/{source_hash[:12]}",
+            )
+    except Exception as exc:
+        message = getattr(exc, "message", str(exc))
+        logger.error(f"Snowflake preparation error for '{relative_path}': {message}")
+        return {
+            "file_path": relative_path,
+            "title": file_path.stem.replace("_", " ").title(),
+            "workflow_code": workflow_code,
+            "states": validation.states_count,
+            "steps": validation.steps_count,
+            "rules": 0,
+            "decisions": validation.decisions_count,
+            "warnings": len(validation.warnings),
+            "version": version_number,
+            "hash": source_hash,
+            "status": "FAILED",
+            "reason": f"Snowflake preparation error: {message}",
+            "validation_errors": [],
+            "compilation_errors": [],
+            "snowflake_errors": [message],
+            "elapsed_sec": round(time.time() - start_time, 3),
+        }
+    prepared_document.workflow.version_number = version_number
 
     # --- Run full pipeline (parse → validate → compile → load) ---
     try:
@@ -168,6 +242,10 @@ def process_single_owd(
             department_id=department_id,
             version_number=version_number,
             skip_loader=skip_loader,
+            prepared_document=prepared_document,
+            stage_file_uri=stage_file_uri,
+            source_filename=file_path.name,
+            user_id=settings.OWD_CLI_USER_ID,
         )
     except OWDLoaderException as load_err:
         logger.error(f"Snowflake Loader Error for '{relative_path}': {load_err.message}")

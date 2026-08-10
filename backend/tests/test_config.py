@@ -31,3 +31,10 @@ def test_local_ai_is_default_provider():
     defaults = Settings(_env_file=None)
 
     assert defaults.LOCAL_AI_ENABLED is True
+
+
+def test_checked_in_security_defaults_are_placeholders():
+    defaults = Settings(_env_file=None)
+
+    assert defaults.JWT_SECRET.startswith("replace_with_")
+    assert defaults.INTERNAL_WEBHOOK_SECRET.startswith("replace_with_")

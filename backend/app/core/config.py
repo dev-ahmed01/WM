@@ -1,11 +1,13 @@
 """Pydantic Settings module reading environment configuration variables."""
 
-# Assumption: Sane defaults are provided for local development and unit testing when .env is absent.
+# Non-secret placeholders allow import-time validation and unit tests when .env is absent.
 # env_file is resolved to an ABSOLUTE path anchored at this file's directory so that scripts
 # running from any working directory (e.g. repo root) always load backend/.env correctly.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Absolute path to backend/.env, resolved relative to this file — CWD-independent
@@ -29,6 +31,7 @@ class Settings(BaseSettings):
     SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
     SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
     SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
+    OWD_CLI_USER_ID: str = "usr_admin001"
 
     # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
@@ -45,17 +48,42 @@ class Settings(BaseSettings):
     LOCAL_AI_MIN_SIMILARITY: float = 0.35
 
     # Auth & Security Credentials
-    JWT_SECRET: str = "test_super_secret_jwt_key_32_bytes_min"
+    JWT_SECRET: str = "replace_with_at_least_32_random_characters"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
     # Internal Webhook & Service Security
-    INTERNAL_WEBHOOK_SECRET: str = "internal_secret_key_12345"
+    INTERNAL_WEBHOOK_SECRET: str = "replace_with_a_random_webhook_secret"
 
     # Orchestration Settings
     N8N_BASE_URL: str = "http://localhost:5678"
     N8N_WEBHOOK_BASE_URL: str = "http://localhost:5678"
+
+    @model_validator(mode="after")
+    def validate_runtime_security(self) -> Self:
+        if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
+            raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
+        if self.APP_ENV.strip().lower() in {"prod", "production"}:
+            protected_values = {
+                "SNOWFLAKE_ACCOUNT": self.SNOWFLAKE_ACCOUNT,
+                "SNOWFLAKE_USER": self.SNOWFLAKE_USER,
+                "SNOWFLAKE_PASSWORD": self.SNOWFLAKE_PASSWORD,
+                "JWT_SECRET": self.JWT_SECRET,
+                "INTERNAL_WEBHOOK_SECRET": self.INTERNAL_WEBHOOK_SECRET,
+            }
+            markers = ("your_", "replace_with_", "placeholder")
+            invalid = [
+                name
+                for name, value in protected_values.items()
+                if not value or any(marker in value.casefold() for marker in markers)
+            ]
+            if invalid:
+                raise ValueError(
+                    "Production configuration contains missing or placeholder secrets: "
+                    + ", ".join(invalid)
+                )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

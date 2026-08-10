@@ -48,7 +48,7 @@ class EscalationRepository:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(query, params)
-                    return cur.rowcount > 0
+                    return (cur.rowcount or 0) > 0
         except Exception as e:
             raise DatabaseException(message=f"Failed to update escalation status: {str(e)}")
 
@@ -64,7 +64,7 @@ class EscalationRepository:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(query, (resolution_note, now, now, escalation_id))
-                    return cur.rowcount > 0
+                    return (cur.rowcount or 0) > 0
         except Exception as e:
             raise DatabaseException(message=f"Failed to resolve escalation: {str(e)}")
 

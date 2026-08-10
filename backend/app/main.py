@@ -32,10 +32,16 @@ app = FastAPI(
 # Audit Logging Middleware for state-changing endpoints (added first so CORS wraps it)
 app.add_middleware(AuditLoggingMiddleware)
 
-# CORS Middleware allowing frontend origin (added LAST so it executes outermost on all responses)
+# CORS Middleware allowing explicit frontend origins (added LAST so it executes outermost)
+configured_origins = [
+    origin.strip() for origin in settings.FRONTEND_ORIGIN.split(",") if origin.strip()
+]
+if settings.APP_ENV.strip().lower() in {"dev", "development", "test"}:
+    configured_origins = list(dict.fromkeys([*configured_origins, "http://localhost:3000"]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list({settings.FRONTEND_ORIGIN, "http://localhost:3000"}),
+    allow_origins=configured_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

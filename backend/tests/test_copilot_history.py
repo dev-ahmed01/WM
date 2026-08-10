@@ -46,3 +46,33 @@ def test_get_copilot_history_success(mock_count, mock_list):
 def test_get_copilot_history_unauthorized():
     response = client.get("/api/v1/copilot/history")
     assert response.status_code == 401
+
+
+@patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None)
+@patch("app.api.v1.copilot.ConversationRepository.load_history")
+@patch("app.api.v1.copilot.ConversationRepository.belongs_to_user", return_value=True)
+def test_get_conversation_messages_for_owner(_belongs, load_history, _current_session):
+    load_history.return_value = [
+        {
+            "id": "msg_1",
+            "sender": "employee",
+            "content": "How do I inspect the seal?",
+            "confidence_score": 0.0,
+            "created_at": "2026-08-04T00:00:00",
+        }
+    ]
+    response = client.get(
+        "/api/v1/copilot/history/conv_12345",
+        headers={"Authorization": f"Bearer {EMP_TOKEN}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["messages"][0]["content"] == "How do I inspect the seal?"
+
+
+@patch("app.api.v1.copilot.ConversationRepository.belongs_to_user", return_value=False)
+def test_conversation_history_hides_other_users_session(_belongs):
+    response = client.get(
+        "/api/v1/copilot/history/conv_other",
+        headers={"Authorization": f"Bearer {EMP_TOKEN}"},
+    )
+    assert response.status_code == 404

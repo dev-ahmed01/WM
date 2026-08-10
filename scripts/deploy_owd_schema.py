@@ -34,6 +34,7 @@ MIGRATION_FILES = [
     "10_enterprise_document_layer.sql",
     "12_runtime_alignment.sql",
     "13_runtime_prerequisites.sql",
+    "14_runtime_integrity.sql",
 ]
 
 
@@ -165,10 +166,12 @@ def deploy_migrations() -> Dict[str, Any]:
 
                 # 4. Verify Seed Data in SECURITY
                 cur.execute("SELECT COUNT(*) FROM SECURITY.departments")
-                dept_count = cur.fetchone()[0]
+                dept_row = cur.fetchone()
+                dept_count = int(dept_row[0]) if dept_row else 0
 
                 cur.execute("SELECT COUNT(*) FROM SECURITY.roles")
-                role_count = cur.fetchone()[0]
+                role_row = cur.fetchone()
+                role_count = int(role_row[0]) if role_row else 0
 
                 report["seed_data_inserted"] = [
                     f"SECURITY.departments ({dept_count} rows: Operations, Warehouse, Logistics, Quality, Inventory)",

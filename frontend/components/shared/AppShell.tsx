@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Intelligence Hub',
     href: '/intelligence-hub',
     icon: BarChart3,
-    roles: ['manager'],
+    roles: ['manager', 'admin'],
   },
   {
     label: 'Copilot',

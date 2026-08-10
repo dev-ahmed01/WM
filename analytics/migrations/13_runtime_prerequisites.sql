@@ -23,12 +23,6 @@ CREATE TABLE IF NOT EXISTS INTELLIGENCE_HUB.analytics_events (
     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
 );
 
-ALTER TABLE WORKMATE_COPILOT.workflow_sessions
-    ADD COLUMN IF NOT EXISTS current_step INT NOT NULL DEFAULT 0;
-
-ALTER TABLE WORKMATE_COPILOT.workflow_sessions
-    ADD COLUMN IF NOT EXISTS abandon_reason TEXT NULL;
-
 -- Required runtime grants are account-specific and deliberately use a placeholder.
 -- Apply equivalent grants after replacing WORKMATE_BACKEND_ROLE with the actual role:
 -- GRANT USAGE ON DATABASE WORKMATE_AI TO ROLE WORKMATE_BACKEND_ROLE;

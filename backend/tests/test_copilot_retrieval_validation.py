@@ -76,17 +76,56 @@ def test_validation_service_valid_grounding():
     assert validated.citations[0].document_title == "Valve SOP"
 
 
+def test_validation_rejects_hallucinated_answer_instead_of_returning_it():
+    chunks = [
+        {
+            "chunk_id": "chk_1",
+            "document_id": "doc_1",
+            "document_title": "Valve SOP",
+            "version_number": 1,
+            "step_number": 1,
+            "department_id": "dept_eng",
+            "status": "PUBLISHED",
+            "content": "Close valve A before valve B.",
+            "score": 0.95,
+        }
+    ]
+    validated, requires_escalation = ResponseValidationService.validate_response(
+        raw_response=GeneratedAnswer(
+            "Disable the alarm and remove the pressure sensor.", ["chk_1"], "test"
+        ),
+        retrieved_chunks=chunks,
+        user_role="employee",
+        user_department_id="dept_eng",
+    )
+    assert requires_escalation is True
+    assert "Disable the alarm" not in validated.answer
+
+
+def test_validation_never_fabricates_missing_citation_identifiers():
+    validated, _ = ResponseValidationService.validate_response(
+        raw_response=GeneratedAnswer("Close valve A.", [], "test"),
+        retrieved_chunks=[{"content": "Close valve A.", "department_id": "dept_eng", "score": 1.0}],
+        user_role="employee",
+        user_department_id="dept_eng",
+    )
+    assert validated.answer == CANONICAL_FALLBACK
+    assert validated.citations == []
+
+
 @patch.object(AIGateway, "detect_intent")
 @patch.object(RetrievalService, "retrieve_chunks")
 @patch.object(AIGateway, "generate_response")
-@patch("app.services.workflow_state.WorkflowStateService.get_active_session")
+@patch("app.services.workflow_state.WorkflowStateService.get_current_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_or_create_session")
 @patch("app.repositories.conversation_repository.ConversationRepository.persist_message")
+@patch("app.repositories.conversation_repository.ConversationRepository.update_message_intent")
 @patch("app.repositories.conversation_repository.ConversationRepository.get_history")
 @patch("app.services.analytics_service.AnalyticsService.record_event")
 def test_copilot_message_endpoint_standalone_turn(
     mock_record_event,
     mock_get_history,
+    mock_update_intent,
     mock_persist,
     mock_session,
     mock_get_active,
@@ -127,4 +166,3 @@ def test_copilot_message_endpoint_standalone_turn(
     assert data["confidence_score"] == 0.88
     assert len(data["citations"]) == 1
     assert data["citations"][0]["document_title"] == "Valve SOP"
-

@@ -29,7 +29,11 @@ class KnowledgeRepository:
 
     @staticmethod
     def department_exists(department_id: str) -> bool:
-        query = "SELECT 1 FROM SECURITY.departments WHERE id = %s LIMIT 1"
+        query = """
+            SELECT 1 FROM SECURITY.departments
+            WHERE id = %s AND COALESCE(is_active, TRUE) = TRUE
+            LIMIT 1
+        """
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -40,7 +44,11 @@ class KnowledgeRepository:
 
     @staticmethod
     def list_departments() -> List[Dict[str, str]]:
-        query = "SELECT id, name FROM SECURITY.departments ORDER BY name"
+        query = """
+            SELECT id, name FROM SECURITY.departments
+            WHERE COALESCE(is_active, TRUE) = TRUE
+            ORDER BY name, id
+        """
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
@@ -245,7 +253,8 @@ class KnowledgeRepository:
                     rows = cur.fetchall()
 
                     cur.execute(count_query, params)
-                    total_count = cur.fetchone()[0]
+                    count_row = cur.fetchone()
+                    total_count = int(count_row[0]) if count_row else 0
 
                     items = [
                         {
@@ -290,7 +299,39 @@ class KnowledgeRepository:
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(query, params)
+                    cur.execute("BEGIN")
+                    try:
+                        cur.execute(query, params)
+                        if cur.rowcount != 1:
+                            cur.execute("ROLLBACK")
+                            return None
+                        if department_id is not None:
+                            cur.execute(
+                                """
+                                UPDATE KNOWLEDGE_STUDIO.workflow_search_metadata
+                                SET department_id = %s
+                                WHERE workflow_version_id IN (
+                                    SELECT id FROM KNOWLEDGE_STUDIO.workflow_versions
+                                    WHERE workflow_id = %s
+                                )
+                                """,
+                                (department_id, item_id),
+                            )
+                            cur.execute(
+                                """
+                                UPDATE KNOWLEDGE_STUDIO.workflow_role_permissions
+                                SET department_id = %s
+                                WHERE workflow_version_id IN (
+                                    SELECT id FROM KNOWLEDGE_STUDIO.workflow_versions
+                                    WHERE workflow_id = %s
+                                )
+                                """,
+                                (department_id, item_id),
+                            )
+                        cur.execute("COMMIT")
+                    except Exception:
+                        cur.execute("ROLLBACK")
+                        raise
             return KnowledgeRepository.get_item_by_id(item_id)
         except Exception as exc:
             raise WorkMateException(message=f"Failed to update workflow metadata: {str(exc)}") from exc
@@ -305,7 +346,7 @@ class KnowledgeRepository:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(query, (status, version_id))
-                    return cur.rowcount > 0
+                    return (cur.rowcount or 0) > 0
         except Exception as exc:
             raise WorkMateException(message=f"Failed to update version status: {str(exc)}") from exc
 

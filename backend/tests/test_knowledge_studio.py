@@ -55,6 +55,31 @@ def test_invalid_owd_returns_422_without_staging():
     stage.assert_not_called()
 
 
+def test_invalid_utf8_returns_422_without_staging():
+    with patch.object(IngestionService, "stage_file") as stage:
+        response = client.post(
+            "/api/v1/knowledge/upload", headers=headers(ADMIN_TOKEN),
+            data={"department_id": "dept_inbound", "title": "Invalid"},
+            files={"file": ("invalid.md", b"\xff\xfe\x00", "text/markdown")},
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["error_code"] == "INVALID_ENCODING"
+    stage.assert_not_called()
+
+
+@patch("app.api.v1.knowledge_studio.KnowledgeRepository.department_exists", return_value=False)
+def test_unknown_department_is_rejected_before_staging(_department_exists):
+    with patch.object(IngestionService, "stage_file") as stage:
+        response = client.post(
+            "/api/v1/knowledge/upload", headers=headers(ADMIN_TOKEN),
+            data={"department_id": "dept_missing", "title": "Receive Shipment"},
+            files={"file": ("receive.md", OWD_BYTES, "text/markdown")},
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["error_code"] == "INVALID_DEPARTMENT"
+    stage.assert_not_called()
+
+
 @patch("app.api.v1.knowledge_studio.KnowledgeRepository.department_exists", return_value=True)
 @patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_next_version_number", return_value=3)
 @patch.object(IngestionService, "stage_file", return_value="@RAW_OWD_STAGE/SOP_INB_001/v3/hash/receive.md")
@@ -77,6 +102,7 @@ def test_upload_uses_server_version_and_publishes(
     assert response.json()["version_number"] == 3
     assert process.call_args.kwargs["version_number"] == 3
     assert process.call_args.kwargs["prepared_document"].workflow.version_number == 3
+    assert process.call_args.kwargs["source_filename"] == "receive.md"
     stage.assert_called_once()
     invalidate.assert_called_once_with("dept_inbound")
 

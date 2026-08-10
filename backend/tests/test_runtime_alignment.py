@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.escalation_repository import EscalationRepository
 from app.services.analytics_service import AnalyticsService
+from app.middleware.audit_logger import _record_audit_entry_sync
 
 
 def _mock_connection():
@@ -58,3 +59,27 @@ def test_runtime_prerequisites_provision_stage_and_side_effect_tables():
     assert "CREATE STAGE IF NOT EXISTS KNOWLEDGE_STUDIO.RAW_OWD_STAGE" in sql
     assert "WORKMATE_COPILOT.escalation_records" in sql
     assert "CREATE TABLE IF NOT EXISTS INTELLIGENCE_HUB.analytics_events" in sql
+
+
+@patch("app.middleware.audit_logger.get_db_cursor")
+def test_audit_logger_targets_migration_backed_table_and_columns(mock_cursor):
+    cursor = MagicMock()
+    mock_cursor.return_value.__enter__.return_value = cursor
+    _record_audit_entry_sync({
+        "user_id": "usr_1",
+        "role": "admin",
+        "action": "POST /api/v1/knowledge/upload",
+        "resource": "/api/v1/knowledge/upload",
+        "ip_address": "127.0.0.1",
+        "status_code": 200,
+    })
+    sql = cursor.execute.call_args.args[0]
+    assert "SHARED.audit_logs" in sql
+    assert "STATUS_CODE" in sql and "ROLE" in sql
+
+
+def test_runtime_integrity_migration_provisions_analytics_views():
+    sql = Path("analytics/migrations/14_runtime_integrity.sql").read_text(encoding="utf-8")
+    assert "INTELLIGENCE_HUB.V_ANALYTICS_FAQS" in sql
+    assert "INTELLIGENCE_HUB.V_ANALYTICS_CONFIDENCE_TRENDS" in sql
+    assert "ADD COLUMN IF NOT EXISTS status_code" in sql

@@ -26,6 +26,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
             </div>
           )}
 
+          {msg.copilotData?.active_decision_options && msg.copilotData.active_decision_options.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Available workflow decisions">
+              {msg.copilotData.active_decision_options.map((option) => (
+                <span key={option.option_code} className="text-xs px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-800">
+                  {option.option_label} ({option.option_code})
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Message Bubble */}
           <div
             className={`p-4 rounded-lg shadow-sm text-sm ${

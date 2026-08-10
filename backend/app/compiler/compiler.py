@@ -21,7 +21,12 @@ class OWDCompiler:
     """Transforms validated UnifiedAST graphs into normalized relational entity payloads."""
 
     @staticmethod
-    def compile(owd_document: UnifiedAST, stage_file_uri: str = "", user_id: str = "admin") -> CompiledWorkflow:
+    def compile(
+        owd_document: UnifiedAST,
+        stage_file_uri: str = "",
+        user_id: str = "admin",
+        source_filename: str = "",
+    ) -> CompiledWorkflow:
         """Transforms UnifiedAST into database-ready CompiledWorkflow object."""
         if not owd_document or not owd_document.workflow:
             raise OWDCompilationException("Cannot compile empty or uninitialized OWD Document.")
@@ -41,20 +46,20 @@ class OWDCompiler:
             "id": workflow_id,
             "workflow_code": wf.workflow_code,
             "title": wf.title,
-            "description": wf.description or (wf_def.workflow_objective if wf_def else f"Compiled OWD workflow for {wf.title}"),
+            "description": wf.description or (wf_def.workflow_objective if wf_def else None),
             "department_id": wf.department_id,
             "category": wf.category,
             "created_by": user_id,
-            "owner": meta.owner if meta else "System Admin",
-            "priority": meta.priority if meta else "MEDIUM",
-            "difficulty": meta.difficulty if meta else "INTERMEDIATE",
-            "estimated_duration": meta.estimated_duration if meta else "30 mins",
-            "review_cycle": meta.review_cycle if meta else "ANNUAL",
-            "effective_date": meta.effective_date if meta else "2026-01-01",
-            "workflow_objective": wf_def.workflow_objective if wf_def else f"Execute {wf.title}",
-            "business_goal": wf_def.business_goal if wf_def else "Process Compliance",
-            "entry_conditions": ", ".join(wf_def.entry_conditions) if (wf_def and wf_def.entry_conditions) else "Standard Entry",
-            "exit_conditions": ", ".join(wf_def.exit_conditions) if (wf_def and wf_def.exit_conditions) else "Standard Exit",
+            "owner": meta.owner if meta else None,
+            "priority": meta.priority if meta else None,
+            "difficulty": meta.difficulty if meta else None,
+            "estimated_duration": meta.estimated_duration if meta else None,
+            "review_cycle": meta.review_cycle if meta else None,
+            "effective_date": meta.effective_date if meta else None,
+            "workflow_objective": wf_def.workflow_objective if wf_def else None,
+            "business_goal": wf_def.business_goal if wf_def else None,
+            "entry_conditions": ", ".join(wf_def.entry_conditions) if (wf_def and wf_def.entry_conditions) else None,
+            "exit_conditions": ", ".join(wf_def.exit_conditions) if (wf_def and wf_def.exit_conditions) else None,
         }
 
         # 2. Workflow Version Payload (KNOWLEDGE_STUDIO.workflow_versions)
@@ -96,12 +101,12 @@ class OWDCompiler:
                 "is_initial": s.is_initial,
                 "is_terminal": s.is_terminal,
                 "ordinal_index": s.ordinal_index,
-                "purpose": s.purpose or s.title,
-                "entry_condition": s.entry_condition or "None",
-                "exit_condition": s.exit_condition or "State Completed",
-                "responsible_role": s.responsible_role or "Employee",
-                "expected_duration": s.expected_duration or "10 mins",
-                "business_objective": s.business_objective or s.title,
+                    "purpose": s.purpose,
+                    "entry_condition": s.entry_condition,
+                    "exit_condition": s.exit_condition,
+                    "responsible_role": s.responsible_role,
+                    "expected_duration": s.expected_duration,
+                    "business_objective": s.business_objective,
             })
 
             # Steps & AI Conversations
@@ -119,12 +124,12 @@ class OWDCompiler:
                     "is_mandatory": st.is_mandatory,
                     "ordinal_index": st.ordinal_index,
                     "sequence_number": st.sequence_number,
-                    "safety_note": st.safety_note or "None",
+                    "safety_note": st.safety_note,
                     "estimated_time": st.estimated_time,
                     "retry_policy": st.retry_policy,
                     "completion_criteria": st.completion_criteria,
-                    "common_failure": st.common_failure or "Operator delay",
-                    "recovery_action": st.recovery_action or "Retry step",
+                    "common_failure": st.common_failure,
+                    "recovery_action": st.recovery_action,
                 })
 
                 # AI Conversation Layer (Section 6)
@@ -322,18 +327,21 @@ class OWDCompiler:
             "state_keys": [state.state_key for state in wf.states],
         }
 
+        staged_path = version_payload["stage_file_uri"].split("/", 1)[1] if "/" in version_payload["stage_file_uri"] else ""
+        actual_filename = source_filename or (staged_path.rsplit("/", 1)[-1] if staged_path else f"{wf.workflow_code}.md")
+        actual_directory = staged_path.rsplit("/", 1)[0] if "/" in staged_path else None
         documents_payload: List[Dict[str, Any]] = [{
             "id": doc_id,
             "workflow_id": workflow_id,
             "workflow_version_id": version_id,
             "document_name": wf.title,
-            "original_filename": f"{wf.workflow_code}.md",
+            "original_filename": actual_filename,
             "stage_uri": version_payload["stage_file_uri"],
-            "relative_path": f"inbound/{wf.workflow_code}.md",
-            "directory": "inbound",
+            "relative_path": staged_path or actual_filename,
+            "directory": actual_directory,
             "extension": "md",
             "mime_type": "text/markdown",
-            "file_size_bytes": len(raw_text),
+            "file_size_bytes": len(raw_text.encode("utf-8")),
             "compression": "none",
             "encoding": "utf-8",
             "md5_hash": md5_val,
@@ -342,9 +350,9 @@ class OWDCompiler:
             "parser_version": "1.1.0",
             "source_type": "OWD_MARKDOWN",
             "language_code": "en-US",
-            "author": owd_document.frontmatter.get("author") or (meta.owner if meta else "System Admin"),
-            "reviewer": owd_document.frontmatter.get("reviewer") or "Supervisor",
-            "approval_status": "APPROVED",
+            "author": owd_document.frontmatter.get("author") or (meta.owner if meta else None),
+            "reviewer": owd_document.frontmatter.get("reviewer"),
+            "approval_status": "PUBLISHED",
             "tags": [wf.category, wf.department_id],
             "labels": owd_document.frontmatter or {},
             "description": wf.description,
@@ -382,7 +390,7 @@ class OWDCompiler:
             "entities": entities_dict,
             "language_detected": "en-US",
             "embedding_model": "none",
-            "embedding_version": "not_applicable",
+            "embedding_version": "none",
             "chunk_count": len(search_metadata_payload),
             "average_chunk_size": avg_chunk_sz,
             "embedding_status": "NOT_REQUIRED",
@@ -422,7 +430,7 @@ class OWDCompiler:
             "compiler_name": "OWDCompiler",
             "loader_name": "OWDLoader",
             "status": "PUBLISHED",
-            "executed_by": "SYSTEM",
+            "executed_by": user_id,
             "execution_notes": f"Successfully compiled {len(states_payload)} states into enterprise document object.",
         }]
 

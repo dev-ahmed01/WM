@@ -27,7 +27,7 @@ class EscalationService:
         )
 
         # Trigger n8n supervisor notification webhook asynchronously
-        n8n_webhook_url = f"{settings.N8N_BASE_URL}/webhook/escalation-webhook"
+        n8n_webhook_url = f"{settings.N8N_WEBHOOK_BASE_URL.rstrip('/')}/webhook/escalation-webhook"
         payload = {
             "escalation_id": escalation_id,
             "conversation_message_id": conversation_message_id,
@@ -37,7 +37,11 @@ class EscalationService:
 
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(n8n_webhook_url, json=payload)
+                response = await client.post(
+                    n8n_webhook_url,
+                    json=payload,
+                    headers={"X-WorkMate-Webhook-Secret": settings.INTERNAL_WEBHOOK_SECRET},
+                )
                 if response.status_code in (200, 201, 202):
                     self.mark_notified(escalation_id)
         except Exception as exc:
@@ -66,19 +70,6 @@ class EscalationService:
         if not success:
             raise NotFoundException(message=f"Escalation {escalation_id} not found.")
         return True
-
-    def create_external_ticket(self, escalation_id: str) -> Dict[str, Any]:
-        """
-        OPTIONAL: Stub for enterprise external ticketing (e.g. Jira/ServiceNow integration).
-        Pending confirmation on enterprise tool integrations.
-        """
-        # TODO: Implement Jira API client when enterprise ticketing scope is confirmed.
-        return {
-            "status": "STUBBED",
-            "escalation_id": escalation_id,
-            "external_ticket_id": None,
-            "message": "Jira ticketing integration is pending enterprise scope confirmation."
-        }
 
     def list_escalations(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """Lists escalation records for administrative/manager analytics views."""

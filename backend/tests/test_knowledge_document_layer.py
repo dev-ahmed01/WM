@@ -80,12 +80,17 @@ def test_ast_builder_preserves_raw_markdown_and_elements():
 
 def test_compiler_generates_enterprise_payloads():
     ast = ASTBuilder.build_ast(SAMPLE_OWD_MARKDOWN, workflow_code="SOP-RCV-001")
-    compiled = OWDCompiler.compile(ast, stage_file_uri="@RAW_OWD_STAGE/SOP-RCV-001_v1.md")
+    compiled = OWDCompiler.compile(
+        ast,
+        stage_file_uri="@RAW_OWD_STAGE/SOP-RCV-001/v1/hash/receive.md",
+        source_filename="receive.md",
+    )
 
     assert len(compiled.documents_payload) == 1
     doc = compiled.documents_payload[0]
     assert doc["document_name"] == "Receive Inbound Shipment"
     assert doc["author"] == "Alice Smith"
+    assert doc["original_filename"] == "receive.md"
 
     assert len(compiled.contents_payload) == 1
     cont = compiled.contents_payload[0]
@@ -95,6 +100,9 @@ def test_compiler_generates_enterprise_payloads():
     assert len(compiled.ai_metadata_payload) == 1
     ai = compiled.ai_metadata_payload[0]
     assert ai["word_count"] > 10
+    assert ai["embedding_model"] == "none"
+    assert ai["embedding_status"] == "NOT_REQUIRED"
+    assert ai["evaluation_score"] is None
 
     assert len(compiled.chunks_payload) >= 1
     chunk = compiled.chunks_payload[0]
@@ -107,8 +115,21 @@ def test_compiler_generates_enterprise_payloads():
     assert lin["status"] == "PUBLISHED"
 
 
-def test_document_repository_stubs_return_clean():
-    # Since get_snowflake_connection is mock/none in local unit tests, repo returns None/empty
+def test_document_repository_returns_empty_results_without_faking_data(monkeypatch):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def connection():
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value = cursor
+        yield conn
+
+    monkeypatch.setattr("app.repositories.document_repository.get_snowflake_connection", connection)
     assert DocumentRepository.get_document_by_id("doc_non_existent") is None
     assert DocumentRepository.get_document_content("doc_non_existent") is None
     assert DocumentRepository.get_document_chunks("doc_non_existent") == []

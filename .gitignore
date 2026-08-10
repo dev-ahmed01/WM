@@ -25,9 +25,13 @@ dist/
 
 # Local AI model files and caches
 .ollama/
-models/
+/models/
 *.gguf
 *.safetensors
+
+# Local upgrade and diagnostic artifacts
+.tsupgrader/
+.env.txt
 
 # IDE & OS files
 .vscode/

@@ -38,6 +38,7 @@ class OWDCompilerPipeline:
         version_number: int = 1,
         skip_loader: bool = False,
         prepared_document: Optional[OWDDocument] = None,
+        source_filename: str = "",
     ) -> Dict[str, Any]:
         """Executes Parser -> Validator -> Compiler -> Loader pipeline and returns detailed compilation report."""
         logger.info("[STAGE 0 INIT] Processing OWD Markdown (%d characters)", len(markdown_text))
@@ -104,6 +105,7 @@ class OWDCompilerPipeline:
                 owd_document=owd_doc,
                 stage_file_uri=stage_file_uri,
                 user_id=user_id,
+                source_filename=source_filename,
             )
             logger.info(f"[STAGE 3 COMPILE COMPLETE] CompiledWorkflow generated. Workflow ID: {compiled_wf.workflow_payload.get('id')}, Version ID: {compiled_wf.version_payload.get('id')}, AST Hash: {compiled_wf.version_payload.get('ast_hash')}")
         except OWDCompilationException as comp_err:

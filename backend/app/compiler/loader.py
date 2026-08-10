@@ -485,7 +485,7 @@ class OWDLoader:
                 try:
                     with conn.cursor() as rollback_cur:
                         rollback_cur.execute("ROLLBACK")
-                except Exception:
-                    logger.exception("[LOADER ROLLBACK ERROR] Snowflake rollback failed")
+                except Exception as rollback_exc:
+                    logger.debug("Loader rollback was already handled by the connection boundary: %s", rollback_exc)
             logger.error(f"[LOADER ERROR] Failed to load compiled workflow into Snowflake: {str(e)}")
             raise OWDLoaderException(message=f"Failed to persist OWD workflow in Snowflake: {str(e)}") from e

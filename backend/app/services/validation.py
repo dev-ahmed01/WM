@@ -4,8 +4,8 @@ import logging
 import re
 from typing import Any, Dict, List, Sequence, Tuple
 
-from app.integrations.ai_provider import GeneratedAnswer
 from app.core.config import settings
+from app.integrations.ai_provider import GeneratedAnswer
 from app.models.copilot import Citation, ValidatedResponse
 
 validation_logger = logging.getLogger("copilot_services")
@@ -33,7 +33,7 @@ _REQUIRED_METADATA = (
 
 
 class ResponseValidationService:
-    """Rejects unsupported model output and never fabricates citation metadata."""
+    """Reject unsupported model output and never fabricate citation metadata."""
 
     @staticmethod
     def _tokens(text: str) -> set[str]:

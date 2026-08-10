@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/lib/auth';
 import { ChatThread } from '@/components/chat/ChatThread';
-import { apiClient, CopilotResponse } from '@/lib/api-client';
+import { apiClient, CopilotConversationDetail, CopilotResponse } from '@/lib/api-client';
 
 function CopilotContent() {
   const { user, loading } = useRequireRole(['employee', 'admin', 'manager']);
@@ -13,6 +13,9 @@ function CopilotContent() {
 
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | undefined>(sessionId || undefined);
+  const [workflowSessionId, setWorkflowSessionId] = useState<string | undefined>();
+  const [workflowSessionStatus, setWorkflowSessionStatus] = useState<CopilotResponse['active_session_status']>();
+  const [workflowDecisionOptions, setWorkflowDecisionOptions] = useState<NonNullable<CopilotResponse['active_decision_options']>>([]);
   const [isSending, setIsSending] = useState(false);
   const [messages, setMessages] = useState<
     Array<{ sender: 'user' | 'assistant'; content: string; copilotData?: CopilotResponse }>
@@ -30,27 +33,17 @@ function CopilotContent() {
       if (!sessionId || loading) return;
 
       try {
-        await apiClient(`/copilot/session/${sessionId}/resume`, {
-          method: 'POST',
-        });
-
+        const history = await apiClient<CopilotConversationDetail>(`/copilot/history/${sessionId}`);
         setConversationId(sessionId);
-        setMessages([
-          {
-            sender: 'assistant',
-            content: `Resumed active session context: "${sessionId}". Ready for your operational queries.`,
-          },
-        ]);
+        setWorkflowSessionId(history.active_session_id);
+        setWorkflowSessionStatus(history.active_session_status);
+        setWorkflowDecisionOptions(history.active_decision_options || []);
+        setMessages(history.messages.map((message) => ({
+          sender: message.sender === 'employee' ? 'user' : 'assistant',
+          content: message.content,
+        })));
       } catch (err: any) {
-        console.error('Failed to resume session:', err);
-        // Fall back gracefully if session state endpoint fails
-        setConversationId(sessionId);
-        setMessages([
-          {
-            sender: 'assistant',
-            content: `Loaded conversation session ID "${sessionId}". You can continue asking questions.`,
-          },
-        ]);
+        setMessages([{ sender: 'assistant', content: err.message || 'Unable to load the conversation.' }]);
       }
     }
 
@@ -84,6 +77,9 @@ function CopilotContent() {
       if (response.conversation_id) {
         setConversationId(response.conversation_id);
       }
+      setWorkflowSessionId(response.active_session_id);
+      setWorkflowSessionStatus(response.active_session_status);
+      setWorkflowDecisionOptions(response.active_decision_options || []);
 
       setMessages((prev) => [
         ...prev,
@@ -106,6 +102,48 @@ function CopilotContent() {
     }
   };
 
+  const handleWorkflowAction = async (action: 'pause' | 'resume' | 'advance' | 'abandon') => {
+    if (!workflowSessionId || isSending) return;
+    let body: string | undefined;
+    if (action === 'abandon') {
+      const reason = window.prompt('Why are you abandoning this workflow?');
+      if (!reason?.trim()) return;
+      body = JSON.stringify({ reason: reason.trim() });
+    } else if (action === 'advance') {
+      const decisionOption = window.prompt(
+        workflowDecisionOptions.length > 0
+          ? `Choose a decision by code or label:\n${workflowDecisionOptions.map((option) => `${option.option_code}: ${option.option_label}`).join('\n')}`
+          : 'Leave blank to complete the current step.',
+      );
+      if (decisionOption === null) return;
+      body = JSON.stringify({
+        decision_option: decisionOption.trim() || undefined,
+        rule_results: {},
+        values: {},
+        use_fallback: false,
+      });
+    }
+    setIsSending(true);
+    try {
+      const updated = await apiClient<{ status: CopilotResponse['active_session_status'] }>(
+        `/copilot/session/${workflowSessionId}/${action}`,
+        { method: 'POST', body },
+      );
+      setWorkflowSessionStatus(updated.status);
+      setMessages((previous) => [
+        ...previous,
+        { sender: 'assistant', content: `Workflow session ${updated.status}.` },
+      ]);
+    } catch (err: any) {
+      setMessages((previous) => [
+        ...previous,
+        { sender: 'assistant', content: err.message || `Unable to ${action} the workflow.` },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-white">
       <header className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-slate-50">
@@ -121,6 +159,26 @@ function CopilotContent() {
           <p className="text-xs text-gray-500">Enterprise Operational Guidance Engine</p>
         </div>
         <div className="flex items-center space-x-2">
+          {workflowSessionId && workflowSessionStatus === 'active' && (
+            <>
+              <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
+                Complete / advance
+              </button>
+              <button onClick={() => handleWorkflowAction('pause')} className="text-xs border px-2.5 py-1 rounded bg-white">
+                Pause workflow
+              </button>
+            </>
+          )}
+          {workflowSessionId && workflowSessionStatus === 'paused' && (
+            <button onClick={() => handleWorkflowAction('resume')} className="text-xs border px-2.5 py-1 rounded bg-white">
+              Resume workflow
+            </button>
+          )}
+          {workflowSessionId && ['active', 'paused'].includes(workflowSessionStatus || '') && (
+            <button onClick={() => handleWorkflowAction('abandon')} className="text-xs border border-red-200 text-red-700 px-2.5 py-1 rounded bg-white">
+              Abandon
+            </button>
+          )}
           <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-1 rounded border border-blue-200">
             Role: {user?.role}
           </span>

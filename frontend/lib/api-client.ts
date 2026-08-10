@@ -36,9 +36,17 @@ export interface CopilotResponse {
   confidence_score: number;
   is_grounded: boolean;
   requires_escalation: boolean;
+  active_session_id?: string;
+  active_session_status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'escalated';
   active_sop_id?: string;
   active_step_number?: number;
   active_step_title?: string;
+  active_decision_options?: WorkflowDecisionOption[];
+}
+
+export interface WorkflowDecisionOption {
+  option_code: string;
+  option_label: string;
 }
 
 export interface KnowledgeDocument {
@@ -125,6 +133,23 @@ export interface CopilotSessionSummary {
 export interface CopilotHistoryResponse {
   sessions: CopilotSessionSummary[];
   total: number;
+}
+
+export interface CopilotConversationDetail {
+  conversation_id: string;
+  messages: Array<{
+    id: string;
+    sender: 'employee' | 'ai';
+    content: string;
+    confidence_score: number;
+    created_at: string;
+  }>;
+  active_session_id?: string;
+  active_session_status?: CopilotResponse['active_session_status'];
+  active_sop_id?: string;
+  active_step_number?: number;
+  active_step_title?: string;
+  active_decision_options?: WorkflowDecisionOption[];
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
