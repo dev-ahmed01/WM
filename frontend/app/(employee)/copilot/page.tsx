@@ -37,11 +37,11 @@ function CopilotContent() {
       try {
         const history = await apiClient<CopilotConversationDetail>(`/copilot/history/${sessionId}`);
         setConversationId(sessionId);
-        setWorkflowSessionId(history.active_session_id);
-        setWorkflowSessionStatus(history.active_session_status);
+        setWorkflowSessionId(history.active_session_id ?? undefined);
+        setWorkflowSessionStatus(history.active_session_status ?? undefined);
         setWorkflowDecisionOptions(history.active_decision_options || []);
-        setActiveStepNumber(history.active_step_number);
-        setActiveStepTitle(history.active_step_title);
+        setActiveStepNumber(history.active_step_number ?? undefined);
+        setActiveStepTitle(history.active_step_title ?? undefined);
         setMessages(history.messages.map((message) => ({
           sender: message.sender === 'employee' ? 'user' : 'assistant',
           content: message.content,
@@ -81,11 +81,11 @@ function CopilotContent() {
       if (response.conversation_id) {
         setConversationId(response.conversation_id);
       }
-      setWorkflowSessionId(response.active_session_id);
-      setWorkflowSessionStatus(response.active_session_status);
+      setWorkflowSessionId(response.active_session_id ?? undefined);
+      setWorkflowSessionStatus(response.active_session_status ?? undefined);
       setWorkflowDecisionOptions(response.active_decision_options || []);
-      setActiveStepNumber(response.active_step_number);
-      setActiveStepTitle(response.active_step_title);
+      setActiveStepNumber(response.active_step_number ?? undefined);
+      setActiveStepTitle(response.active_step_title ?? undefined);
 
       setMessages((prev) => [
         ...prev,
@@ -141,16 +141,18 @@ function CopilotContent() {
       let statusMessage = `Workflow session ${updated.status}.`;
       if (action === 'advance' && conversationId) {
         const detail = await apiClient<CopilotConversationDetail>(`/copilot/history/${conversationId}`);
-        setWorkflowSessionId(detail.active_session_id);
-        setWorkflowSessionStatus(detail.active_session_status);
+        setWorkflowSessionId(detail.active_session_id ?? undefined);
+        setWorkflowSessionStatus(detail.active_session_status ?? undefined);
         setWorkflowDecisionOptions(detail.active_decision_options || []);
-        setActiveStepNumber(detail.active_step_number);
-        setActiveStepTitle(detail.active_step_title);
+        setActiveStepNumber(detail.active_step_number ?? undefined);
+        setActiveStepTitle(detail.active_step_title ?? undefined);
         statusMessage = detail.active_session_status === 'completed'
           ? 'Workflow completed.'
-          : detail.active_step_title
-            ? `Step completed. Next: ${detail.active_step_title}`
-            : 'Step completed. Choose the next workflow outcome.';
+          : detail.active_decision_options?.length
+            ? `Step completed. Decision required: ${detail.active_step_title}`
+            : detail.active_step_title
+              ? `Step completed. Next: ${detail.active_step_title}`
+              : 'Step completed.';
       }
       setMessages((previous) => [
         ...previous,
@@ -212,16 +214,16 @@ function CopilotContent() {
       {workflowSessionId
         && ['active', 'paused'].includes(workflowSessionStatus || '')
         && activeStepTitle
-        && (activeStepNumber !== undefined || workflowDecisionOptions.length > 0) && (
+        && (activeStepNumber != null || workflowDecisionOptions.length > 0) && (
         <section
           aria-label="Current workflow step"
           className="mx-4 mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
         >
           <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-            {activeStepNumber !== undefined ? `Current step ${activeStepNumber}` : 'Decision required'}
+            {activeStepNumber != null ? `Current step ${activeStepNumber}` : 'Decision required'}
           </div>
           <p className="mt-1 text-sm font-medium">{activeStepTitle}</p>
-          {activeStepNumber !== undefined ? (
+          {activeStepNumber != null ? (
             <p className="mt-1 text-xs text-blue-700">
               Complete this step only, then type &quot;done&quot; or select Complete step to continue.
             </p>
@@ -248,7 +250,7 @@ function CopilotContent() {
             placeholder={
               isSending
                 ? 'Copilot is processing...'
-                : activeStepNumber !== undefined
+                : activeStepNumber != null
                   ? 'Ask about this step or type "done"...'
                   : workflowDecisionOptions.length > 0
                     ? 'Ask about the decision or use Choose outcome...'

@@ -36,11 +36,11 @@ export interface CopilotResponse {
   confidence_score: number;
   is_grounded: boolean;
   requires_escalation: boolean;
-  active_session_id?: string;
-  active_session_status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'escalated';
-  active_sop_id?: string;
-  active_step_number?: number;
-  active_step_title?: string;
+  active_session_id?: string | null;
+  active_session_status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'escalated' | null;
+  active_sop_id?: string | null;
+  active_step_number?: number | null;
+  active_step_title?: string | null;
   active_decision_options?: WorkflowDecisionOption[];
 }
 
@@ -144,11 +144,11 @@ export interface CopilotConversationDetail {
     confidence_score: number;
     created_at: string;
   }>;
-  active_session_id?: string;
+  active_session_id?: string | null;
   active_session_status?: CopilotResponse['active_session_status'];
-  active_sop_id?: string;
-  active_step_number?: number;
-  active_step_title?: string;
+  active_sop_id?: string | null;
+  active_step_number?: number | null;
+  active_step_title?: string | null;
   active_decision_options?: WorkflowDecisionOption[];
 }
 
