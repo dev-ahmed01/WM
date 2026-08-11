@@ -108,6 +108,7 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     assert body["answer"].startswith("Current step: Inspect the shipment seal")
     assert 'type "done"' in body["answer"]
     assert body["citations"][0]["chunk_id"] == "chunk_1"
+    mock_generate.assert_not_awaited()
     mock_start.assert_called_once_with(
         conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
     )
@@ -225,6 +226,7 @@ def test_weak_match_does_not_start_workflow(
     assert response.json()["requires_escalation"] is True
     assert response.json()["active_session_id"] is None
     mock_start.assert_not_called()
+    mock_generate.assert_not_awaited()
 
 
 @patch("app.api.v1.copilot.AnalyticsService.record_event", side_effect=RuntimeError("offline"))

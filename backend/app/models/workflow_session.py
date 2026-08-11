@@ -54,3 +54,11 @@ class WorkflowPosition(BaseModel):
     step_title: Optional[str] = None
     expected_output_type: Optional[str] = None
     decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)
+
+
+class WorkflowAdvanceResponse(BaseModel):
+    status: WorkflowSessionStatus
+    current_state_id: str
+    active_step_number: Optional[int] = None
+    active_step_title: Optional[str] = None
+    active_decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)

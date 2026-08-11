@@ -49,6 +49,14 @@ export interface WorkflowDecisionOption {
   option_label: string;
 }
 
+export interface WorkflowAdvanceResponse {
+  status: CopilotResponse['active_session_status'];
+  current_state_id?: string | null;
+  active_step_number?: number | null;
+  active_step_title?: string | null;
+  active_decision_options: WorkflowDecisionOption[];
+}
+
 export interface KnowledgeDocument {
   id: string;
   title: string;

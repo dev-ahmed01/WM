@@ -22,6 +22,7 @@ from app.services.workflow_state import WorkflowStateService
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.integrations.ai_gateway import AIGateway
+from app.integrations.ai_provider import GeneratedAnswer
 
 copilot_logger = logging.getLogger("copilot_services")
 
@@ -153,7 +154,9 @@ async def copilot_message(
         content=payload.message,
         confidence_score=0.0,
     )
-    history = ConversationRepository.get_history(conversation_id)
+    # Current local intent/generation providers do not consume history. Avoid a
+    # redundant Snowflake round-trip on every interactive turn.
+    history: list[Dict[str, Any]] = []
     active_session = WorkflowStateService.get_current_session(conversation_id)
 
     # A short, explicit completion command belongs to the active state machine,
@@ -269,15 +272,41 @@ async def copilot_message(
                 user_id=user_id,
             )
 
-    # 5. Context assembly and local grounded generation
-    prompt_context = {
-        "user": current_user,
-        "query": payload.message,
-        "history": history,
-        "workflow_state": active_session.model_dump() if active_session else None,
-        "retrieved_chunks": retrieved_chunks,
-    }
-    raw_response = await AIGateway.generate_response(prompt_context)
+    # 5. Use deterministic persisted workflow guidance when the retrieved
+    # source identifies the active state. This avoids waiting for a model to
+    # regenerate text that already exists in the compiled workflow graph.
+    position = WorkflowStateService.get_position(active_session) if active_session else None
+    workflow_source = next(
+        (
+            chunk
+            for chunk in retrieved_chunks
+            if active_session
+            and position
+            and str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
+            and str(chunk.get("state_id")) == position.state_id
+        ),
+        None,
+    )
+    if not ResponseValidationService.has_relevant_evidence(
+        retrieved_chunks, department_id
+    ):
+        raw_response = GeneratedAnswer(answer="", source_ids=[], provider="none")
+    elif workflow_source and position and position.step_id:
+        raw_response = GeneratedAnswer(
+            answer=position.step_title or "",
+            source_ids=[str(workflow_source["chunk_id"])],
+            provider="workflow",
+        )
+    else:
+        raw_response = await AIGateway.generate_response(
+            {
+                "user": current_user,
+                "query": payload.message,
+                "history": history,
+                "workflow_state": active_session.model_dump() if active_session else None,
+                "retrieved_chunks": retrieved_chunks,
+            }
+        )
 
     # 6. Response Validation Layer Gate (Mandatory Pre-Delivery Gate)
     validated, requires_escalation = ResponseValidationService.validate_response(
@@ -287,7 +316,6 @@ async def copilot_message(
         user_department_id=department_id,
     )
 
-    position = WorkflowStateService.get_position(active_session) if active_session else None
     cited_chunk_ids = {citation.chunk_id for citation in validated.citations}
     if (
         active_session

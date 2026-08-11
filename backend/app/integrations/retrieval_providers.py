@@ -16,7 +16,8 @@ logger = logging.getLogger("workmate.retrieval")
 
 _STOP_WORDS = {
     "a", "an", "and", "are", "do", "for", "how", "i", "if", "in", "is", "it",
-    "of", "on", "should", "the", "to", "what", "when", "where", "with", "you",
+    "give", "me", "of", "on", "please", "show", "step", "steps", "should", "the",
+    "to", "what", "when", "where", "with", "you",
 }
 
 

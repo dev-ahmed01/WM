@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.copilot_session import router
 from app.core.security import create_access_token
-from app.models.workflow_session import WorkflowSession
+from app.models.workflow_session import WorkflowPosition, WorkflowSession
 from app.repositories.owd_repository import OWDRepository
 from app.services.workflow_state import WorkflowStateService
 
@@ -237,12 +237,24 @@ def test_owner_can_pause_session(mock_get, mock_pause):
 def test_owner_advance_completes_real_step_explicitly(mock_get, mock_advance):
     mock_get.return_value = session_row()
     mock_advance.return_value = WorkflowSession(**session_row())
-    response = client.post(
-        "/api/v1/copilot/session/sess_1/advance",
-        headers={"Authorization": f"Bearer {OWNER_TOKEN}"},
-        json={"decision_option": "Damaged", "use_fallback": False},
-    )
+    with patch(
+        "app.api.v1.copilot_session.WorkflowStateService.get_position",
+        return_value=WorkflowPosition(
+            state_id="state_2",
+            state_title="Next state",
+            state_type="ATOMIC_STEP",
+            step_id="step_2",
+            step_number=2,
+            step_title="Record temperature",
+        ),
+    ):
+        response = client.post(
+            "/api/v1/copilot/session/sess_1/advance",
+            headers={"Authorization": f"Bearer {OWNER_TOKEN}"},
+            json={"decision_option": "Damaged", "use_fallback": False},
+        )
     assert response.status_code == 200
+    assert response.json()["active_step_number"] == 2
     mock_advance.assert_called_once_with(
         "sess_1",
         {

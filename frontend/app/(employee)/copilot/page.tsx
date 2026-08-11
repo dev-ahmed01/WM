@@ -4,7 +4,12 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/lib/auth';
 import { ChatThread } from '@/components/chat/ChatThread';
-import { apiClient, CopilotConversationDetail, CopilotResponse } from '@/lib/api-client';
+import {
+  apiClient,
+  CopilotConversationDetail,
+  CopilotResponse,
+  WorkflowAdvanceResponse,
+} from '@/lib/api-client';
 
 function CopilotContent() {
   const { user, loading } = useRequireRole(['employee', 'admin', 'manager']);
@@ -108,7 +113,10 @@ function CopilotContent() {
     }
   };
 
-  const handleWorkflowAction = async (action: 'pause' | 'resume' | 'advance' | 'abandon') => {
+  const handleWorkflowAction = async (
+    action: 'pause' | 'resume' | 'advance' | 'abandon',
+    decisionOption?: string,
+  ) => {
     if (!workflowSessionId || isSending) return;
     let body: string | undefined;
     if (action === 'abandon') {
@@ -116,14 +124,6 @@ function CopilotContent() {
       if (!reason?.trim()) return;
       body = JSON.stringify({ reason: reason.trim() });
     } else if (action === 'advance') {
-      let decisionOption: string | undefined;
-      if (workflowDecisionOptions.length > 0) {
-        const selectedOption = window.prompt(
-          `Choose a decision by code or label:\n${workflowDecisionOptions.map((option) => `${option.option_code}: ${option.option_label}`).join('\n')}`,
-        );
-        if (selectedOption === null) return;
-        decisionOption = selectedOption.trim() || undefined;
-      }
       body = JSON.stringify({
         decision_option: decisionOption,
         rule_results: {},
@@ -133,25 +133,22 @@ function CopilotContent() {
     }
     setIsSending(true);
     try {
-      const updated = await apiClient<{ status: CopilotResponse['active_session_status'] }>(
+      const updated = await apiClient<WorkflowAdvanceResponse>(
         `/copilot/session/${workflowSessionId}/${action}`,
         { method: 'POST', body },
       );
       setWorkflowSessionStatus(updated.status);
       let statusMessage = `Workflow session ${updated.status}.`;
-      if (action === 'advance' && conversationId) {
-        const detail = await apiClient<CopilotConversationDetail>(`/copilot/history/${conversationId}`);
-        setWorkflowSessionId(detail.active_session_id ?? undefined);
-        setWorkflowSessionStatus(detail.active_session_status ?? undefined);
-        setWorkflowDecisionOptions(detail.active_decision_options || []);
-        setActiveStepNumber(detail.active_step_number ?? undefined);
-        setActiveStepTitle(detail.active_step_title ?? undefined);
-        statusMessage = detail.active_session_status === 'completed'
+      if (action === 'advance') {
+        setWorkflowDecisionOptions(updated.active_decision_options || []);
+        setActiveStepNumber(updated.active_step_number ?? undefined);
+        setActiveStepTitle(updated.active_step_title ?? undefined);
+        statusMessage = updated.status === 'completed'
           ? 'Workflow completed.'
-          : detail.active_decision_options?.length
-            ? `Step completed. Decision required: ${detail.active_step_title}`
-            : detail.active_step_title
-              ? `Step completed. Next: ${detail.active_step_title}`
+          : updated.active_decision_options?.length
+            ? `Step completed. Choose the next outcome from the active SOP below.`
+            : updated.active_step_title
+              ? `Step completed. Next step: ${updated.active_step_title}`
               : 'Step completed.';
       }
       setMessages((previous) => [
@@ -185,9 +182,11 @@ function CopilotContent() {
         <div className="flex items-center space-x-2">
           {workflowSessionId && workflowSessionStatus === 'active' && (
             <>
-              <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
-                {workflowDecisionOptions.length > 0 ? 'Choose outcome' : 'Complete step'}
-              </button>
+              {workflowDecisionOptions.length === 0 && (
+                <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
+                  Complete step
+                </button>
+              )}
               <button onClick={() => handleWorkflowAction('pause')} className="text-xs border px-2.5 py-1 rounded bg-white">
                 Pause workflow
               </button>
@@ -217,32 +216,43 @@ function CopilotContent() {
         && (activeStepNumber != null || workflowDecisionOptions.length > 0) && (
         <section
           aria-label="Current workflow step"
-          className="mx-4 mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
+          aria-live="polite"
+          className="mx-4 mt-4 flex-none rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
         >
           <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
             {activeStepNumber != null ? `Current step ${activeStepNumber}` : 'Decision required'}
           </div>
           <p className="mt-1 text-sm font-medium">{activeStepTitle}</p>
-          {activeStepNumber != null ? (
+          {workflowDecisionOptions.length === 0 ? (
             <p className="mt-1 text-xs text-blue-700">
               Complete this step only, then type &quot;done&quot; or select Complete step to continue.
             </p>
           ) : (
             <div className="mt-2">
-              <p className="text-xs text-blue-700">Select Choose outcome and use one of these verified options:</p>
-              <ul className="mt-1 list-disc pl-5 text-xs text-blue-900">
+              <p className="text-xs text-blue-700">
+                These outcomes come directly from the active SOP. Select the result you observed:
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="Verified SOP outcomes">
                 {workflowDecisionOptions.map((option) => (
-                  <li key={option.option_code}>{option.option_label}</li>
+                  <button
+                    key={option.option_code}
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => handleWorkflowAction('advance', option.option_code)}
+                    className="rounded-md border border-blue-300 bg-white px-3 py-2 text-left text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    {option.option_label}
+                  </button>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </section>
       )}
-      <main className="flex-1 overflow-hidden p-4">
+      <main className="min-h-0 flex-1 overflow-hidden p-4">
         <ChatThread messages={messages} />
       </main>
-      <footer className="p-4 border-t border-gray-200 bg-slate-50">
+      <footer className="flex-none p-4 border-t border-gray-200 bg-slate-50">
         <div className="flex space-x-2">
           <input
             type="text"

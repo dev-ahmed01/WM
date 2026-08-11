@@ -11,7 +11,15 @@ from app.integrations.retrieval_providers import (
     CandidateRepository,
     LocalSemanticIndex,
     SqlLexicalRetrievalProvider,
+    search_terms,
 )
+
+
+def test_workflow_request_keeps_only_meaningful_search_terms():
+    assert search_terms("Please give me the steps for receive shipment") == [
+        "receive",
+        "shipment",
+    ]
 
 
 @pytest.mark.asyncio
@@ -152,13 +160,37 @@ async def test_index_filters_cross_department_and_non_published_after_ranking(mo
 
 
 @pytest.mark.asyncio
-async def test_ollama_unavailable_uses_sql_retrieval(monkeypatch):
-    monkeypatch.setattr(AIGateway.semantic_index, "search", AsyncMock(side_effect=ConnectionError("offline")))
-    monkeypatch.setattr(AIGateway.sql_provider, "search", AsyncMock(return_value=[{"chunk_id": "sql"}]))
+async def test_strong_sql_result_skips_semantic_retrieval(monkeypatch):
+    semantic = AsyncMock(side_effect=ConnectionError("offline"))
+    monkeypatch.setattr(AIGateway.semantic_index, "search", semantic)
+    monkeypatch.setattr(
+        AIGateway.sql_provider,
+        "search",
+        AsyncMock(return_value=[{"chunk_id": "sql", "score": 0.9}]),
+    )
 
     result = await AIGateway.search("query", "dept_ops", 5)
 
-    assert result == [{"chunk_id": "sql"}]
+    assert result == [{"chunk_id": "sql", "score": 0.9}]
+    semantic.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_weak_sql_result_can_use_semantic_retrieval(monkeypatch):
+    monkeypatch.setattr(
+        AIGateway.sql_provider,
+        "search",
+        AsyncMock(return_value=[{"chunk_id": "sql", "score": 0.25}]),
+    )
+    monkeypatch.setattr(
+        AIGateway.semantic_index,
+        "search",
+        AsyncMock(return_value=[{"chunk_id": "semantic", "score": 0.86}]),
+    )
+
+    result = await AIGateway.search("query", "dept_ops", 5)
+
+    assert result == [{"chunk_id": "semantic", "score": 0.86}]
 
 
 def test_index_invalidation_removes_only_published_department_cache():

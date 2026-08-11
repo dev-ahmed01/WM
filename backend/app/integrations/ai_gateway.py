@@ -47,7 +47,10 @@ class AIGateway:
         lowered = message.lower()
         if len(message.strip()) < 4:
             return {"intent": "AMBIGUOUS", "needs_clarification": True}
-        if any(term in lowered for term in ("help", "what", "how", "sop")):
+        if any(
+            term in lowered
+            for term in ("help", "what", "how", "sop", "step", "procedure", "process", "guide")
+        ):
             return {"intent": "SOP_GUIDANCE", "needs_clarification": False}
         return {"intent": "GENERAL_QUERY", "needs_clarification": False}
 
@@ -56,6 +59,21 @@ class AIGateway:
         if not query.strip() or not department_id.strip():
             return []
         effective_limit = max(1, min(limit, settings.COPILOT_RETRIEVAL_LIMIT, 20))
+        lexical_results: List[Dict[str, Any]] = []
+        try:
+            lexical_results = await cls.sql_provider.search(
+                query, department_id, effective_limit
+            )
+            if lexical_results and float(lexical_results[0].get("score", 0.0)) >= (
+                settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+            ):
+                logger.info("Using strong scoped lexical retrieval result")
+                return lexical_results
+        except Exception as exc:
+            logger.warning(
+                "Scoped SQL retrieval unavailable; trying local semantic retrieval: %s",
+                type(exc).__name__,
+            )
         if settings.LOCAL_AI_ENABLED:
             try:
                 results = await cls.semantic_index.search(query, department_id, effective_limit)
@@ -63,7 +81,7 @@ class AIGateway:
                     return results
             except Exception as exc:
                 logger.warning("Local semantic retrieval unavailable; using SQL fallback: %s", type(exc).__name__)
-        return await cls.sql_provider.search(query, department_id, effective_limit)
+        return lexical_results
 
     @classmethod
     async def generate_response(cls, prompt_context: Dict[str, Any]) -> GeneratedAnswer:

@@ -9,6 +9,7 @@ from app.middleware.rbac_middleware import require_role
 from app.models.workflow_session import (
     AbandonSessionRequest,
     AdvanceSessionRequest,
+    WorkflowAdvanceResponse,
     WorkflowSession,
 )
 from app.repositories.workflow_session_repository import WorkflowSessionRepository
@@ -69,12 +70,12 @@ async def pause_session_endpoint(
     return WorkflowStateService.pause_session(id)
 
 
-@router.post("/{id}/advance", response_model=WorkflowSession)
+@router.post("/{id}/advance", response_model=WorkflowAdvanceResponse)
 async def advance_session_endpoint(
     id: str,
     payload: AdvanceSessionRequest,
     current_user: Dict[str, Any] = Depends(_authorized_user),
-) -> WorkflowSession:
+) -> WorkflowAdvanceResponse:
     _owned_session(id, current_user)
     context: Dict[str, Any] = {
         "values": payload.values,
@@ -83,7 +84,15 @@ async def advance_session_endpoint(
     }
     if payload.decision_option:
         context["decision_option"] = payload.decision_option
-    return WorkflowStateService.mark_step_complete(id, context)
+    session = WorkflowStateService.mark_step_complete(id, context)
+    position = WorkflowStateService.get_position(session)
+    return WorkflowAdvanceResponse(
+        status=session.status,
+        current_state_id=session.current_state_id,
+        active_step_number=position.step_number,
+        active_step_title=position.step_title,
+        active_decision_options=position.decision_options,
+    )
 
 
 @router.post("/{id}/abandon", response_model=WorkflowSession)

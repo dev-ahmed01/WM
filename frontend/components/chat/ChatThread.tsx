@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CopilotResponse } from '@/lib/api-client';
 
 interface ChatThreadProps {
@@ -10,8 +10,21 @@ interface ChatThreadProps {
 }
 
 export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
+
   return (
-    <div className="flex flex-col space-y-4 p-4 overflow-y-auto max-h-[70vh]">
+    <div
+      ref={scrollContainerRef}
+      className="flex h-full min-h-0 flex-col space-y-4 overflow-y-auto p-4"
+      aria-live="polite"
+    >
       {messages.map((msg, index) => (
         <div
           key={index}
@@ -19,19 +32,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
             msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
           }`}
         >
-          {msg.copilotData?.active_decision_options && msg.copilotData.active_decision_options.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Available workflow decisions">
-              {msg.copilotData.active_decision_options.map((option) => (
-                <span key={option.option_code} className="text-xs px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-800">
-                  {option.option_label} ({option.option_code})
-                </span>
-              ))}
-            </div>
-          )}
-
           {/* Message Bubble */}
           <div
-            className={`p-4 rounded-lg shadow-sm text-sm ${
+            className={`whitespace-pre-wrap break-words p-4 rounded-lg shadow-sm text-sm ${
               msg.sender === 'user'
                 ? 'bg-blue-600 text-white rounded-br-none'
                 : 'bg-gray-100 text-gray-800 rounded-bl-none border border-gray-200'
