@@ -18,7 +18,7 @@ UPDATE KNOWLEDGE_STUDIO.workflow_search_metadata AS metadata
 SET status = 'archived'
 FROM KNOWLEDGE_STUDIO.workflow_versions AS version
 WHERE metadata.workflow_version_id = version.id
-  AND LOWER(version.status) = 'deprecated'
+  AND LOWER(version.status) <> 'published'
   AND LOWER(metadata.status) = 'published';
 
 UPDATE KNOWLEDGE_STUDIO.workflow_search_metadata AS metadata
@@ -27,5 +27,4 @@ FROM KNOWLEDGE_STUDIO.workflow_versions AS version
 JOIN KNOWLEDGE_STUDIO.workflows AS workflow
   ON workflow.id = version.workflow_id
 WHERE metadata.workflow_version_id = version.id
-  AND LOWER(version.status) = 'published'
   AND metadata.department_id <> workflow.department_id;
