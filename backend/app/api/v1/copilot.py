@@ -78,6 +78,17 @@ def _requested_step_jump(message: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _claimed_current_step(message: str) -> int | None:
+    """Recognize an employee's reported position, not a request to skip checks."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    match = re.search(
+        r"\b(?:(?:i am|i m|im)\s+(?:currently\s+)?(?:working\s+|stuck\s+)?|"
+        r"(?:currently|working|stuck)\s+)(?:at|on)\s+step\s*(\d+)\b",
+        normalized,
+    )
+    return int(match.group(1)) if match else None
+
+
 def _requested_sop_index(message: str) -> int | None:
     normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
     match = re.search(r"\bsop\s*(?:number\s*)?(\d+)\b", normalized)
@@ -124,12 +135,19 @@ def _match_decision_option(message: str, options: list[Any]) -> str | None:
     return ranked[0][1] if ranked[0][0] - runner_up >= 0.20 else None
 
 
-def _deferred_workflow_guidance(position: Any, future_source: Dict[str, Any]) -> str:
-    future_title = str(future_source.get("step_title") or "Later workflow guidance")
+def _future_workflow_guidance(
+    query: str, position: Any, future_source: Dict[str, Any]
+) -> str:
+    """Answer from a later verified step without changing recorded progress."""
+    future_title = str(future_source.get("step_title") or "Workflow guidance")
     future_number = future_source.get("step_number")
+    guidance = CopilotReasoningService.concise_extract(query, future_source)
+    if not guidance:
+        guidance = future_title
     return (
-        f"{future_title} is handled at workflow step {future_number}. "
-        f"Do not skip ahead. {_step_guidance(position)}"
+        f"Verified guidance from workflow step {future_number}: {guidance} "
+        f"This answers your question without changing your recorded position "
+        f"at step {position.step_number}."
     )
 
 
@@ -377,6 +395,12 @@ async def copilot_message(
                 f"Using {workflow_match['title']} ({workflow_match['workflow_code']}). "
                 f"{_step_guidance(position)}"
             )
+            if intent == "WORKFLOW_START":
+                answer += (
+                    " If you are already partway through, tell me your current step "
+                    "or describe what you are stuck on and I will use that verified "
+                    "guidance directly."
+                )
         copilot_logger.info(
             "Resolved workflow catalog intent '%s' with score %.3f",
             intent,
@@ -442,20 +466,59 @@ async def copilot_message(
                 position=next_position,
             )
 
-        if _claims_previous_steps_without_target(payload.message):
-            answer = (
-                "I can record multiple completed steps, but I need the last step number "
-                "you personally completed. For example, say \"complete through step 2\". "
-                "I will advance only through persisted steps and stop at any required "
-                f"decision. {_step_guidance(current_position)}"
+        claimed_step = _claimed_current_step(payload.message)
+        if claimed_step is not None:
+            persisted_step = OWDRepository.get_step_by_ordinal(
+                active_session.workflow_version_id, claimed_step
             )
+            if persisted_step is None:
+                answer = (
+                    f"Step {claimed_step} is not present in this published SOP. "
+                    f"{_step_guidance(current_position)}"
+                )
+                return _persist_control_reply(
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    intent="WORKFLOW_POSITION_INVALID",
+                    answer=answer,
+                    active_session=active_session,
+                    position=current_position,
+                )
+            current_step_number = int(current_position.step_number or 0)
+            if claimed_step <= current_step_number:
+                answer = (
+                    f"Using your reported position at step {claimed_step}. "
+                    f"{_step_guidance(current_position)}"
+                )
+                return _persist_control_reply(
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    intent="WORKFLOW_POSITION_CONFIRMED",
+                    answer=answer,
+                    active_session=active_session,
+                    position=current_position,
+                )
+            completion = WorkflowStateService.complete_through_step(
+                active_session.id, claimed_step - 1
+            )
+            active_session = completion.session
+            reported_position = WorkflowStateService.get_position(active_session)
+            if reported_position.step_number == claimed_step:
+                answer = (
+                    f"{_recorded_completion_text(completion.completed_step_numbers)} "
+                    f"Resuming at your reported position. {_step_guidance(reported_position)}"
+                )
+            else:
+                answer = _completion_reply(
+                    completion, reported_position, claimed_step, mention_target=True
+                )
             return _persist_control_reply(
                 conversation_id=conversation_id,
                 user_message_id=user_message_id,
-                intent="WORKFLOW_COMPLETION_CLARIFICATION",
+                intent="WORKFLOW_POSITION_RESUME",
                 answer=answer,
                 active_session=active_session,
-                position=current_position,
+                position=reported_position,
             )
 
         requested_step = _requested_step_jump(payload.message)
@@ -540,7 +603,9 @@ async def copilot_message(
             active_session
         )
         if CopilotReasoningService.should_plan_workflow_action(
-            payload.message, history
+            payload.message,
+            history,
+            str(planner_position.step_title or ""),
         ):
             planner_history, planner_context = (
                 CopilotReasoningService.workflow_planner_context(
@@ -817,32 +882,41 @@ async def copilot_message(
         ),
         None,
     )
-    future_workflow_source = next(
-        (
-            chunk
-            for chunk in retrieved_chunks
-            if active_session
-            and not started_workflow_this_turn
-            and position
-            and position.step_id
-            and str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
-            and str(chunk.get("state_id")) != position.state_id
-            and int(chunk.get("step_number") or 0) > int(position.step_number or 0)
-            and float(chunk.get("score") or 0.0)
-            >= settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
-            and float(chunk.get("score") or 0.0) - current_query_score >= 0.20
+    future_candidates = [
+        chunk
+        for chunk in retrieved_chunks
+        if active_session
+        and not started_workflow_this_turn
+        and position
+        and position.step_id
+        and str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
+        and str(chunk.get("state_id")) != position.state_id
+        and int(chunk.get("step_number") or 0) > int(position.step_number or 0)
+        and float(chunk.get("score") or 0.0)
+        >= settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+        and float(chunk.get("score") or 0.0) - current_query_score >= 0.20
+    ]
+    future_workflow_source = max(
+        future_candidates,
+        key=lambda chunk: (
+            bool(
+                CopilotReasoningService.evidence_sections(
+                    str(chunk.get("content") or "")
+                ).get("instructions")
+            ),
+            float(chunk.get("score") or 0.0),
+            -int(chunk.get("step_number") or 0),
         ),
-        None,
+        default=None,
     )
     if not evidence_is_relevant:
         raw_response = GeneratedAnswer(answer="", source_ids=[], provider="none")
     elif future_workflow_source and workflow_source and position:
         raw_response = GeneratedAnswer(
-            answer=_deferred_workflow_guidance(position, future_workflow_source),
-            source_ids=[
-                str(future_workflow_source["chunk_id"]),
-                str(workflow_source["chunk_id"]),
-            ],
+            answer=_future_workflow_guidance(
+                retrieval_query, position, future_workflow_source
+            ),
+            source_ids=[str(future_workflow_source["chunk_id"])],
             provider="workflow_deferred",
         )
     elif workflow_source and position and position.step_id:

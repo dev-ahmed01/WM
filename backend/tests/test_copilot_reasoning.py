@@ -121,6 +121,14 @@ def test_ambiguous_completion_attestation_is_routed_to_semantic_planner():
     assert CopilotReasoningService.should_plan_workflow_action(
         "I complted all these taks; what about it", history
     )
+    assert CopilotReasoningService.should_plan_workflow_action(
+        "turn on the previous steps tell me what's further", history
+    )
+    assert CopilotReasoningService.should_plan_workflow_action(
+        "finished verifying physical trailer told seal number",
+        history,
+        "Verify physical trailer door seal number against Bill of Lading manifest.",
+    )
     assert not CopilotReasoningService.should_plan_workflow_action(
         "Are all these tasks done?", history
     )
@@ -140,3 +148,22 @@ def test_discourse_fallback_preserves_prior_employee_issue_without_inventing_act
     assert plan["outcome_text"] == "packages damaged what should i do"
     assert plan["confidence"] == 0.74
     assert plan["authoritative"] is False
+
+
+def test_discourse_fallback_skips_control_chatter_to_find_operational_issue():
+    history = [
+        {"sender": "employee", "content": "the packages damage what should I do"},
+        {"sender": "ai", "content": "Verified damage guidance is available later."},
+        {
+            "sender": "employee",
+            "content": "turn on the previous steps tell me what's further",
+        },
+        {"sender": "ai", "content": "Please clarify."},
+    ]
+
+    plan = CopilotReasoningService.fallback_workflow_plan(
+        "I have done the previous steps", history
+    )
+
+    assert plan["completion_scope"] == "all_available"
+    assert plan["outcome_text"] == "packages damage what should i do"

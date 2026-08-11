@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.copilot import (
+    _claimed_current_step,
     _claims_previous_steps_without_target,
     _completion_through_target,
     _match_decision_option,
@@ -87,6 +88,9 @@ def test_workflow_navigation_phrases_are_parsed_without_model_inference():
     assert _requested_sop_index("show sop1") == 1
     assert _requested_step_jump("can we not skip to step 3") == 3
     assert _requested_step_jump("jump to step3") == 3
+    assert _claimed_current_step("I'm stuck on step 15") == 15
+    assert _claimed_current_step("I am currently working at step 12") == 12
+    assert _claimed_current_step("skip to step 15") is None
     assert _completion_through_target("I completed through step 2") == 2
     assert _completion_through_target("complete up to step2") == 2
     assert _completion_through_target("can I complete through step 2?") is None
@@ -305,15 +309,28 @@ def test_complete_through_command_records_attestation_without_ai_or_retrieval():
     generate.assert_not_awaited()
 
 
-def test_previous_steps_claim_requests_last_completed_number_without_escalation():
+def test_reported_step_position_resumes_there_without_replaying_from_step_one():
     current = workflow_session()
+    resumed = workflow_session().model_copy(update={"current_state_id": "state_15"})
     current_position = WorkflowPosition(
         state_id="state_1",
-        state_title="Arrival inspection",
+        state_title="Start",
         state_type="ATOMIC_STEP",
         step_id="step_1",
         step_number=1,
-        step_title="Inspect the shipment seal",
+        step_title="First check",
+    )
+    reported_position = WorkflowPosition(
+        state_id="state_15",
+        state_title="Reported work area",
+        state_type="ATOMIC_STEP",
+        step_id="step_15",
+        step_number=15,
+        step_title="Resolve the reported equipment condition",
+    )
+    completion = WorkflowCompletionResult(
+        session=resumed,
+        completed_step_numbers=list(range(1, 15)),
     )
 
     with (
@@ -332,26 +349,32 @@ def test_previous_steps_claim_requests_last_completed_number_without_escalation(
         ),
         patch(
             "app.api.v1.copilot.WorkflowStateService.get_position",
-            return_value=current_position,
+            side_effect=[current_position, reported_position],
         ),
-        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch(
+            "app.api.v1.copilot.OWDRepository.get_step_by_ordinal",
+            return_value={"id": "step_15", "ordinal_index": 15},
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.complete_through_step",
+            return_value=completion,
+        ) as complete_through,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect,
         patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
     ):
         response = client.post(
             "/api/v1/copilot/message",
             headers={"Authorization": f"Bearer {TOKEN}"},
-            json={
-                "conversation_id": "conv_1",
-                "message": "I completed the previous steps and the package is damaged",
-            },
+            json={"conversation_id": "conv_1", "message": "I'm stuck on step 15"},
         )
 
     assert response.status_code == 200
     body = response.json()
-    assert 'say "complete through step 2"' in body["answer"]
-    assert body["confidence_score"] == 1.0
-    assert body["requires_escalation"] is False
-    detect_intent.assert_not_awaited()
+    assert body["active_step_number"] == 15
+    assert "Resuming at your reported position" in body["answer"]
+    assert "Resolve the reported equipment condition" in body["answer"]
+    complete_through.assert_called_once_with("sess_1", 14)
+    detect.assert_not_awaited()
     retrieve.assert_not_awaited()
 
 
@@ -665,7 +688,7 @@ def test_ai_planner_resolves_elliptical_completion_and_prior_damage_outcome():
     retrieve.assert_not_awaited()
 
 
-def test_future_damage_question_is_acknowledged_without_skipping_current_step():
+def test_future_damage_question_returns_direct_verified_guidance_without_advancing():
     current = workflow_session()
     current_position = WorkflowPosition(
         state_id="state_1",
@@ -677,10 +700,13 @@ def test_future_damage_question_is_acknowledged_without_skipping_current_step():
     )
     future = source_chunk(
         chunk_id="chunk_damage",
-        state_id="state_3",
-        step_number=3,
-        step_title="Container Damage Evaluation",
-        content="State: Container Damage Evaluation (STATE_DECISION_DAMAGE)",
+        state_id="state_4",
+        step_number=4,
+        step_title="Quality Quarantine Hold",
+        content=(
+            "State: Quality Quarantine Hold | Instructions: STEP_APPLY_TAPE "
+            "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1."
+        ),
         score=1.0,
     )
     current_source = source_chunk(
@@ -748,9 +774,10 @@ def test_future_damage_question_is_acknowledged_without_skipping_current_step():
     body = response.json()
     assert body["is_grounded"] is True
     assert body["requires_escalation"] is False
-    assert "Container Damage Evaluation is handled at workflow step 3" in body["answer"]
-    assert "Do not skip ahead" in body["answer"]
-    assert "Current step: Verify physical trailer door seal" in body["answer"]
+    assert "Verified guidance from workflow step 4" in body["answer"]
+    assert "Apply physical red quarantine tape" in body["answer"]
+    assert "without changing your recorded position at step 1" in body["answer"]
+    assert "Do not skip ahead" not in body["answer"]
     assert body["active_step_number"] == 1
     generate.assert_not_awaited()
 

@@ -33,6 +33,7 @@ class CopilotReasoningService:
         if normalized.startswith("what if") or tokens & {
             "broken",
             "cannot",
+            "damage",
             "damaged",
             "error",
             "fails",
@@ -62,7 +63,10 @@ class CopilotReasoningService:
 
     @classmethod
     def should_plan_workflow_action(
-        cls, message: str, history: Sequence[Dict[str, Any]]
+        cls,
+        message: str,
+        history: Sequence[Dict[str, Any]],
+        current_instruction: str = "",
     ) -> bool:
         """Use the model for ambiguous attestations; explicit controls stay instant.
 
@@ -108,7 +112,20 @@ class CopilotReasoningService:
                 "this",
             }
         )
-        return has_attestation_signal and has_context_reference
+        matches_current_step = bool(
+            has_attestation_signal
+            and current_instruction
+            and fuzzy_relevance_score(message, current_instruction) >= 0.45
+        )
+        has_contextual_navigation = bool(
+            set(tokens) & {"earlier", "previous", "prior"}
+            and set(tokens) & {"after", "continue", "further", "next", "step", "steps"}
+        )
+        return bool(
+            has_attestation_signal
+            and (has_context_reference or matches_current_step)
+            or has_contextual_navigation
+        )
 
     @classmethod
     def workflow_planner_context(
@@ -136,16 +153,12 @@ class CopilotReasoningService:
         """
         normalized = cls._normalized(message)
         tokens = set(normalized.split())
-        full_scope = bool(tokens & {"all", "each", "every", "everything"})
-        prior_user_topic = next(
-            (
-                str(item.get("content") or "").strip()
-                for item in reversed(history)
-                if str(item.get("sender") or "").lower() == "employee"
-                and str(item.get("content") or "").strip()
-            ),
-            "",
+        full_scope = bool(
+            tokens & {"all", "each", "every", "everything"}
+            or tokens & {"earlier", "previous", "prior"}
+            and tokens & {"step", "steps", "task", "tasks"}
         )
+        prior_user_topic = cls.previous_operational_topic(history)
         return {
             "intent": "continue_prior_issue" if prior_user_topic else "complete_work",
             "completion_scope": "all_available" if full_scope else "current",
@@ -159,6 +172,33 @@ class CopilotReasoningService:
             "authoritative": False,
             "provider": "deterministic_discourse_fallback",
         }
+
+    @classmethod
+    def previous_operational_topic(
+        cls, history: Sequence[Dict[str, Any]]
+    ) -> str:
+        """Return the latest operational issue, skipping workflow-control chatter."""
+        fallback = ""
+        for item in reversed(history):
+            if str(item.get("sender") or "").lower() != "employee":
+                continue
+            content = str(item.get("content") or "").strip()
+            if not content:
+                continue
+            normalized = cls._normalized(content)
+            tokens = set(normalized.split())
+            is_control_chatter = bool(
+                tokens & {"earlier", "previous", "prior", "skip"}
+                and tokens & {"step", "steps", "task", "tasks"}
+                or tokens & {"complete", "completed", "done", "finish", "finished"}
+                and tokens & {"step", "steps", "task", "tasks"}
+            )
+            if is_control_chatter:
+                continue
+            if cls.classify_move(content) == "exception":
+                return content
+            fallback = fallback or content
+        return fallback
 
     @classmethod
     def resolve_query(
