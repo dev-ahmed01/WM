@@ -52,6 +52,8 @@ def test_active_version_migration_deprecates_stale_retrieval_rows():
     ).read_text(encoding="utf-8")
 
     assert "ROW_NUMBER() OVER" in sql
+    assert "UPDATE KNOWLEDGE_STUDIO.workflow_versions AS target" in sql
+    assert "WHERE target.id = stale.id" in sql
     assert "SET status = 'deprecated'" in sql
     assert "SET status = 'archived'" in sql
     assert "SET department_id = workflow.department_id" in sql

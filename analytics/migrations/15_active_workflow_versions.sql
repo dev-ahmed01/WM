@@ -1,9 +1,9 @@
 -- Keep exactly one active published version per workflow and align its
 -- department-scoped retrieval metadata with the canonical workflow record.
 
-UPDATE KNOWLEDGE_STUDIO.workflow_versions
+UPDATE KNOWLEDGE_STUDIO.workflow_versions AS target
 SET status = 'deprecated'
-WHERE id IN (
+FROM (
     SELECT id
     FROM KNOWLEDGE_STUDIO.workflow_versions
     WHERE LOWER(status) = 'published'
@@ -11,7 +11,8 @@ WHERE id IN (
         PARTITION BY workflow_id
         ORDER BY version_number DESC, published_at DESC, created_at DESC, id DESC
     ) > 1
-);
+) AS stale
+WHERE target.id = stale.id;
 
 UPDATE KNOWLEDGE_STUDIO.workflow_search_metadata AS metadata
 SET status = 'archived'
