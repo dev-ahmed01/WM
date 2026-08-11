@@ -17,7 +17,10 @@ class LocalAIProvider(Protocol):
     async def health(self) -> Dict[str, Any]: ...
     async def embed(self, texts: Sequence[str]) -> List[List[float]]: ...
     async def generate_grounded(
-        self, question: str, sources: Sequence[Dict[str, Any]]
+        self,
+        question: str,
+        sources: Sequence[Dict[str, Any]],
+        context: Dict[str, Any] | None = None,
     ) -> GeneratedAnswer: ...
     async def extract_answer(
         self, question: str, sources: Sequence[Dict[str, Any]]

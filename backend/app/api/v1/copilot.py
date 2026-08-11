@@ -6,6 +6,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 
 from app.core.config import settings
+from app.core.text_matching import fuzzy_relevance_score
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.models.copilot import (
@@ -22,9 +23,9 @@ from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowStateService
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
+from app.services.copilot_reasoning import CopilotReasoningService
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
-from app.integrations.retrieval_providers import fuzzy_relevance_score
 
 copilot_logger = logging.getLogger("copilot_services")
 
@@ -190,9 +191,8 @@ async def copilot_message(
         content=payload.message,
         confidence_score=0.0,
     )
-    # Current local intent/generation providers do not consume history. Avoid a
-    # redundant Snowflake round-trip on every interactive turn.
     history: list[Dict[str, Any]] = []
+    started_workflow_this_turn = False
     active_session = WorkflowStateService.get_current_session(conversation_id)
     resolved_position: Any = None
 
@@ -241,6 +241,18 @@ async def copilot_message(
                 active_step_title=next_position.step_title,
                 active_decision_options=next_position.decision_options,
             )
+
+    # Load only bounded prior context after the fast completion-command path.
+    # The just-persisted user message is excluded, and history is never evidence.
+    history = [
+        item
+        for item in ConversationRepository.get_history(
+            conversation_id, limit=settings.COPILOT_HISTORY_LIMIT + 1
+        )
+        if str(item.get("id")) != user_message_id
+    ][-settings.COPILOT_HISTORY_LIMIT :]
+    reasoning_move = CopilotReasoningService.classify_move(payload.message)
+    retrieval_query = CopilotReasoningService.resolve_query(payload.message, history)
 
     # 2. Intent Detection & Clarification Check
     intent_result = await AIGateway.detect_intent(message=payload.message, history=history)
@@ -301,11 +313,38 @@ async def copilot_message(
             if active_session.current_state_id == previous_state_id:
                 resolved_position = decision_position
 
-    # 4. Scoped Retrieval (Published Chunks & Department Scoped)
-    retrieved_chunks = await RetrievalService.retrieve_chunks(
-        query=payload.message,
-        department_id=department_id,
-    )
+    # 4. Prefer the authoritative active-state source for explanations and
+    # matching exceptions. This avoids broad semantic retrieval for questions
+    # the current workflow state can answer directly.
+    precomputed_reasoned_answer: str | None = None
+    retrieved_chunks: list[Dict[str, Any]] = []
+    if (
+        active_session
+        and active_session.status == "active"
+        and resolved_position
+        and resolved_position.step_id
+        and reasoning_move in {"reason", "exception", "explain"}
+    ):
+        active_source = await AIGateway.get_workflow_state_source(
+            department_id,
+            active_session.workflow_version_id,
+            resolved_position.state_id,
+        )
+        if active_source:
+            precomputed_reasoned_answer = CopilotReasoningService.active_step_answer(
+                retrieval_query,
+                reasoning_move,
+                resolved_position,
+                active_source,
+            )
+            if precomputed_reasoned_answer:
+                retrieved_chunks = [active_source]
+
+    if not retrieved_chunks:
+        retrieved_chunks = await RetrievalService.retrieve_chunks(
+            query=retrieval_query,
+            department_id=department_id,
+        )
 
     if (
         not active_session
@@ -318,6 +357,7 @@ async def copilot_message(
                 workflow_version_id=str(workflow_version_id),
                 user_id=user_id,
             )
+            started_workflow_this_turn = True
 
     # 5. Use deterministic persisted workflow guidance when the retrieved
     # source identifies the active state. This avoids waiting for a model to
@@ -375,6 +415,7 @@ async def copilot_message(
             chunk
             for chunk in retrieved_chunks
             if active_session
+            and not started_workflow_this_turn
             and position
             and position.step_id
             and str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
@@ -398,17 +439,34 @@ async def copilot_message(
             provider="workflow_deferred",
         )
     elif workflow_source and position and position.step_id:
+        reasoned_answer = precomputed_reasoned_answer or (
+            CopilotReasoningService.active_step_answer(
+                retrieval_query,
+                reasoning_move,
+                position,
+                workflow_source,
+            )
+        )
         raw_response = GeneratedAnswer(
-            answer=position.step_title or "",
+            answer=reasoned_answer or position.step_title or "",
             source_ids=[str(workflow_source["chunk_id"])],
-            provider="workflow",
+            provider="workflow_reasoned" if reasoned_answer else "workflow",
         )
     else:
+        agent_context = CopilotReasoningService.agent_context(
+            move=reasoning_move,
+            history=history,
+            position=position,
+            role=role,
+            department_id=department_id,
+            history_limit=settings.COPILOT_HISTORY_LIMIT,
+        )
         raw_response = await AIGateway.generate_response(
             {
                 "user": current_user,
-                "query": payload.message,
+                "query": retrieval_query,
                 "history": history,
+                "agent_context": agent_context,
                 "workflow_state": active_session.model_dump() if active_session else None,
                 "retrieved_chunks": retrieved_chunks,
             }
@@ -428,7 +486,7 @@ async def copilot_message(
         and active_session.status == "active"
         and position
         and position.step_id
-        and raw_response.provider != "workflow_deferred"
+        and raw_response.provider not in {"workflow_deferred", "workflow_reasoned"}
         and validated.is_grounded
         and any(
             str(chunk.get("workflow_version_id")) == active_session.workflow_version_id

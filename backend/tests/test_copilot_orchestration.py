@@ -103,7 +103,6 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     # workflow when a realistic paraphrase lacks an exact command keyword.
     mock_intent.return_value = {"intent": "GENERAL_QUERY", "needs_clarification": False}
     mock_retrieve.return_value = [
-        source_chunk(),
         source_chunk(
             chunk_id="chunk_2",
             state_id="state_2",
@@ -111,6 +110,7 @@ def test_retrieval_starts_workflow_and_returns_real_position(
             step_title="Record the shipment temperature",
             content="Record the shipment temperature.",
         ),
+        source_chunk(score=0.10),
     ]
     mock_generate.return_value = GeneratedAnswer(
         "Inspect the shipment seal before unloading.", ["chunk_1"], "test"
@@ -248,6 +248,7 @@ def test_future_damage_question_is_acknowledged_without_skipping_current_step():
             "app.api.v1.copilot.ConversationRepository.persist_message",
             side_effect=["user_msg", "ai_msg"],
         ),
+        patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[]),
         patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
         patch(
             "app.api.v1.copilot.WorkflowStateService.get_current_session",
@@ -299,6 +300,87 @@ def test_future_damage_question_is_acknowledged_without_skipping_current_step():
     assert "Do not skip ahead" in body["answer"]
     assert "Current step: Verify physical trailer door seal" in body["answer"]
     assert body["active_step_number"] == 1
+    generate.assert_not_awaited()
+
+
+def test_contextual_why_uses_active_rule_without_broad_retrieval():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Dock Arrival and Seal Inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Verify physical trailer door seal number against Bill of Lading manifest.",
+    )
+    current_source = source_chunk(
+        content=(
+            "State: Dock Arrival and Seal Inspection | Instructions: STEP_CHECK_SEAL "
+            "Verify physical trailer door seal number against Bill of Lading manifest. | "
+            "Rules: RULE_SEAL_HARD_STOP Broken seal or tag mismatch requires immediate "
+            "driver hold and QA escalation. | Keywords: SEAL, MISMATCH"
+        ),
+        score=1.0,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_history",
+            return_value=[
+                {
+                    "id": "previous_user",
+                    "sender": "employee",
+                    "content": "What if the seal number does not match?",
+                }
+            ],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=current_position,
+        ),
+        patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        patch.object(
+            AIGateway,
+            "detect_intent",
+            new_callable=AsyncMock,
+            return_value={"intent": "CONTEXTUAL_FOLLOW_UP", "needs_clarification": False},
+        ),
+        patch.object(
+            AIGateway,
+            "get_workflow_state_source",
+            new_callable=AsyncMock,
+            return_value=current_source,
+        ),
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "Why?"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requires_escalation"] is False
+    assert body["is_grounded"] is True
+    assert body["answer"].startswith(
+        "Broken seal or tag mismatch requires immediate driver hold and QA escalation."
+    )
+    retrieve.assert_not_awaited()
     generate.assert_not_awaited()
 
 

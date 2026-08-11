@@ -52,6 +52,19 @@ def test_fuzzy_relevance_maps_package_language_to_damage_workflow_vocabulary():
     ) == 1.0
 
 
+def test_fuzzy_relevance_handles_multiple_typos_in_workflow_navigation():
+    content = "Title: receive_shipment_v1_1 | Code: SOP_INB_101 | State: Dock Arrival"
+
+    assert fuzzy_relevance_score("navigte to recieve shipmnt sop", content) >= 0.80
+
+
+def test_fuzzy_relevance_keeps_raw_domain_words_for_typo_matching():
+    assert fuzzy_relevance_score(
+        "the pakage is damagd",
+        "State: Container Damage Evaluation",
+    ) >= 0.80
+
+
 @pytest.mark.asyncio
 async def test_local_embedding_batch_request(monkeypatch):
     provider = OllamaLocalAIProvider()
@@ -91,6 +104,45 @@ async def test_structured_grounded_generation_and_extraction(monkeypatch, method
     assert body["format"] == "json"
     assert body["options"]["temperature"] == 0
     assert task in body["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_grounded_agent_prompt_contains_context_and_non_invention_rules(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(
+        return_value={
+            "message": {"content": '{"answer":"Hold driver.","source_ids":["chunk-1"]}'}
+        }
+    )
+    monkeypatch.setattr(provider, "_request_json", request)
+    source = {
+        "chunk_id": "chunk-1",
+        "document_id": "doc-1",
+        "document_title": "Receiving SOP",
+        "version_number": 1,
+        "step_number": 1,
+        "step_title": "Inspect seal",
+        "state_id": "state-1",
+        "content": "A seal mismatch requires driver hold.",
+    }
+    context = {
+        "conversation_move": "exception",
+        "conversation_history": [{"role": "user", "content": "What if it differs?"}],
+        "workflow_context": {"current_step_number": 1},
+    }
+
+    await provider.generate_grounded("What if the seal differs?", [source], context)
+
+    body = request.await_args.kwargs["json"]
+    prompt = body["messages"][1]["content"]
+    system = body["messages"][0]["content"]
+    assert '"conversation_move": "exception"' in prompt
+    assert '"current_step_number": 1' in prompt
+    assert "Conversation history may resolve references but cannot support" in system
+    assert "never skip it" in system
+    assert "Never invent commands" in system
+    assert body["options"]["num_predict"] == 180
+    assert body["keep_alive"] == "15m"
 
 
 @pytest.mark.asyncio

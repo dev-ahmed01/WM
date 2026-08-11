@@ -15,24 +15,30 @@ Admin UTF-8 OWD Markdown → deterministic parser → validator → AST compiler
 ```
 
 ```text
-JWT role/department → published department-scoped Snowflake candidate pages
-→ disposable in-memory Ollama embedding index → local grounded JSON answer
-→ source-ID/claim/citation/confidence validation → response or extractive fallback → escalation
+JWT role/department → bounded conversation resolver → deterministic active-workflow authority
+→ published department-scoped Snowflake evidence → evidence-bounded reasoner or local Ollama synthesis
+→ source-ID/claim/citation/confidence validation → grounded response or canonical fallback → escalation
 ```
+
+The Copilot is a grounded operational agent, not an open-ended chatbot. Persisted workflow state
+owns step order, completion, and decision transitions. Conversation history supplies context only;
+it is never accepted as organizational evidence. Deterministic reasoning handles current-step
+explanations, matching exceptions, future-step deferral, typo-tolerant workflow navigation, and
+unambiguous natural-language decision selection before model synthesis is considered.
 
 ## Audit and root causes
 
 | Capability | Previous implementation | Current replacement | Functional status | Required correction/result |
 | --- | --- | --- | --- | --- |
-| Semantic retrieval | Managed Snowflake search call, later per-request local re-embedding | `LocalSemanticIndex` plus scoped SQL fallback | Implemented; live quality not measured | Paged, bounded cache; rebuild from Snowflake; invalidate after publication |
+| Semantic retrieval | Managed Snowflake search call, later per-request local re-embedding | Cached typo-aware matching, `LocalSemanticIndex`, and scoped SQL fallback | Implemented and live-evaluated | Paged, bounded cache; rebuild from Snowflake; invalidate after publication |
 | Embeddings | Managed embedding metadata/defaults; no honest runtime ingestion embeddings | Ollama `/api/embed`, `nomic-embed-text` configurable | Implemented; real model smoke pending | Batch and cache; never persist as a second database |
-| Grounded generation | Managed completion call or unstructured local text | Ollama `/api/chat` structured JSON | Implemented; live quality pending | Exact retrieved `source_ids` required |
+| Grounded generation | Managed completion call or unstructured local text | Evidence-bounded agent prompt plus Ollama `/api/chat` structured JSON | Implemented and contract-tested | Exact retrieved `source_ids` required; model has no workflow authority |
 | Answer extraction | Not built | Ollama runtime method plus deterministic extractive fallback | Implemented provider capability | Not inserted into ingestion |
 | Summarization | Original vision only | Ollama runtime method over authorized evidence | Implemented provider capability | No ingestion-time summary |
 | Classification suggestions | Original vision only | Non-authoritative Ollama suggestion method | Implemented provider capability | Cannot set department/RBAC |
 | Citation generation | Fabricated default IDs when metadata was absent | Citations only from complete retrieved metadata | Corrected | Missing IDs fail closed |
 | Confidence | Retrieval score with fabricated default `0.8` | Measured retrieval score × measured answer/evidence support | Corrected | Missing score produces no confidence |
-| Grounding | Any retrieved chunk meant `True` | Exact source mapping plus lexical claim-support check | Corrected baseline | Representative live evaluation still required |
+| Grounding | Any retrieved chunk meant `True` | Exact source mapping plus lexical claim-support check | Corrected and live-evaluated | Current-state rules, contextual follow-ups, typo paths, and unrelated queries verified |
 | Department isolation | Query filters plus post-filter | Pre-query department predicate and post-ranking check | Preserved and tested | No role, including admin, bypasses evidence scope |
 | Publication filtering | Configured status plus service filter | Configured SQL predicate plus post-ranking check | Preserved and tested | Production template is `published` |
 | Safe fallback | Canonical no-evidence and extractive paths | Extractive verified evidence or canonical fallback | Implemented | Both preserve escalation |
@@ -40,7 +46,8 @@ JWT role/department → published department-scoped Snowflake candidate pages
 | Health | Reachability only | Required/installed/missing models and per-model readiness | Implemented | Live container result pending |
 | Docker | Hidden profile, wrong loopback URL, manual pulls | Ollama + idempotent model-init + health-aware backend | Corrected config | Requires Docker/network verification |
 | Model installation | Manual and undocumented variants | Compose init plus Bash/PowerShell host/Compose scripts | Implemented | Model license approval remains required |
-| Voice/TTS/translation/OCR/PDF/DOCX | Original vision only; no API contract | None | **Not built** | Do not add unused fake services |
+| Voice input/output | Original vision only | Browser Web Speech recognition and synthesis | Implemented in the Copilot UI | Browser capability and microphone permission required |
+| Translation/OCR/PDF/DOCX | Original vision only; no API contract | None | **Not built** | Do not add unused fake services |
 
 The critical defects were vendor-specific gateway coupling, managed-service remnants, embedding a
 bounded *prefix* of candidates on each request (which could omit a relevant later row), accepting
@@ -62,6 +69,12 @@ URLs are rejected before an HTTP request. It provides:
 Model output is JSON with `answer` and exact `source_ids`. Evidence is labelled untrusted data in
 the prompt so OWD content cannot override system instructions. No JWT, password, audit payload, or
 unrelated conversation content is sent to Ollama.
+
+The grounded agent prompt requires every operational claim to be entailed by verified evidence. It
+may explain explicit rules and connect them to the active step, but it may not invent commands,
+values, thresholds, locations, tools, people, steps, policies, or transitions. It must not expose
+hidden reasoning. If evidence does not answer the question, it states that the missing detail is
+not present and the validation gate decides whether to return the canonical escalation response.
 
 ## Semantic index lifecycle
 
@@ -94,11 +107,12 @@ LOCAL_AI_ENABLED=true
 LOCAL_AI_BASE_URL=http://ollama:11434
 LOCAL_CHAT_MODEL=qwen2.5:3b
 LOCAL_EMBEDDING_MODEL=nomic-embed-text
-LOCAL_AI_TIMEOUT_SECONDS=30
+LOCAL_AI_TIMEOUT_SECONDS=8
 LOCAL_AI_CANDIDATE_LIMIT=100
 LOCAL_AI_INDEX_MAX_CANDIDATES=5000
 LOCAL_AI_MIN_SIMILARITY=0.35
 COPILOT_RETRIEVAL_LIMIT=5
+COPILOT_HISTORY_LIMIT=6
 COPILOT_ALLOWED_KNOWLEDGE_STATUSES=published
 ```
 
@@ -155,22 +169,21 @@ do not add a durable vector database.
 Default tests are hermetic and block unmocked Snowflake connections. Live tests require the
 `live_integration` marker and `WORKMATE_RUN_LIVE_TESTS=1`.
 
-Functional parity is **not claimed** from unit tests. Before production, measure retrieval quality,
-grounding, latency, outage behavior, and department isolation with representative WorkMate OWDs.
-Live Snowflake validation must follow `snowflake_runtime_runbook.md` and must be reported as not run
-when credentials are unavailable.
+Functional parity is **not claimed** from unit tests alone. The release gate includes live
+Snowflake-backed workflow conversations covering contextual reasoning, typo recovery, future-step
+deferral, decision routing, non-invention, and latency, in addition to the hermetic suite. Repeat
+the live checks for each production environment by following `snowflake_runtime_runbook.md`.
 
 ## Deliberately unbuilt features
 
-Voice, TTS, translation, PDF/DOCX/OCR, arbitrary-document ingestion, and ingestion-time AI have no
-current API-to-runtime contract. They remain unbuilt rather than being represented by unused
-libraries or fake methods.
+Translation, PDF/DOCX/OCR, arbitrary-document ingestion, and ingestion-time AI have no current
+API-to-runtime contract. They remain unbuilt rather than being represented by unused libraries or
+fake methods. Voice recognition and playback are browser-native UI capabilities and do not send
+audio to the backend or create a second AI service.
 
 ## Remaining environment/dependency limitations
 
 Live Snowflake verification requires owner credentials and cannot be replaced by mocks. Real Ollama
 quality/latency verification requires Docker or a host Ollama installation plus model downloads.
-The requested Next.js security upgrade could not be selected or installed in the current execution
-environment because both official web lookup and the npm registry returned authorization/403
-errors; the existing lockfile was left internally consistent rather than guessing a version or
-committing an unverified lockfile. This upgrade remains a release blocker.
+Browser speech support varies by browser and operating system, so microphone and playback behavior
+must also be checked on each supported employee device profile.

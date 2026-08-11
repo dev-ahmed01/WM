@@ -1,42 +1,18 @@
 """Provider-neutral retrieval with a disposable local semantic index."""
 
 import asyncio
-from difflib import SequenceMatcher
 import logging
 import math
-import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
 from app.core.config import settings
 from app.core.database import get_snowflake_connection
+from app.core.text_matching import fuzzy_relevance_score, search_terms
 from app.exceptions import WorkMateException
 from app.integrations.ai_provider import LocalAIProvider
 
 logger = logging.getLogger("workmate.retrieval")
-
-_STOP_WORDS = {
-    "a", "an", "and", "are", "do", "for", "how", "i", "if", "in", "is", "it",
-    "give", "me", "next", "of", "on", "please", "show", "step", "steps", "should", "the",
-    "its", "to", "what", "when", "where", "with", "you",
-}
-
-_DOMAIN_EQUIVALENTS = {
-    "box": "handling_unit",
-    "boxes": "handling_unit",
-    "carton": "handling_unit",
-    "cartons": "handling_unit",
-    "container": "handling_unit",
-    "containers": "handling_unit",
-    "package": "handling_unit",
-    "packages": "handling_unit",
-    "pallet": "handling_unit",
-    "pallets": "handling_unit",
-    "damage": "damage",
-    "damaged": "damage",
-    "damages": "damage",
-}
-
 
 def allowed_statuses() -> Tuple[str, ...]:
     statuses = tuple(
@@ -45,66 +21,6 @@ def allowed_statuses() -> Tuple[str, ...]:
         if value.strip()
     )
     return statuses or ("published",)
-
-
-def _is_stop_word(term: str) -> bool:
-    if term in _STOP_WORDS:
-        return True
-    if len(term) < 3:
-        return False
-    return any(
-        abs(len(term) - len(stop_word)) <= 1
-        and term[0] == stop_word[0]
-        and SequenceMatcher(None, term, stop_word).ratio() >= 0.82
-        for stop_word in _STOP_WORDS
-    )
-
-
-def search_terms(query: str) -> List[str]:
-    terms = re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (query or "").lower())
-    result: List[str] = []
-    for term in terms:
-        if not _is_stop_word(term) and term not in result:
-            result.append(term)
-    return result[:8]
-
-
-def fuzzy_relevance_score(query: str, candidate_content: str) -> float:
-    """Score typo-tolerant token overlap without changing or generating SOP text."""
-    query_tokens = [_DOMAIN_EQUIVALENTS.get(token, token) for token in search_terms(query)]
-    if not query_tokens:
-        return 0.0
-    candidate_tokens = {
-        _DOMAIN_EQUIVALENTS.get(token, token)
-        for token in re.findall(
-            r"[a-z0-9][a-z0-9_-]{1,}", (candidate_content or "").lower()
-        )
-    }
-    qualities: List[float] = []
-    for query_token in query_tokens:
-        if query_token in candidate_tokens:
-            qualities.append(1.0)
-            continue
-        if len(query_token) < 4:
-            continue
-        threshold = 0.72 if len(query_token) >= 6 else 0.74
-        best = max(
-            (
-                SequenceMatcher(None, query_token, candidate_token).ratio()
-                for candidate_token in candidate_tokens
-                if candidate_token
-                and candidate_token[0] == query_token[0]
-                and abs(len(candidate_token) - len(query_token)) <= 2
-            ),
-            default=0.0,
-        )
-        if best >= threshold:
-            qualities.append(best)
-    # Requiring up to four independently matching terms prevents a single
-    # incidental fuzzy match from crossing the response safety threshold.
-    denominator = min(len(query_tokens), 4)
-    return round(min(1.0, sum(sorted(qualities, reverse=True)[:4]) / denominator), 6)
-
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     """Compute similarity independently of the configured embedding provider."""

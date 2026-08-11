@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.integrations.ai_provider import GeneratedAnswer
 from app.integrations.local_ai_provider import OllamaLocalAIProvider
 from app.integrations.retrieval_providers import LocalSemanticIndex, SqlLexicalRetrievalProvider
+from app.services.copilot_reasoning import CopilotReasoningService
 
 logger = logging.getLogger("workmate.ai_gateway")
 
@@ -17,17 +18,12 @@ class ExtractiveGenerationProvider:
     async def generate(
         self, question: str, sources: Sequence[Dict[str, Any]]
     ) -> GeneratedAnswer:
-        del question
         if not sources:
             return GeneratedAnswer(answer="", source_ids=[], provider="extractive")
         top = sources[0]
         source_id = str(top.get("chunk_id", ""))
         return GeneratedAnswer(
-            answer=(
-                f"According to '{top.get('document_title', 'the retrieved SOP')}' "
-                f"(v{top.get('version_number', 'unknown')}), "
-                f"{str(top.get('content', '')).strip()}"
-            ),
+            answer=CopilotReasoningService.concise_extract(question, top),
             source_ids=[source_id] if source_id else [],
             provider="extractive",
         )
@@ -43,9 +39,10 @@ class AIGateway:
 
     @staticmethod
     async def detect_intent(message: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
-        del history
         lowered = message.lower()
         if len(message.strip()) < 4:
+            if history:
+                return {"intent": "CONTEXTUAL_FOLLOW_UP", "needs_clarification": False}
             return {"intent": "AMBIGUOUS", "needs_clarification": True}
         if any(
             term in lowered
@@ -106,11 +103,14 @@ class AIGateway:
     async def generate_response(cls, prompt_context: Dict[str, Any]) -> GeneratedAnswer:
         sources = prompt_context.get("retrieved_chunks", [])
         question = str(prompt_context.get("query", ""))
+        agent_context = prompt_context.get("agent_context", {})
         if not sources:
             return GeneratedAnswer(answer="", source_ids=[], provider="none")
         if settings.LOCAL_AI_ENABLED:
             try:
-                return await cls.local_provider.generate_grounded(question, sources)
+                return await cls.local_provider.generate_grounded(
+                    question, sources, agent_context
+                )
             except Exception as exc:
                 logger.warning("Local generation unavailable; using extractive fallback: %s", type(exc).__name__)
         return await cls.extractive_provider.generate(question, sources)
