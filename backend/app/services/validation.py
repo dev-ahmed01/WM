@@ -82,6 +82,24 @@ class ResponseValidationService:
         return result
 
     @classmethod
+    def has_relevant_evidence(
+        cls,
+        chunks: Sequence[Dict[str, Any]],
+        user_department_id: str,
+        min_confidence_threshold: float | None = None,
+    ) -> bool:
+        """Return whether authorized evidence is strong enough to answer or start a workflow."""
+        threshold = (
+            settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+            if min_confidence_threshold is None
+            else min_confidence_threshold
+        )
+        source_map = cls._source_map(chunks, user_department_id)
+        return bool(source_map) and max(
+            float(chunk["score"]) for chunk in source_map.values()
+        ) >= threshold
+
+    @classmethod
     def verify_grounding(
         cls, generated: GeneratedAnswer, cited_chunks: Sequence[Dict[str, Any]]
     ) -> Tuple[bool, float]:
@@ -168,16 +186,24 @@ class ResponseValidationService:
         retrieved_chunks: List[Dict[str, Any]],
         user_role: str,
         user_department_id: str,
-        min_confidence_threshold: float = 0.70,
+        min_confidence_threshold: float | None = None,
     ) -> Tuple[ValidatedResponse, bool]:
         """Validate structured source IDs, evidence support, metadata, and RBAC."""
         del user_role  # Roles never bypass department isolation.
+        threshold = (
+            settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+            if min_confidence_threshold is None
+            else min_confidence_threshold
+        )
         validation_logger.info("Executing response validation gate")
         if not retrieved_chunks or not cls.check_permissions(user_department_id, retrieved_chunks):
             return cls._canonical()
 
         source_map = cls._source_map(retrieved_chunks, user_department_id)
         if not source_map:
+            return cls._canonical()
+        if max(float(chunk["score"]) for chunk in source_map.values()) < threshold:
+            validation_logger.warning("Retrieved evidence failed relevance threshold")
             return cls._canonical()
 
         source_ids = list(dict.fromkeys(raw_response.source_ids))
@@ -188,7 +214,7 @@ class ResponseValidationService:
         cited_chunks = [source_map[source_id] for source_id in source_ids]
         grounded, support_ratio = cls.verify_grounding(raw_response, cited_chunks)
         confidence = cls.estimate_confidence(cited_chunks, support_ratio)
-        if not grounded or confidence < min_confidence_threshold:
+        if not grounded or confidence < threshold:
             validation_logger.warning("Generated answer failed grounding or confidence threshold")
             return cls._extractive_review_fallback(source_map)
 

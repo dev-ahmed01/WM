@@ -111,6 +111,51 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     )
 
 
+@patch("app.api.v1.copilot.EscalationService.escalate", new_callable=AsyncMock)
+@patch("app.api.v1.copilot.AnalyticsService.record_event")
+@patch("app.api.v1.copilot.WorkflowStateService.get_position")
+@patch("app.api.v1.copilot.WorkflowStateService.start_session")
+@patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None)
+@patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[])
+@patch("app.api.v1.copilot.ConversationRepository.update_message_intent")
+@patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"])
+@patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1")
+@patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
+@patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
+@patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
+def test_weak_match_does_not_start_workflow(
+    mock_intent,
+    mock_retrieve,
+    mock_generate,
+    _mock_conversation,
+    _mock_persist,
+    _mock_update_intent,
+    _mock_history,
+    _mock_current,
+    mock_start,
+    _mock_position,
+    _mock_analytics,
+    _mock_escalate,
+):
+    mock_intent.return_value = {"intent": "SOP_GUIDANCE", "needs_clarification": False}
+    mock_retrieve.return_value = [source_chunk(score=0.51)]
+    mock_generate.return_value = GeneratedAnswer(
+        "Inspect the shipment seal before unloading.", ["chunk_1"], "test"
+    )
+
+    response = client.post(
+        "/api/v1/copilot/message",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        json={"message": "Explain quantum nebula payroll crystallography protocol ZXQ-947."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == CANONICAL_FALLBACK
+    assert response.json()["requires_escalation"] is True
+    assert response.json()["active_session_id"] is None
+    mock_start.assert_not_called()
+
+
 @patch("app.api.v1.copilot.AnalyticsService.record_event", side_effect=RuntimeError("offline"))
 @patch("app.api.v1.copilot.EscalationService.escalate", new_callable=AsyncMock, side_effect=RuntimeError("offline"))
 @patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None)

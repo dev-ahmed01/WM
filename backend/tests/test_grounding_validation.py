@@ -50,6 +50,19 @@ def test_retrieved_chunk_does_not_validate_unrelated_instruction():
     assert "Disable the fire alarm" not in validated.answer
 
 
+def test_weak_semantic_match_produces_canonical_fallback():
+    validated, escalated = validate(
+        GeneratedAnswer("Inspect the shipment seal.", ["chunk-1"], "test"),
+        [chunk(score=0.51)],
+    )
+
+    assert escalated is True
+    assert validated.answer == CANONICAL_FALLBACK
+    assert validated.citations == []
+    assert validated.is_grounded is False
+    assert validated.confidence_score == 0.0
+
+
 def test_fabricated_source_id_is_rejected():
     validated, escalated = validate(
         GeneratedAnswer("Inspect the security seal.", ["fabricated"], "test")

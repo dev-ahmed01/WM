@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
+    COPILOT_MIN_CONFIDENCE_THRESHOLD: float = 0.70
 
     # Free/self-hosted Ollama runtime. Snowflake is candidate storage only.
     LOCAL_AI_ENABLED: bool = True
