@@ -78,6 +78,35 @@ class OWDRepository:
             raise DatabaseException(message=f"Failed to fetch steps for state {state_id}: {str(e)}")
 
     @staticmethod
+    def get_step_by_ordinal(
+        workflow_version_id: str, ordinal_index: int
+    ) -> Optional[Dict[str, Any]]:
+        """Return a persisted workflow step by its user-facing global number."""
+        query = """
+            SELECT st.id, st.state_id, st.step_code, st.instruction,
+                   st.expected_output_type, st.is_mandatory, st.ordinal_index
+            FROM KNOWLEDGE_STUDIO.workflow_steps st
+            JOIN KNOWLEDGE_STUDIO.workflow_states ws ON ws.id = st.state_id
+            WHERE ws.workflow_version_id = %s AND st.ordinal_index = %s
+            LIMIT 1
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (workflow_version_id, ordinal_index))
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    return dict(zip([column[0].lower() for column in cur.description], row))
+        except Exception as exc:
+            raise DatabaseException(
+                message=(
+                    f"Failed to fetch step {ordinal_index} for workflow version "
+                    f"{workflow_version_id}: {exc}"
+                )
+            ) from exc
+
+    @staticmethod
     def get_decision_options(state_id: str) -> List[Dict[str, Any]]:
         """Return the persisted user-selectable edges for a decision state."""
         query = """

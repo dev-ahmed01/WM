@@ -124,6 +124,58 @@ def test_step_completion_records_real_step_without_leaving_state(
     assert isinstance(mock_apply.call_args.kwargs["expected_updated_at"], datetime)
 
 
+def test_complete_through_step_advances_sequentially_with_attestation():
+    first_session = WorkflowSession(**session_row())
+    second_session = WorkflowSession(**session_row(current_state_id="state_2"))
+    first_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect seal",
+    )
+    second_position = WorkflowPosition(
+        state_id="state_2",
+        state_title="Temperature inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_2",
+        step_number=2,
+        step_title="Record temperature",
+    )
+
+    with (
+        patch(
+            "app.services.workflow_state.WorkflowSessionRepository.get_by_id",
+            return_value=session_row(),
+        ),
+        patch(
+            "app.services.workflow_state.OWDRepository.get_step_by_ordinal",
+            return_value={"id": "step_2", "ordinal_index": 2},
+        ),
+        patch.object(
+            WorkflowStateService,
+            "get_position",
+            side_effect=[first_position, second_position],
+        ),
+        patch.object(
+            WorkflowStateService,
+            "mark_step_complete",
+            side_effect=[first_session, second_session],
+        ) as mark_complete,
+    ):
+        result = WorkflowStateService.complete_through_step("sess_1", 2)
+
+    assert result.current_state_id == "state_2"
+    assert mark_complete.call_count == 2
+    for call in mark_complete.call_args_list:
+        assert call.args[0] == "sess_1"
+        assert call.args[1] == {
+            "completion_attestation": "completed_through_step",
+            "completion_target_step": 2,
+        }
+
+
 @patch("app.services.workflow_state.OWDRepository.record_analytics_event")
 @patch("app.services.workflow_state.WorkflowSessionRepository.apply_progress")
 @patch("app.services.workflow_state.OWDRepository.get_steps_for_state")

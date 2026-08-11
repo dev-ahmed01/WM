@@ -46,10 +46,6 @@ function CopilotContent() {
     },
   ]);
 
-  const handleTranscript = useCallback((transcript: string) => {
-    setInput((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript);
-  }, []);
-  const speechRecognition = useSpeechRecognition(handleTranscript);
   const speechSynthesis = useSpeechSynthesis();
 
   useEffect(() => {
@@ -75,12 +71,9 @@ function CopilotContent() {
     resumeSession();
   }, [sessionId, loading]);
 
-  if (loading) return <LoadingState label="Loading Copilot workspace" />;
-
-  const handleSend = async () => {
-    if (!input.trim() || isSending) return;
-    const userMessage = input.trim();
-    speechRecognition.stopListening();
+  const submitMessage = useCallback(async (message: string, speakReply = false) => {
+    const userMessage = message.trim();
+    if (!userMessage || isSending) return;
     setInput('');
     setIsSending(true);
     setMessages((current) => [...current, { id: createMessageId('user'), sender: 'user', content: userMessage }]);
@@ -96,13 +89,31 @@ function CopilotContent() {
       setWorkflowDecisionOptions(response.active_decision_options || []);
       setActiveStepNumber(response.active_step_number ?? undefined);
       setActiveStepTitle(response.active_step_title ?? undefined);
-      setMessages((current) => [...current, { id: response.message_id || createMessageId('assistant'), sender: 'assistant', content: response.answer, copilotData: response }]);
+      const assistantMessageId = response.message_id || createMessageId('assistant');
+      setMessages((current) => [...current, { id: assistantMessageId, sender: 'assistant', content: response.answer, copilotData: response }]);
+      if (speakReply) speechSynthesis.speak(response.answer, assistantMessageId);
     } catch (error) {
-      setMessages((current) => [...current, { id: createMessageId('error'), sender: 'assistant', content: getErrorMessage(error, 'WorkMate could not reach the Copilot service. Please try again.') }]);
+      const errorMessage = getErrorMessage(error, 'WorkMate could not reach the Copilot service. Please try again.');
+      const errorMessageId = createMessageId('error');
+      setMessages((current) => [...current, { id: errorMessageId, sender: 'assistant', content: errorMessage }]);
+      if (speakReply) speechSynthesis.speak(errorMessage, errorMessageId);
     } finally {
       setIsSending(false);
     }
+  }, [conversationId, isSending, speechSynthesis.speak]);
+
+  const handleTranscript = useCallback((transcript: string) => {
+    setInput(transcript);
+    void submitMessage(transcript, true);
+  }, [submitMessage]);
+  const speechRecognition = useSpeechRecognition(handleTranscript);
+
+  const handleSend = () => {
+    speechRecognition.stopListening();
+    void submitMessage(input);
   };
+
+  if (loading) return <LoadingState label="Loading Copilot workspace" />;
 
   const handleWorkflowAction = async (
     action: 'pause' | 'resume' | 'advance' | 'abandon',
@@ -191,7 +202,7 @@ function CopilotContent() {
             speechSupported={speechRecognition.isSupported}
             speechError={speechRecognition.error}
             onChange={setInput}
-            onSend={handleSend}
+            onSend={() => void handleSend()}
             onToggleListening={speechRecognition.toggleListening}
           />
         </section>

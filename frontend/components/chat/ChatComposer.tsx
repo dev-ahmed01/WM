@@ -59,7 +59,7 @@ export function ChatComposer({ value, placeholder, busy, listening, speechSuppor
           </div>
         </div>
         <div id="voice-input-status" aria-live="polite" className={`min-h-5 px-2 pt-1.5 text-[10px] ${speechError ? 'text-red-600' : 'text-muted-foreground'}`}>
-          {speechError || (listening ? 'Listening… speak naturally, then review the transcript before sending.' : 'Responses are grounded in published organizational guidance.')}
+          {speechError || (listening ? 'Listening… your question will send automatically and the verified reply will play aloud.' : 'Voice questions receive automatic spoken replies. Responses stay grounded in published guidance.')}
         </div>
       </div>
     </footer>

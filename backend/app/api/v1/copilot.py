@@ -18,6 +18,7 @@ from app.models.copilot import (
     CopilotHistoryMessage,
 )
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.knowledge_repository import KnowledgeRepository
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowStateService
@@ -45,6 +46,40 @@ _STEP_COMPLETION_COMMANDS = {
 def _is_step_completion_message(message: str) -> bool:
     normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
     return normalized in _STEP_COMPLETION_COMMANDS
+
+
+def _completion_through_target(message: str) -> int | None:
+    """Recognize an explicit attestation, never a question or a bare skip request."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    if "?" in message or not re.search(r"\b(?:complete|completed|finished|done)\b", normalized):
+        return None
+    match = re.search(
+        r"\b(?:through|thru|up to|until)\s+(?:step\s*)?(\d+)\b", normalized
+    )
+    return int(match.group(1)) if match else None
+
+
+def _claims_previous_steps_without_target(message: str) -> bool:
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    return bool(
+        re.search(r"\b(?:complete|completed|finished|done)\b", normalized)
+        and re.search(r"\b(?:previous|prior|earlier)\s+steps?\b", normalized)
+        and _completion_through_target(message) is None
+    )
+
+
+def _requested_step_jump(message: str) -> int | None:
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    if not re.search(r"\b(?:skip|jump|go|move|advance)\b", normalized):
+        return None
+    match = re.search(r"\b(?:to\s+)?step\s*(\d+)\b", normalized)
+    return int(match.group(1)) if match else None
+
+
+def _requested_sop_index(message: str) -> int | None:
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    match = re.search(r"\bsop\s*(?:number\s*)?(\d+)\b", normalized)
+    return int(match.group(1)) if match else None
 
 
 def _step_guidance(position: Any, *, advanced: bool = False) -> str:
@@ -93,6 +128,40 @@ def _deferred_workflow_guidance(position: Any, future_source: Dict[str, Any]) ->
     return (
         f"{future_title} is handled at workflow step {future_number}. "
         f"Do not skip ahead. {_step_guidance(position)}"
+    )
+
+
+def _persist_control_reply(
+    *,
+    conversation_id: str,
+    user_message_id: str,
+    intent: str,
+    answer: str,
+    active_session: Any = None,
+    position: Any = None,
+) -> CopilotResponse:
+    """Persist a deterministic reply backed by catalog or workflow state."""
+    ConversationRepository.update_message_intent(user_message_id, intent)
+    message_id = ConversationRepository.persist_message(
+        conversation_id=conversation_id,
+        sender="ai",
+        content=answer,
+        confidence_score=1.0,
+    )
+    return CopilotResponse(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        answer=answer,
+        citations=[],
+        confidence_score=1.0,
+        is_grounded=True,
+        requires_escalation=False,
+        active_session_id=active_session.id if active_session else None,
+        active_session_status=active_session.status if active_session else None,
+        active_sop_id=active_session.workflow_version_id if active_session else None,
+        active_step_number=position.step_number if position else None,
+        active_step_title=position.step_title if position else None,
+        active_decision_options=position.decision_options if position else [],
     )
 
 
@@ -196,10 +265,108 @@ async def copilot_message(
     active_session = WorkflowStateService.get_current_session(conversation_id)
     resolved_position: Any = None
 
+    # A numbered catalog request is a discovery action, not an execution
+    # command. Resolve it deterministically against published department SOPs.
+    requested_sop_index = _requested_sop_index(payload.message)
+    if requested_sop_index is not None:
+        catalog, total = KnowledgeRepository.list_items(
+            department_id=department_id,
+            status_filter="published",
+            page=1,
+            limit=20,
+        )
+        catalog_position = requested_sop_index - 1
+        if 0 <= catalog_position < len(catalog):
+            item = catalog[catalog_position]
+            description = str(item.get("description") or "").strip()
+            answer = (
+                f"Published SOP {requested_sop_index}: {item['title']} "
+                f"({item['workflow_code']})."
+            )
+            if description:
+                answer += f" {description}"
+            answer += f' To begin guided execution, say "start {item["title"]}".'
+        elif total:
+            available = ", ".join(
+                f"{index + 1}. {item['title']}"
+                for index, item in enumerate(catalog[:5])
+            )
+            answer = (
+                f"SOP {requested_sop_index} is not available for your department. "
+                f"Published SOPs: {available}."
+            )
+        else:
+            answer = "No published SOPs are available for your department."
+        position = WorkflowStateService.get_position(active_session) if active_session else None
+        return _persist_control_reply(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            intent="SOP_CATALOG_LOOKUP",
+            answer=answer,
+            active_session=active_session,
+            position=position,
+        )
+
+    if active_session and active_session.status == "active":
+        current_position = WorkflowStateService.get_position(active_session)
+        resolved_position = current_position
+        completion_target = _completion_through_target(payload.message)
+        if completion_target is not None:
+            active_session = WorkflowStateService.complete_through_step(
+                active_session.id, completion_target
+            )
+            next_position = WorkflowStateService.get_position(active_session)
+            answer = (
+                f"Recorded your attestation that work through step {completion_target} "
+                f"is complete. {_step_guidance(next_position, advanced=True)}"
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_MULTI_STEP_COMPLETE",
+                answer=answer,
+                active_session=active_session,
+                position=next_position,
+            )
+
+        if _claims_previous_steps_without_target(payload.message):
+            answer = (
+                "I can record multiple completed steps, but I need the last step number "
+                "you personally completed. For example, say \"complete through step 2\". "
+                "I will advance only through persisted steps and stop at any required "
+                f"decision. {_step_guidance(current_position)}"
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_COMPLETION_CLARIFICATION",
+                answer=answer,
+                active_session=active_session,
+                position=current_position,
+            )
+
+        requested_step = _requested_step_jump(payload.message)
+        if requested_step is not None:
+            last_required_step = max(0, requested_step - 1)
+            answer = (
+                f"I will not silently skip operational checks to step {requested_step}. "
+                f"If you already completed the preceding work, say \"complete through "
+                f"step {last_required_step}\". I will record that attestation and stop "
+                f"at any required decision. {_step_guidance(current_position)}"
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_STEP_NAVIGATION",
+                answer=answer,
+                active_session=active_session,
+                position=current_position,
+            )
+
     # A short, explicit completion command belongs to the active state machine,
     # not to general intent detection or semantic retrieval.
     if active_session and active_session.status == "active":
-        current_position = WorkflowStateService.get_position(active_session)
+        current_position = resolved_position or WorkflowStateService.get_position(active_session)
         if current_position.step_id and _is_step_completion_message(payload.message):
             ConversationRepository.update_message_intent(
                 user_message_id, "WORKFLOW_STEP_COMPLETE"

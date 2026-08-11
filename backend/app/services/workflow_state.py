@@ -170,6 +170,59 @@ class WorkflowStateService:
         return WorkflowStateService._reload(session_id)
 
     @staticmethod
+    def complete_through_step(session_id: str, target_step_number: int) -> WorkflowSession:
+        """Record an explicit completion attestation through a numbered atomic step.
+
+        This advances sequentially through persisted steps only. It never invents a
+        branch choice and stops if the workflow reaches a required decision.
+        """
+        if target_step_number < 1:
+            raise WorkflowStateService._conflict("The target step number must be positive.")
+
+        session_data = WorkflowSessionRepository.get_by_id(session_id)
+        if not session_data:
+            raise WorkflowStateService._not_found(session_id)
+        if session_data["status"] != "active":
+            raise WorkflowStateService._conflict(
+                "Only an active workflow session can record completed steps."
+            )
+        target_step = OWDRepository.get_step_by_ordinal(
+            session_data["workflow_version_id"], target_step_number
+        )
+        if not target_step:
+            raise WorkflowStateService._conflict(
+                f"Step {target_step_number} does not exist in this published workflow."
+            )
+
+        session = WorkflowSession(**session_data)
+        for _ in range(100):
+            position = WorkflowStateService.get_position(session)
+            if session.status != "active":
+                return session
+            if not position.step_id:
+                raise WorkflowStateService._conflict(
+                    "A verified decision is required before the requested step. "
+                    "Select the observed outcome, then continue."
+                )
+            current_number = int(position.step_number or 0)
+            if current_number > target_step_number:
+                return session
+
+            session = WorkflowStateService.mark_step_complete(
+                session_id,
+                {
+                    "completion_attestation": "completed_through_step",
+                    "completion_target_step": target_step_number,
+                },
+            )
+            if current_number == target_step_number:
+                return session
+
+        raise WorkflowStateService._conflict(
+            "The requested completion range is too large to process safely."
+        )
+
+    @staticmethod
     def advance_session(session_id: str, transition_context: Dict[str, Any]) -> WorkflowSession:
         """Advance a decision/rule state that has no remaining atomic step."""
         session_data = WorkflowSessionRepository.get_by_id(session_id)

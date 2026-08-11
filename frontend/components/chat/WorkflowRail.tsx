@@ -111,7 +111,7 @@ export function WorkflowRail({
 
         <div className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-[11px] leading-4 text-emerald-900">
           <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" />
-          <span><strong className="font-semibold">Verified mode.</strong> WorkMate will not skip steps or invent organizational guidance.</span>
+          <span><strong className="font-semibold">Verified mode.</strong> WorkMate advances only from explicit completion attestations and verified outcomes.</span>
         </div>
       </div>
     </aside>

@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.v1.copilot import _match_decision_option, router
+from app.api.v1.copilot import (
+    _claims_previous_steps_without_target,
+    _completion_through_target,
+    _match_decision_option,
+    _requested_sop_index,
+    _requested_step_jump,
+    router,
+)
 from app.core.security import create_access_token
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
@@ -72,6 +79,19 @@ def test_natural_damage_language_uniquely_matches_persisted_decision_option():
     assert _match_decision_option("the package is damaged", options) == "OPT_DAMAGED"
     assert _match_decision_option("package is intact", options) == "OPT_INTACT"
     assert _match_decision_option("cartons", options) is None
+
+
+def test_workflow_navigation_phrases_are_parsed_without_model_inference():
+    assert _requested_sop_index("give me SOP 1") == 1
+    assert _requested_sop_index("show sop1") == 1
+    assert _requested_step_jump("can we not skip to step 3") == 3
+    assert _requested_step_jump("jump to step3") == 3
+    assert _completion_through_target("I completed through step 2") == 2
+    assert _completion_through_target("complete up to step2") == 2
+    assert _completion_through_target("can I complete through step 2?") is None
+    assert _claims_previous_steps_without_target(
+        "I have completed the previous steps; the package is damaged"
+    )
 
 
 @patch("app.api.v1.copilot.AnalyticsService.record_event")
@@ -211,6 +231,173 @@ def test_done_completes_active_step_without_ai_or_retrieval():
     detect_intent.assert_not_awaited()
     retrieve.assert_not_awaited()
     generate.assert_not_awaited()
+
+
+def test_complete_through_command_records_attestation_without_ai_or_retrieval():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect the shipment seal",
+    )
+    decision_position = WorkflowPosition(
+        state_id="state_decision",
+        state_title="Container damage evaluation",
+        state_type="DECISION",
+        step_title="Container damage evaluation",
+        decision_options=[
+            WorkflowDecisionOption(
+                option_code="OPT_DAMAGED",
+                option_label="Yes, damaged cartons detected",
+            )
+        ],
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.update_message_intent"
+        ) as update_intent,
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            side_effect=[current_position, decision_position],
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.complete_through_step",
+            return_value=current,
+        ) as complete_through,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "complete through step 2"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "work through step 2 is complete" in body["answer"]
+    assert body["active_decision_options"][0]["option_code"] == "OPT_DAMAGED"
+    assert body["requires_escalation"] is False
+    complete_through.assert_called_once_with("sess_1", 2)
+    update_intent.assert_called_once_with("user_msg", "WORKFLOW_MULTI_STEP_COMPLETE")
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+    generate.assert_not_awaited()
+
+
+def test_previous_steps_claim_requests_last_completed_number_without_escalation():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect the shipment seal",
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=current_position,
+        ),
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": "I completed the previous steps and the package is damaged",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert 'say "complete through step 2"' in body["answer"]
+    assert body["confidence_score"] == 1.0
+    assert body["requires_escalation"] is False
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_numbered_sop_request_uses_published_department_catalog():
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=None,
+        ),
+        patch(
+            "app.api.v1.copilot.KnowledgeRepository.list_items",
+            return_value=(
+                [
+                    {
+                        "title": "Receive shipment",
+                        "workflow_code": "SOP_INB_101",
+                        "description": "Inbound receiving and inspection.",
+                    }
+                ],
+                1,
+            ),
+        ) as list_items,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"message": "give me SOP 1"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"].startswith("Published SOP 1: Receive shipment")
+    assert body["requires_escalation"] is False
+    list_items.assert_called_once_with(
+        department_id="dept_ops", status_filter="published", page=1, limit=20
+    )
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
 
 
 def test_future_damage_question_is_acknowledged_without_skipping_current_step():
