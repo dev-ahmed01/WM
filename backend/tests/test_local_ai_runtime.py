@@ -176,6 +176,44 @@ async def test_classification_is_non_authoritative_and_rejects_unknown_label(mon
 
 
 @pytest.mark.asyncio
+async def test_workflow_planner_returns_bounded_non_authoritative_action(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(
+        return_value={
+            "message": {
+                "content": (
+                    '{"intent":"continue_prior_issue",'
+                    '"completion_scope":"all_available",'
+                    '"outcome_text":"packages damaged",'
+                    '"needs_clarification":false,"confidence":0.91}'
+                )
+            }
+        }
+    )
+    monkeypatch.setattr(provider, "_request_json", request)
+
+    result = await provider.plan_workflow_action(
+        "I have done all this tasks tell me what should I do about",
+        [{"role": "user", "content": "packages damaged what should I do"}],
+        {"current_step_number": 1, "allowed_outcome_labels": []},
+    )
+
+    assert result == {
+        "intent": "continue_prior_issue",
+        "completion_scope": "all_available",
+        "outcome_text": "packages damaged",
+        "needs_clarification": False,
+        "confidence": 0.91,
+        "authoritative": False,
+    }
+    body = request.await_args.kwargs["json"]
+    assert body["format"] == "json"
+    assert body["options"]["temperature"] == 0
+    assert "never invent facts" in body["messages"][0]["content"]
+    assert "packages damaged what should I do" in body["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_health_reports_installed_and_missing_models(monkeypatch):
     provider = OllamaLocalAIProvider()
     monkeypatch.setattr(

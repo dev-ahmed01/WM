@@ -537,6 +537,134 @@ def test_all_steps_done_stops_at_persisted_decision_without_escalation():
     retrieve.assert_not_awaited()
 
 
+def test_ai_planner_resolves_elliptical_completion_and_prior_damage_outcome():
+    current = workflow_session()
+    decision_session = workflow_session().model_copy(
+        update={"current_state_id": "state_decision"}
+    )
+    advanced = workflow_session().model_copy(update={"current_state_id": "state_damage"})
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect the shipment seal",
+    )
+    decision_position = WorkflowPosition(
+        state_id="state_decision",
+        state_title="Container damage evaluation",
+        state_type="DECISION",
+        decision_options=[
+            WorkflowDecisionOption(
+                option_code="OPT_DAMAGED",
+                option_label="Yes, damaged cartons detected",
+            ),
+            WorkflowDecisionOption(
+                option_code="OPT_INTACT",
+                option_label="No, all cartons intact",
+            ),
+        ],
+    )
+    damage_position = WorkflowPosition(
+        state_id="state_damage",
+        state_title="Damage quarantine",
+        state_type="ATOMIC_STEP",
+        step_id="step_3",
+        step_number=3,
+        step_title="Apply red quarantine tape and transport to Bay Q-1.",
+    )
+    completion = WorkflowCompletionResult(
+        session=decision_session,
+        completed_step_numbers=[1, 2],
+        stopped_at_decision=True,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_history",
+            return_value=[
+                {
+                    "id": "prior_user",
+                    "sender": "employee",
+                    "content": "packages damaged what should I do",
+                },
+                {
+                    "id": "prior_ai",
+                    "sender": "ai",
+                    "content": "Damage evaluation is handled after the current checks.",
+                },
+            ],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            side_effect=[current_position, decision_position, damage_position],
+        ),
+        patch(
+            "app.api.v1.copilot.OWDRepository.get_last_step_ordinal",
+            return_value=6,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.complete_through_step",
+            return_value=completion,
+        ) as complete_through,
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.advance_if_transition_matches",
+            return_value=advanced,
+        ) as advance,
+        patch.object(
+            AIGateway,
+            "plan_workflow_action",
+            new_callable=AsyncMock,
+            return_value={
+                "intent": "continue_prior_issue",
+                "completion_scope": "all_available",
+                "outcome_text": "packages damaged",
+                "needs_clarification": False,
+                "confidence": 0.91,
+                "authoritative": False,
+            },
+        ) as plan,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": "I have done all this tasks tell me what should I do about",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "steps 1 through 2" in body["answer"]
+    assert "Outcome recorded: Yes, damaged cartons detected" in body["answer"]
+    assert "Apply red quarantine tape" in body["answer"]
+    assert body["active_step_number"] == 3
+    assert body["requires_escalation"] is False
+    complete_through.assert_called_once_with("sess_1", 6)
+    advance.assert_called_once()
+    assert advance.call_args.args[1]["decision_option"] == "OPT_DAMAGED"
+    plan.assert_awaited_once()
+    detect.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
 def test_future_damage_question_is_acknowledged_without_skipping_current_step():
     current = workflow_session()
     current_position = WorkflowPosition(

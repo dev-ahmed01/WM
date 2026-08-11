@@ -107,3 +107,36 @@ def test_agent_context_marks_history_separately_from_workflow_authority():
         "role": "employee",
         "department_id": "dept_inbound",
     }
+
+
+def test_ambiguous_completion_attestation_is_routed_to_semantic_planner():
+    history = [
+        {"sender": "employee", "content": "Packages are damaged. What should I do?"},
+        {"sender": "ai", "content": "That is handled after the current checks."},
+    ]
+
+    assert CopilotReasoningService.should_plan_workflow_action(
+        "I have done all this tasks tell me what should I do about", history
+    )
+    assert CopilotReasoningService.should_plan_workflow_action(
+        "I complted all these taks; what about it", history
+    )
+    assert not CopilotReasoningService.should_plan_workflow_action(
+        "Are all these tasks done?", history
+    )
+
+
+def test_discourse_fallback_preserves_prior_employee_issue_without_inventing_action():
+    history = [
+        {"sender": "employee", "content": "packages damaged what should I do"},
+        {"sender": "ai", "content": "Damage is evaluated after the current checks."},
+    ]
+
+    plan = CopilotReasoningService.fallback_workflow_plan(
+        "I have done all this tasks tell me what should I do about", history
+    )
+
+    assert plan["completion_scope"] == "all_available"
+    assert plan["outcome_text"] == "packages damaged what should i do"
+    assert plan["confidence"] == 0.74
+    assert plan["authoritative"] is False

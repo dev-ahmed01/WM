@@ -22,7 +22,7 @@ from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.owd_repository import OWDRepository
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService
-from app.services.workflow_state import WorkflowStateService
+from app.services.workflow_state import WorkflowCompletionResult, WorkflowStateService
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
@@ -170,16 +170,7 @@ def _persist_control_reply(
 def _completion_reply(
     completion: Any, position: Any, target: int, *, mention_target: bool = True
 ) -> str:
-    completed = completion.completed_step_numbers
-    if not completed:
-        recorded = "No additional steps were recorded."
-    elif len(completed) == 1:
-        recorded = f"Recorded your completion attestation for step {completed[0]}."
-    else:
-        recorded = (
-            f"Recorded your completion attestation for steps {completed[0]} "
-            f"through {completed[-1]}."
-        )
+    recorded = _recorded_completion_text(completion.completed_step_numbers)
     if completion.stopped_at_decision:
         continuation = (
             f"continue toward step {target}." if mention_target else "continue."
@@ -189,6 +180,17 @@ def _completion_reply(
             f"{_step_guidance(position, advanced=True)}"
         )
     return f"{recorded} {_step_guidance(position, advanced=True)}"
+
+
+def _recorded_completion_text(completed: list[int]) -> str:
+    if not completed:
+        return "No additional steps were recorded."
+    if len(completed) == 1:
+        return f"Recorded your completion attestation for step {completed[0]}."
+    return (
+        f"Recorded your completion attestation for steps {completed[0]} "
+        f"through {completed[-1]}."
+    )
 
 
 @router.get(
@@ -529,6 +531,132 @@ async def copilot_message(
         )
         if str(item.get("id")) != user_message_id
     ][-settings.COPILOT_HISTORY_LIMIT :]
+
+    # Natural, context-dependent completion claims are interpreted by the local
+    # model as a structured proposal. The model never receives graph identifiers
+    # and cannot mutate state; persisted steps and options are validated below.
+    if active_session and active_session.status == "active":
+        planner_position = prechecked_position or WorkflowStateService.get_position(
+            active_session
+        )
+        if CopilotReasoningService.should_plan_workflow_action(
+            payload.message, history
+        ):
+            planner_history, planner_context = (
+                CopilotReasoningService.workflow_planner_context(
+                    planner_position, history, settings.COPILOT_HISTORY_LIMIT
+                )
+            )
+            workflow_plan = await AIGateway.plan_workflow_action(
+                payload.message, planner_history, planner_context
+            )
+            plan_confidence = float(workflow_plan.get("confidence") or 0.0)
+            if plan_confidence == 0.0:
+                workflow_plan = CopilotReasoningService.fallback_workflow_plan(
+                    payload.message, history
+                )
+                plan_confidence = float(workflow_plan["confidence"])
+            completion_scope = str(
+                workflow_plan.get("completion_scope") or "none"
+            )
+            outcome_text = str(workflow_plan.get("outcome_text") or "").strip()
+            copilot_logger.info(
+                "Structured workflow plan intent=%s scope=%s confidence=%.3f outcome=%s",
+                workflow_plan.get("intent"),
+                completion_scope,
+                plan_confidence,
+                bool(outcome_text),
+            )
+
+            completion = None
+            if plan_confidence >= 0.72 and completion_scope != "none":
+                if completion_scope == "current" and planner_position.step_id:
+                    completed_number = int(planner_position.step_number or 0)
+                    active_session = WorkflowStateService.mark_step_complete(
+                        active_session.id,
+                        {
+                            "completion_attestation": "ai_interpreted_current_step",
+                            "original_message": payload.message[:500],
+                            "planner_confidence": plan_confidence,
+                        },
+                    )
+                    completion = WorkflowCompletionResult(
+                        session=active_session,
+                        completed_step_numbers=(
+                            [completed_number] if completed_number else []
+                        ),
+                    )
+                elif completion_scope == "all_available":
+                    final_step = OWDRepository.get_last_step_ordinal(
+                        active_session.workflow_version_id
+                    )
+                    if final_step is not None:
+                        completion = WorkflowStateService.complete_through_step(
+                            active_session.id, final_step
+                        )
+                        active_session = completion.session
+
+                if completion is not None:
+                    planner_position = WorkflowStateService.get_position(active_session)
+                    matched_option = (
+                        _match_decision_option(
+                            outcome_text, planner_position.decision_options
+                        )
+                        if outcome_text and planner_position.decision_options
+                        else None
+                    )
+                    if matched_option:
+                        selected_label = next(
+                            option.option_label
+                            for option in planner_position.decision_options
+                            if option.option_code == matched_option
+                        )
+                        previous_state_id = active_session.current_state_id
+                        active_session = (
+                            WorkflowStateService.advance_if_transition_matches(
+                                active_session.id,
+                                {
+                                    "decision_option": matched_option,
+                                    "values": {
+                                        "message": payload.message.strip(),
+                                        "ai_interpreted_outcome": outcome_text,
+                                    },
+                                },
+                            )
+                        )
+                        if active_session.current_state_id != previous_state_id:
+                            next_position = WorkflowStateService.get_position(
+                                active_session
+                            )
+                            answer = (
+                                f"{_recorded_completion_text(completion.completed_step_numbers)} "
+                                f"Outcome recorded: {selected_label}. "
+                                f"{_step_guidance(next_position, advanced=True)}"
+                            )
+                            return _persist_control_reply(
+                                conversation_id=conversation_id,
+                                user_message_id=user_message_id,
+                                intent="WORKFLOW_CONTEXTUAL_CONTINUATION",
+                                answer=answer,
+                                active_session=active_session,
+                                position=next_position,
+                            )
+
+                    answer = _completion_reply(
+                        completion,
+                        planner_position,
+                        int(planner_position.step_number or 1),
+                        mention_target=False,
+                    )
+                    return _persist_control_reply(
+                        conversation_id=conversation_id,
+                        user_message_id=user_message_id,
+                        intent="WORKFLOW_AI_INTERPRETED_COMPLETION",
+                        answer=answer,
+                        active_session=active_session,
+                        position=planner_position,
+                    )
+
     reasoning_move = CopilotReasoningService.classify_move(payload.message)
     retrieval_query = CopilotReasoningService.resolve_query(payload.message, history)
     retrieval_query = CopilotReasoningService.focus_operational_query(retrieval_query)

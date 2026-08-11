@@ -52,6 +52,35 @@ class AIGateway:
         return {"intent": "GENERAL_QUERY", "needs_clarification": False}
 
     @classmethod
+    async def plan_workflow_action(
+        cls,
+        message: str,
+        history: List[Dict[str, Any]],
+        workflow_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Return a non-authoritative semantic plan for an ambiguous workflow move."""
+        fallback = {
+            "intent": "ask_guidance",
+            "completion_scope": "none",
+            "outcome_text": "",
+            "needs_clarification": False,
+            "confidence": 0.0,
+            "authoritative": False,
+        }
+        if not settings.LOCAL_AI_ENABLED:
+            return fallback
+        try:
+            return await cls.local_provider.plan_workflow_action(
+                message, history, workflow_context
+            )
+        except Exception as exc:
+            logger.warning(
+                "Local workflow planning unavailable; preserving deterministic flow: %s",
+                type(exc).__name__,
+            )
+            return fallback
+
+    @classmethod
     async def search(cls, query: str, department_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         if not query.strip() or not department_id.strip():
             return []

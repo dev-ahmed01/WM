@@ -1,6 +1,7 @@
 """Grounded conversational reasoning helpers for the operational Copilot."""
 
 import re
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Sequence
 
 from app.core.text_matching import fuzzy_relevance_score
@@ -58,6 +59,106 @@ class CopilotReasoningService:
             or len(tokens) <= 3
             and bool(set(tokens) & {"it", "that", "then", "this", "why"})
         )
+
+    @classmethod
+    def should_plan_workflow_action(
+        cls, message: str, history: Sequence[Dict[str, Any]]
+    ) -> bool:
+        """Use the model for ambiguous attestations; explicit controls stay instant.
+
+        This is only a cheap routing gate. It does not decide whether work was
+        completed or which outcome applies—that judgment belongs to the structured
+        planner and then the deterministic workflow validator.
+        """
+        if not history or "?" in message:
+            return False
+        tokens = cls._normalized(message).split()
+        if not tokens:
+            return False
+        completion_vocabulary = (
+            "complete",
+            "completed",
+            "done",
+            "finish",
+            "finished",
+            "performed",
+        )
+        has_attestation_signal = any(
+            any(
+                token == candidate
+                or len(token) >= 4
+                and SequenceMatcher(None, token, candidate).ratio() >= 0.80
+                for candidate in completion_vocabulary
+            )
+            for token in tokens
+        )
+        has_context_reference = bool(
+            set(tokens)
+            & {
+                "about",
+                "all",
+                "already",
+                "it",
+                "previous",
+                "prior",
+                "task",
+                "tasks",
+                "that",
+                "these",
+                "this",
+            }
+        )
+        return has_attestation_signal and has_context_reference
+
+    @classmethod
+    def workflow_planner_context(
+        cls, position: Any, history: Sequence[Dict[str, Any]], history_limit: int
+    ) -> tuple[List[Dict[str, str]], Dict[str, Any]]:
+        """Expose conversational and current-state context without graph authority."""
+        compact_history = cls.compact_history(history, history_limit)
+        return compact_history, {
+            "current_step_number": position.step_number,
+            "current_step_instruction": position.step_title,
+            "awaiting_outcome": bool(position.decision_options),
+            "allowed_outcome_labels": [
+                option.option_label for option in position.decision_options
+            ],
+        }
+
+    @classmethod
+    def fallback_workflow_plan(
+        cls, message: str, history: Sequence[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Resolve discourse generically when the local planner is unavailable.
+
+        This fallback proposes only scope and prior user wording. It supplies no
+        workflow fact, and its outcome still requires a unique persisted match.
+        """
+        normalized = cls._normalized(message)
+        tokens = set(normalized.split())
+        full_scope = bool(tokens & {"all", "each", "every", "everything"})
+        prior_user_topic = next(
+            (
+                str(item.get("content") or "").strip()
+                for item in reversed(history)
+                if str(item.get("sender") or "").lower() == "employee"
+                and str(item.get("content") or "").strip()
+            ),
+            "",
+        )
+        return {
+            "intent": "continue_prior_issue" if prior_user_topic else "complete_work",
+            "completion_scope": "all_available" if full_scope else "current",
+            "outcome_text": (
+                cls.focus_operational_query(prior_user_topic)[:300]
+                if prior_user_topic
+                else ""
+            ),
+            "needs_clarification": False,
+            "confidence": 0.74,
+            "authoritative": False,
+            "provider": "deterministic_discourse_fallback",
+        }
 
     @classmethod
     def resolve_query(

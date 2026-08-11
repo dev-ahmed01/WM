@@ -35,7 +35,10 @@ class OllamaLocalAIProvider:
 
     @staticmethod
     async def _request_json(method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
-        timeout = httpx.Timeout(settings.LOCAL_AI_TIMEOUT_SECONDS)
+        timeout_seconds = float(
+            kwargs.pop("timeout_seconds", settings.LOCAL_AI_TIMEOUT_SECONDS)
+        )
+        timeout = httpx.Timeout(timeout_seconds)
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, OllamaLocalAIProvider._url(path), **kwargs)
             response.raise_for_status()
@@ -270,6 +273,106 @@ class OllamaLocalAIProvider:
             "label": label,
             "confidence": normalized_confidence,
             "reason": str(parsed.get("reason", ""))[:500],
+            "authoritative": False,
+        }
+
+    async def plan_workflow_action(
+        self,
+        message: str,
+        history: Sequence[Dict[str, Any]],
+        workflow_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Interpret a conversational workflow move without authorizing it.
+
+        The returned values are deliberately semantic rather than graph identifiers.
+        The deterministic workflow engine must validate and execute any suggestion.
+        """
+        prompt = {
+            "task": "classify_workflow_move",
+            "message": message[:1000],
+            "recent_conversation": [
+                {
+                    "role": str(item.get("role") or "")[:20],
+                    "content": str(item.get("content") or "")[:350],
+                }
+                for item in history[-4:]
+            ],
+            "workflow_context": workflow_context,
+            "rule": (
+                "Infer meaning from context. Completion is an attestation, not a question. "
+                "Use all_available only when all relevant work is claimed done. For 'what "
+                "about it', copy the prior employee issue into outcome_text. Invent nothing."
+            ),
+            "example": {
+                "history": "user: packages damaged; assistant: handled after checks",
+                "message": "I did all these tasks, what about it",
+                "output": "continue_prior_issue, all_available, packages damaged, false, 0.9",
+            },
+            "required_output": {
+                "intent": "ask_guidance|complete_work|continue_prior_issue|select_outcome|clarify",
+                "completion_scope": "none|current|all_available",
+                "outcome_text": "prior observed issue or empty",
+                "needs_clarification": "bool",
+                "confidence": "0..1",
+            },
+        }
+        payload = await self._request_json(
+            "POST",
+            "/api/chat",
+            timeout_seconds=min(settings.LOCAL_AI_TIMEOUT_SECONDS, 2.0),
+            json={
+                "model": settings.LOCAL_CHAT_MODEL,
+                "stream": False,
+                "format": "json",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return only the requested JSON. Classify meaning; never invent facts "
+                            "or authorize workflow changes."
+                        ),
+                    },
+                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                ],
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": 1536,
+                    "num_predict": 64,
+                },
+                "keep_alive": "15m",
+            },
+        )
+        response_message = payload.get("message", {})
+        parsed = (
+            json.loads(str(response_message.get("content", "{}")))
+            if isinstance(response_message, dict)
+            else {}
+        )
+        if not isinstance(parsed, dict):
+            raise ValueError("Local workflow planner returned invalid JSON")
+
+        allowed_intents = {
+            "ask_guidance",
+            "complete_work",
+            "continue_prior_issue",
+            "select_outcome",
+            "clarify",
+        }
+        allowed_scopes = {"none", "current", "all_available"}
+        intent = str(parsed.get("intent") or "ask_guidance")
+        completion_scope = str(parsed.get("completion_scope") or "none")
+        try:
+            confidence = max(0.0, min(float(parsed.get("confidence", 0.0)), 1.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        return {
+            "intent": intent if intent in allowed_intents else "ask_guidance",
+            "completion_scope": (
+                completion_scope if completion_scope in allowed_scopes else "none"
+            ),
+            "outcome_text": str(parsed.get("outcome_text") or "").strip()[:300],
+            "needs_clarification": bool(parsed.get("needs_clarification", False)),
+            "confidence": confidence,
             "authoritative": False,
         }
 
