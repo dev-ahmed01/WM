@@ -99,3 +99,24 @@ def test_decision_options_order_by_a_migration_backed_column(mock_connection):
     assert "ORDER BY option_code ASC" in sql
     assert "ordinal_index" not in sql
     assert params == ("state_1",)
+
+
+@patch("app.repositories.owd_repository.get_snowflake_connection")
+def test_workflow_analytics_json_uses_snowflake_select_projection(mock_connection):
+    manager, cursor = _mock_connection()
+    mock_connection.return_value = manager
+
+    recorded = OWDRepository.record_analytics_event(
+        "session_1",
+        "version_1",
+        "SESSION_STARTED",
+        payload={"source": "copilot"},
+    )
+
+    assert recorded is True
+    sql, params = cursor.execute.call_args.args
+    normalized_sql = " ".join(sql.split()).upper()
+    assert ") SELECT %S, %S, %S, %S, %S, %S, %S, PARSE_JSON(%S), CURRENT_TIMESTAMP()" in normalized_sql
+    assert " VALUES " not in normalized_sql
+    assert params[1:3] == ("session_1", "version_1")
+    assert params[-1] == '{"source": "copilot"}'
