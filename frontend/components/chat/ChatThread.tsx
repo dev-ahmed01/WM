@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Square, Volume2 } from 'lucide-react';
 import { CopilotResponse } from '@/lib/api-client';
 
 interface ChatThreadProps {
@@ -7,9 +8,17 @@ interface ChatThreadProps {
     content: string;
     copilotData?: CopilotResponse;
   }>;
+  speechSupported: boolean;
+  speakingMessageKey: string | null;
+  onSpeak: (text: string, messageKey: string) => void;
 }
 
-export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
+export const ChatThread: React.FC<ChatThreadProps> = ({
+  messages,
+  onSpeak,
+  speakingMessageKey,
+  speechSupported,
+}) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,13 +34,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
       className="flex h-full min-h-0 flex-col space-y-4 overflow-y-auto p-4"
       aria-live="polite"
     >
-      {messages.map((msg, index) => (
-        <div
-          key={index}
-          className={`flex flex-col max-w-2xl ${
-            msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
-          }`}
-        >
+      {messages.map((msg, index) => {
+        const messageKey = `assistant-${index}`;
+        const isSpeaking = speakingMessageKey === messageKey;
+        return (
+          <div
+            key={index}
+            className={`flex flex-col max-w-2xl ${
+              msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
+            }`}
+          >
           {/* Message Bubble */}
           <div
             className={`whitespace-pre-wrap break-words p-4 rounded-lg shadow-sm text-sm ${
@@ -59,6 +71,18 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
             )}
           </div>
 
+          {msg.sender === 'assistant' && speechSupported && (
+            <button
+              type="button"
+              onClick={() => onSpeak(msg.content, messageKey)}
+              aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'}
+              className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-700"
+            >
+              {isSpeaking ? <Square aria-hidden="true" size={13} /> : <Volume2 aria-hidden="true" size={14} />}
+              {isSpeaking ? 'Stop' : 'Listen'}
+            </button>
+          )}
+
           {/* Confidence / Escalation Badge */}
           {msg.copilotData && (
             <div className="mt-1 flex items-center space-x-2 text-xs">
@@ -78,8 +102,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
               )}
             </div>
           )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useCallback, useState, useEffect, Suspense } from 'react';
+import { Mic, MicOff } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/lib/auth';
 import { ChatThread } from '@/components/chat/ChatThread';
+import { useSpeechRecognition, useSpeechSynthesis } from '@/hooks/useWebSpeech';
 import {
   apiClient,
   CopilotConversationDetail,
@@ -35,6 +37,12 @@ function CopilotContent() {
     },
   ]);
 
+  const handleTranscript = useCallback((transcript: string) => {
+    setInput((current) => current.trim() ? `${current.trim()} ${transcript}` : transcript);
+  }, []);
+  const speechRecognition = useSpeechRecognition(handleTranscript);
+  const speechSynthesis = useSpeechSynthesis();
+
   useEffect(() => {
     async function resumeSession() {
       if (!sessionId || loading) return;
@@ -65,6 +73,7 @@ function CopilotContent() {
     if (!input.trim() || isSending) return;
 
     const userMsg = input.trim();
+    speechRecognition.stopListening();
     setInput('');
     setIsSending(true);
 
@@ -262,7 +271,12 @@ function CopilotContent() {
         </section>
       )}
       <main className="min-h-0 flex-1 overflow-hidden p-4">
-        <ChatThread messages={messages} />
+        <ChatThread
+          messages={messages}
+          onSpeak={speechSynthesis.speak}
+          speakingMessageKey={speechSynthesis.speakingKey}
+          speechSupported={speechSynthesis.isSupported}
+        />
       </main>
       <footer className="flex-none p-4 border-t border-gray-200 bg-slate-50">
         <div className="flex space-x-2">
@@ -280,9 +294,35 @@ function CopilotContent() {
             }
             value={input}
             disabled={isSending}
+            aria-describedby="voice-input-status"
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           />
+          <button
+            type="button"
+            onClick={speechRecognition.toggleListening}
+            disabled={isSending || !speechRecognition.isSupported}
+            aria-label={
+              !speechRecognition.isSupported
+                ? 'Voice input is not supported in this browser'
+                : speechRecognition.isListening
+                  ? 'Stop voice input'
+                  : 'Start voice input'
+            }
+            aria-pressed={speechRecognition.isListening}
+            title={speechRecognition.isSupported
+              ? 'Speak your question using your browser speech service'
+              : 'Voice input is not supported in this browser'}
+            className={`inline-flex min-w-11 items-center justify-center rounded-lg border px-3 py-2 transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              speechRecognition.isListening
+                ? 'border-red-300 bg-red-50 text-red-700'
+                : 'border-gray-300 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700'
+            }`}
+          >
+            {speechRecognition.isListening
+              ? <MicOff aria-hidden="true" size={18} />
+              : <Mic aria-hidden="true" size={18} />}
+          </button>
           <button
             onClick={handleSend}
             disabled={isSending}
@@ -290,6 +330,16 @@ function CopilotContent() {
           >
             {isSending ? 'Sending...' : 'Send'}
           </button>
+        </div>
+        <div
+          id="voice-input-status"
+          aria-live="polite"
+          className={`mt-1 min-h-4 text-xs ${speechRecognition.error ? 'text-red-600' : 'text-slate-500'}`}
+        >
+          {speechRecognition.error
+            || (speechRecognition.isListening
+              ? 'Listening… Speak now, then review the transcript before sending.'
+              : '')}
         </div>
       </footer>
     </div>
