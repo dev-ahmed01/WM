@@ -184,7 +184,7 @@ function CopilotContent() {
           {workflowSessionId && workflowSessionStatus === 'active' && (
             <>
               <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
-                Complete step
+                {workflowDecisionOptions.length > 0 ? 'Choose outcome' : 'Complete step'}
               </button>
               <button onClick={() => handleWorkflowAction('pause')} className="text-xs border px-2.5 py-1 rounded bg-white">
                 Pause workflow
@@ -209,18 +209,32 @@ function CopilotContent() {
           </span>
         </div>
       </header>
-      {workflowSessionId && ['active', 'paused'].includes(workflowSessionStatus || '') && activeStepTitle && (
+      {workflowSessionId
+        && ['active', 'paused'].includes(workflowSessionStatus || '')
+        && activeStepTitle
+        && (activeStepNumber !== undefined || workflowDecisionOptions.length > 0) && (
         <section
           aria-label="Current workflow step"
           className="mx-4 mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
         >
           <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-            Current step {activeStepNumber}
+            {activeStepNumber !== undefined ? `Current step ${activeStepNumber}` : 'Decision required'}
           </div>
           <p className="mt-1 text-sm font-medium">{activeStepTitle}</p>
-          <p className="mt-1 text-xs text-blue-700">
-            Complete this step only, then type &quot;done&quot; or select Complete step to continue.
-          </p>
+          {activeStepNumber !== undefined ? (
+            <p className="mt-1 text-xs text-blue-700">
+              Complete this step only, then type &quot;done&quot; or select Complete step to continue.
+            </p>
+          ) : (
+            <div className="mt-2">
+              <p className="text-xs text-blue-700">Select Choose outcome and use one of these verified options:</p>
+              <ul className="mt-1 list-disc pl-5 text-xs text-blue-900">
+                {workflowDecisionOptions.map((option) => (
+                  <li key={option.option_code}>{option.option_label}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
       <main className="flex-1 overflow-hidden p-4">
@@ -234,8 +248,10 @@ function CopilotContent() {
             placeholder={
               isSending
                 ? 'Copilot is processing...'
-                : activeStepTitle
+                : activeStepNumber !== undefined
                   ? 'Ask about this step or type "done"...'
+                  : workflowDecisionOptions.length > 0
+                    ? 'Ask about the decision or use Choose outcome...'
                   : 'Type your operational question...'
             }
             value={input}
