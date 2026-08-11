@@ -82,10 +82,24 @@ class CandidateRepository:
             WHERE LOWER(wv.status) IN ({placeholders})
               AND LOWER(sm.status) = 'published'
               AND sm.department_id = %s
+              AND w.department_id = %s
+              AND wv.version_number = (
+                  SELECT MAX(candidate_version.version_number)
+                  FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
+                  WHERE candidate_version.workflow_id = wv.workflow_id
+                    AND LOWER(candidate_version.status) IN ({placeholders})
+              )
             ORDER BY sm.id
             LIMIT %s OFFSET %s
         """
-        params: List[Any] = [*statuses, department_id, page_size, offset]
+        params: List[Any] = [
+            *statuses,
+            department_id,
+            department_id,
+            *statuses,
+            page_size,
+            offset,
+        ]
         with get_snowflake_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(sql, params)
@@ -214,12 +228,27 @@ class SqlLexicalRetrievalProvider:
             WHERE LOWER(wv.status) IN ({status_placeholders})
               AND LOWER(sm.status) = 'published'
               AND sm.department_id = %s
+              AND w.department_id = %s
+              AND wv.version_number = (
+                  SELECT MAX(candidate_version.version_number)
+                  FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
+                  WHERE candidate_version.workflow_id = wv.workflow_id
+                    AND LOWER(candidate_version.status) IN ({status_placeholders})
+              )
               AND ({' OR '.join(where_parts)})
             ORDER BY score DESC, s.ordinal_index ASC
             LIMIT %s
         """
         patterns = [f"%{term}%" for term in terms]
-        params: List[Any] = [*patterns, *statuses, department_id, *patterns, limit]
+        params: List[Any] = [
+            *patterns,
+            *statuses,
+            department_id,
+            department_id,
+            *statuses,
+            *patterns,
+            limit,
+        ]
 
         def execute() -> List[Dict[str, Any]]:
             with get_snowflake_connection() as connection:

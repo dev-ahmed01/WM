@@ -83,5 +83,9 @@ class AIGateway:
         cls.semantic_index.invalidate_department(department_id)
 
     @classmethod
+    def invalidate_all(cls) -> None:
+        cls.semantic_index.clear()
+
+    @classmethod
     async def health(cls) -> Dict[str, Any]:
         return await cls.local_provider.health()

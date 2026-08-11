@@ -143,6 +143,28 @@ class OWDLoader:
                         """,
                         (ver["id"], ver["workflow_id"], ver["version_number"], ver["semantic_version"], ver["stage_file_uri"], ver["ast_hash"], ver["status"]),
                     )
+                    cur.execute(
+                        """
+                        UPDATE KNOWLEDGE_STUDIO.workflow_versions
+                        SET status = 'deprecated'
+                        WHERE workflow_id = %s
+                          AND id <> %s
+                          AND LOWER(status) = 'published'
+                        """,
+                        (ver["workflow_id"], ver["id"]),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE KNOWLEDGE_STUDIO.workflow_search_metadata AS metadata
+                        SET status = 'archived'
+                        FROM KNOWLEDGE_STUDIO.workflow_versions AS version
+                        WHERE metadata.workflow_version_id = version.id
+                          AND version.workflow_id = %s
+                          AND version.id <> %s
+                          AND LOWER(version.status) = 'deprecated'
+                        """,
+                        (ver["workflow_id"], ver["id"]),
+                    )
                     tables_updated.append("KNOWLEDGE_STUDIO.workflow_versions")
 
                     # 3. Insert Workflow States
@@ -347,7 +369,7 @@ class OWDLoader:
                             MERGE INTO KNOWLEDGE_STUDIO.workflow_search_metadata AS target
                             USING (SELECT %s AS id, %s AS workflow_version_id, %s AS state_id, %s AS department_id, %s AS search_content, %s AS embedding_ref, %s AS status) AS src
                             ON target.id = src.id
-                            WHEN MATCHED THEN UPDATE SET search_content = src.search_content, status = 'published'
+                            WHEN MATCHED THEN UPDATE SET search_content = src.search_content, department_id = src.department_id, status = 'published'
                             WHEN NOT MATCHED THEN INSERT (id, workflow_version_id, state_id, department_id, search_content, embedding_ref, status)
                             VALUES (src.id, src.workflow_version_id, src.state_id, src.department_id, src.search_content, COALESCE(src.embedding_ref, 'none'), 'published')
                             """,

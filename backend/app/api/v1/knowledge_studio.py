@@ -173,10 +173,10 @@ async def upload_knowledge(
         )
     workflow_id = compilation_report.get("workflow_id", "")
     version_id = compilation_report.get("version_id", "")
-    # The local semantic index is disposable derived state. Invalidate only
-    # after a successful transactional publication; the next Copilot query
-    # rebuilds it entirely from authoritative Snowflake rows.
-    AIGateway.invalidate_department(department_id)
+    # A publication can move an existing workflow between departments. Clear
+    # all disposable retrieval state so neither the old nor new department can
+    # observe stale workflow versions.
+    AIGateway.invalidate_all()
 
     return UploadResponse(
         knowledge_item_id=workflow_id,

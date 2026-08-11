@@ -29,6 +29,7 @@ def test_no_managed_ai_runtime_or_migration_remnants():
         "08_seed_data.sql", "09_owd_v1_1_tables.sql",
         "10_enterprise_document_layer.sql", "12_runtime_alignment.sql",
         "13_runtime_prerequisites.sql", "14_runtime_integrity.sql",
+        "15_active_workflow_versions.sql",
     ]
     assert all("search_service" not in name for name in migration_names)
 

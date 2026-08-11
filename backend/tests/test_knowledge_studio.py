@@ -84,7 +84,7 @@ def test_unknown_department_is_rejected_before_staging(_department_exists):
 @patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_next_version_number", return_value=3)
 @patch.object(IngestionService, "stage_file", return_value="@RAW_OWD_STAGE/SOP_INB_001/v3/hash/receive.md")
 @patch("app.api.v1.knowledge_studio.OWDCompilerPipeline.process_owd")
-@patch("app.api.v1.knowledge_studio.AIGateway.invalidate_department")
+@patch("app.api.v1.knowledge_studio.AIGateway.invalidate_all")
 def test_upload_uses_server_version_and_publishes(
     invalidate, process, stage, next_version, department_exists
 ):
@@ -104,7 +104,7 @@ def test_upload_uses_server_version_and_publishes(
     assert process.call_args.kwargs["prepared_document"].workflow.version_number == 3
     assert process.call_args.kwargs["source_filename"] == "receive.md"
     stage.assert_called_once()
-    invalidate.assert_called_once_with("dept_inbound")
+    invalidate.assert_called_once_with()
 
 
 def test_legacy_ingestion_callback_is_removed():

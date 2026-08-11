@@ -129,6 +129,8 @@ class TestOWDCompilerSubsystem(unittest.TestCase):
         statements = [str(call.args[0]).strip().upper() for call in mock_cursor.execute.call_args_list]
         self.assertEqual(statements[0], "BEGIN")
         self.assertEqual(statements[-1], "COMMIT")
+        self.assertTrue(any("SET STATUS = 'DEPRECATED'" in statement for statement in statements))
+        self.assertTrue(any("SET STATUS = 'ARCHIVED'" in statement for statement in statements))
 
     def test_pipeline_end_to_end(self):
         """Tests end-to-end OWDCompilerPipeline execution and report generation."""

@@ -26,10 +26,11 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
 
 
 def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
-    assert deploy_owd_schema.MIGRATION_FILES[-3:] == [
+    assert deploy_owd_schema.MIGRATION_FILES[-4:] == [
         "12_runtime_alignment.sql",
         "13_runtime_prerequisites.sql",
         "14_runtime_integrity.sql",
+        "15_active_workflow_versions.sql",
     ]
     assert deploy_owd_schema.ordered_migrations() == deploy_owd_schema.MIGRATION_FILES
     monkeypatch.setattr(
@@ -43,6 +44,17 @@ def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
     assert report["status"] == "FAILED"
     assert report["failed_statements"]
     assert report["schemas_created"] == []
+
+
+def test_active_version_migration_deprecates_stale_retrieval_rows():
+    sql = (
+        deploy_owd_schema.MIGRATIONS_DIR / "15_active_workflow_versions.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "ROW_NUMBER() OVER" in sql
+    assert "SET status = 'deprecated'" in sql
+    assert "SET status = 'archived'" in sql
+    assert "SET department_id = workflow.department_id" in sql
 
 
 def test_deployment_rejects_sanitized_template_credentials(monkeypatch):

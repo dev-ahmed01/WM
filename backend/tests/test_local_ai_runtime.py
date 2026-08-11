@@ -203,7 +203,9 @@ def test_candidate_query_scopes_department_and_status_before_rows_are_returned(m
     assert "wv.id AS workflow_version_id" in sql
     assert "LOWER(wv.status) IN (%s)" in sql
     assert "sm.department_id = %s" in sql
-    assert params == ["published", "dept_ops", 100, 0]
+    assert "w.department_id = %s" in sql
+    assert "MAX(candidate_version.version_number)" in sql
+    assert params == ["published", "dept_ops", "dept_ops", "published", 100, 0]
 
 
 @pytest.mark.asyncio
@@ -222,8 +224,20 @@ async def test_sql_fallback_returns_workflow_version_identity(monkeypatch):
 
     await SqlLexicalRetrievalProvider().search("receive seal", "dept_ops", 5)
 
-    sql, _ = cursor.execute.call_args.args
+    sql, params = cursor.execute.call_args.args
     assert "wv.id AS workflow_version_id" in sql
+    assert "w.department_id = %s" in sql
+    assert "MAX(candidate_version.version_number)" in sql
+    assert params[2:6] == ["published", "dept_ops", "dept_ops", "published"]
+
+
+def test_gateway_can_invalidate_all_department_indexes(monkeypatch):
+    clear = MagicMock()
+    monkeypatch.setattr(AIGateway.semantic_index, "clear", clear)
+
+    AIGateway.invalidate_all()
+
+    clear.assert_called_once_with()
 
 
 @pytest.mark.asyncio
