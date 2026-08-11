@@ -14,8 +14,18 @@ def test_legacy_generic_chunk_writers_are_not_exposed():
 
 
 def test_demo_employee_uses_a_migration_backed_content_department():
-    employee = next(user for user in SEED_USERS if user["role_name"] == "employee")
+    employee = next(user for user in SEED_USERS if user["email"] == "employee@workmate.ai")
     assert employee["department_id"] == "dept_ops"
+
+
+def test_seed_users_cover_both_retrieval_departments():
+    employee_departments = {
+        user["department_id"]
+        for user in SEED_USERS
+        if user["role_name"] == "employee"
+    }
+
+    assert {"dept_ops", "dept_inbound"} <= employee_departments
 
 
 def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
