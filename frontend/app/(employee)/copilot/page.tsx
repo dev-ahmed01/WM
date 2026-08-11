@@ -118,6 +118,9 @@ function CopilotContent() {
     decisionOption?: string,
   ) => {
     if (!workflowSessionId || isSending) return;
+    const selectedDecisionLabel = decisionOption
+      ? workflowDecisionOptions.find((option) => option.option_code === decisionOption)?.option_label
+      : undefined;
     let body: string | undefined;
     if (action === 'abandon') {
       const reason = window.prompt('Why are you abandoning this workflow?');
@@ -131,6 +134,12 @@ function CopilotContent() {
         use_fallback: false,
       });
     }
+    if (selectedDecisionLabel) {
+      setMessages((previous) => [
+        ...previous,
+        { sender: 'user', content: `Selected SOP outcome: ${selectedDecisionLabel}` },
+      ]);
+    }
     setIsSending(true);
     try {
       const updated = await apiClient<WorkflowAdvanceResponse>(
@@ -143,12 +152,15 @@ function CopilotContent() {
         setWorkflowDecisionOptions(updated.active_decision_options || []);
         setActiveStepNumber(updated.active_step_number ?? undefined);
         setActiveStepTitle(updated.active_step_title ?? undefined);
+        const outcomePrefix = selectedDecisionLabel
+          ? `Outcome recorded: ${selectedDecisionLabel}. `
+          : '';
         statusMessage = updated.status === 'completed'
-          ? 'Workflow completed.'
+          ? `${outcomePrefix}Workflow completed.`
           : updated.active_decision_options?.length
             ? `Step completed. Choose the next outcome from the active SOP below.`
             : updated.active_step_title
-              ? `Step completed. Next step: ${updated.active_step_title}`
+              ? `${outcomePrefix}Next step: ${updated.active_step_title}`
               : 'Step completed.';
       }
       setMessages((previous) => [
@@ -263,8 +275,8 @@ function CopilotContent() {
                 : activeStepNumber != null
                   ? 'Ask about this step or type "done"...'
                   : workflowDecisionOptions.length > 0
-                    ? 'Ask about the decision or use Choose outcome...'
-                  : 'Type your operational question...'
+                    ? 'Ask about the decision or select a verified outcome above...'
+                    : 'Type your operational question...'
             }
             value={input}
             disabled={isSending}
