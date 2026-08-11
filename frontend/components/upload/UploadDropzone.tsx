@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
+import { AlertCircle, ArrowRight, CheckCircle2, FileCode2, UploadCloud } from 'lucide-react';
 
 export const UploadDropzone: React.FC = () => {
   const [title, setTitle] = useState('');
@@ -112,115 +113,34 @@ export const UploadDropzone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition space-y-4 ${
-          isDragging
-            ? 'border-blue-500 bg-blue-50/80 shadow-md ring-2 ring-blue-400/50'
-            : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-        }`}
-      >
-        <div className="flex flex-col md:flex-row gap-4 text-left max-w-lg mx-auto">
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Document Title</label>
-            <input
-              type="text"
-              placeholder="e.g. Safety Valve Maintenance SOP"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={uploading || departments.length === 0}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div className="w-full md:w-44">
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Department</label>
-            <select
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              disabled={uploading}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>{department.name}</option>
-              ))}
-            </select>
-          </div>
+      <section className="wm-panel overflow-hidden">
+        <div className="grid gap-5 border-b bg-muted/35 p-5 sm:grid-cols-[1fr_15rem] sm:p-6">
+          <label><span className="wm-label">Document title</span><input type="text" placeholder="e.g. Inbound Shipment Receiving" value={title} onChange={(event) => setTitle(event.target.value)} disabled={uploading || departments.length === 0} className="wm-input" /></label>
+          <label><span className="wm-label">Department scope</span><select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} disabled={uploading} className="wm-input">{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
         </div>
 
-        <div>
-          <input
-            type="file"
-            id="file-upload"
-            className="hidden"
-            onChange={handleFileUpload}
-            disabled={uploading}
-            accept=".md,text/markdown"
-          />
-          <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
-            <svg
-              className={`w-12 h-12 mb-3 transition-colors ${
-                isDragging ? 'text-blue-600 scale-110' : 'text-gray-400'
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <span className="text-sm font-medium text-gray-700">
-              {isDragging ? 'Drop file here to upload' : 'Click to upload or drag & drop document'}
-            </span>
-            <span className="text-xs text-gray-500 mt-1">OWD Markdown (.md), UTF-8, up to 25 MB</span>
+        <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`m-5 rounded-2xl border-2 border-dashed p-8 text-center transition sm:m-6 sm:p-12 ${isDragging ? 'border-emerald-500 bg-emerald-50 ring-4 ring-emerald-100' : 'border-border bg-[#fafcfb] hover:border-emerald-300 hover:bg-emerald-50/35'}`}>
+          <input type="file" id="file-upload" className="sr-only" onChange={handleFileUpload} disabled={uploading} accept=".md,text/markdown" />
+          <label htmlFor="file-upload" className="mx-auto flex max-w-md cursor-pointer flex-col items-center">
+            <span className={`grid h-14 w-14 place-items-center rounded-2xl transition ${isDragging ? 'scale-105 bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'}`}><UploadCloud className="h-6 w-6" /></span>
+            <span className="mt-4 text-sm font-semibold text-foreground">{isDragging ? 'Release to upload this workflow' : 'Drop your OWD Markdown file here'}</span>
+            <span className="mt-1 text-xs leading-5 text-muted-foreground">or click to choose a file · UTF-8 `.md` · maximum 25 MB</span>
           </label>
+
+          {uploading ? <div className="mx-auto mt-6 max-w-md"><div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground"><span>Validating and compiling</span><span>{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-600 transition-all duration-300" style={{ width: `${progress}%` }} /></div></div> : null}
+          {message && !errorDetails && !uploadedDocId ? <p className="mt-4 text-xs font-medium text-muted-foreground" aria-live="polite">{message}</p> : null}
         </div>
 
-        {uploading && (
-          <div className="mt-4 w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
-
-        {message && !errorDetails && !uploadedDocId && (
-          <p className="mt-3 text-xs text-gray-600 font-medium">{message}</p>
-        )}
-      </div>
-
-      {errorDetails && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md text-sm">
-          <p className="font-semibold mb-1">Upload Compilation Error</p>
-          <p>{errorDetails}</p>
+        <div className="grid gap-3 border-t bg-muted/25 px-5 py-4 text-xs text-muted-foreground sm:grid-cols-3 sm:px-6">
+          <span className="flex items-center gap-2"><FileCode2 className="h-4 w-4 text-emerald-700" />Parse OWD structure</span>
+          <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-700" />Validate all transitions</span>
+          <span className="flex items-center gap-2"><ArrowRight className="h-4 w-4 text-emerald-700" />Publish atomically</span>
         </div>
-      )}
+      </section>
 
-      {uploadedDocId && (
-        <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-md text-sm space-y-3">
-          <p className="font-semibold">{message}</p>
-          <div className="flex gap-3">
-            <a
-              href={`/knowledge-studio/${uploadedDocId}`}
-              className="inline-block bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-blue-700"
-            >
-              View Document Details
-            </a>
-            <a
-              href="/knowledge-studio"
-              className="inline-block bg-gray-100 text-gray-800 border border-gray-300 px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-200"
-            >
-              Back to Knowledge Studio
-            </a>
-          </div>
-        </div>
-      )}
+      {errorDetails ? <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-5 w-5 flex-none" /><div><p className="font-semibold">Compilation failed</p><p className="mt-1 leading-5">{errorDetails}</p></div></div> : null}
+
+      {uploadedDocId ? <div className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-emerald-700" /><div><p className="font-semibold">Workflow published</p><p className="mt-1 text-xs leading-5 text-emerald-800">{message}</p></div></div><div className="flex flex-none gap-2"><a href="/knowledge-studio" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold">Library</a><a href={`/knowledge-studio/${uploadedDocId}`} className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">View workflow</a></div></div> : null}
     </div>
   );
 };

@@ -1,124 +1,78 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRequireRole } from '@/lib/auth';
-import { apiClient, PaginatedKnowledgeItems, KnowledgeItemDetail } from '@/lib/api-client';
 import Link from 'next/link';
+import { ArrowUpRight, BookOpenText, Layers3, Plus, Search } from 'lucide-react';
+import { useRequireRole } from '@/lib/auth';
+import { apiClient, type PaginatedKnowledgeItems } from '@/lib/api-client';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export default function KnowledgeStudioPage() {
   const { loading: authLoading } = useRequireRole(['admin']);
   const [data, setData] = useState<PaginatedKnowledgeItems | null>(null);
-  const [loadingData, setLoadingData] = useState<boolean>(true);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    async function fetchKnowledgeItems() {
-      try {
-        setLoadingData(true);
-        setError(null);
-        const res = await apiClient<PaginatedKnowledgeItems>('/knowledge');
-        setData(res);
-      } catch (err: any) {
-        console.error('Failed to load knowledge items:', err);
-        setError(err?.message || 'Failed to load knowledge documents.');
-      } finally {
-        setLoadingData(false);
-      }
-    }
-
-    if (!authLoading) {
-      fetchKnowledgeItems();
-    }
+    if (authLoading) return;
+    apiClient<PaginatedKnowledgeItems>('/knowledge')
+      .then(setData)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : 'Failed to load knowledge documents.'))
+      .finally(() => setLoadingData(false));
   }, [authLoading]);
 
-  if (authLoading || loadingData) {
-    return <div className="p-8">Loading Knowledge Studio...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="p-8 max-w-6xl mx-auto">
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-          <p className="font-semibold">Error Loading Documents</p>
-          <p className="text-sm">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const items = data?.items || [];
+  if (authLoading || loadingData) return <LoadingState label="Loading Knowledge Studio" />;
+  const items = (data?.items || []).filter((detail) => detail.item.title.toLowerCase().includes(query.trim().toLowerCase()) || detail.item.department_id.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Knowledge Studio</h1>
-        <Link
-          href="/knowledge-studio/upload"
-          className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
-        >
-          Upload New Document
-        </Link>
+    <div className="wm-page space-y-7">
+      <PageHeader eyebrow="Knowledge operations" title="Knowledge studio" description="Publish and govern the verified SOPs that power employee guidance." action={<Button asChild><Link href="/knowledge-studio/upload"><Plus className="h-4 w-4" />Upload SOP</Link></Button>} />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="wm-panel p-4"><p className="text-xs font-semibold text-muted-foreground">Documents</p><p className="mt-3 text-2xl font-semibold tracking-tight">{data?.total || 0}</p></div>
+        <div className="wm-panel p-4"><p className="text-xs font-semibold text-muted-foreground">Published</p><p className="mt-3 text-2xl font-semibold tracking-tight text-emerald-700">{(data?.items || []).filter((item) => item.published_version).length}</p></div>
+        <div className="wm-panel p-4"><p className="text-xs font-semibold text-muted-foreground">Departments</p><p className="mt-3 text-2xl font-semibold tracking-tight">{new Set((data?.items || []).map((item) => item.item.department_id)).size}</p></div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-lg p-12 text-center text-gray-500">
-          <p className="text-lg font-medium mb-2">No documents found</p>
-          <p className="text-sm mb-4">Get started by uploading your first SOP, policy, or manual.</p>
-          <Link
-            href="/knowledge-studio/upload"
-            className="inline-block bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
-          >
-            Upload Document
-          </Link>
-        </div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 font-semibold uppercase">
-                <th className="p-4">Title</th>
-                <th className="p-4">Department</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Version</th>
-                <th className="p-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 text-sm text-gray-700">
-              {items.map((detail: KnowledgeItemDetail) => {
-                const activeVer = detail.published_version || detail.latest_version;
-                const statusStr = activeVer?.status?.toUpperCase() || 'UNKNOWN';
-                const versionNum = activeVer?.version_number ? `v1.${activeVer.version_number - 1}` : 'v1.0';
+      {error ? <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><p className="font-semibold">Documents unavailable</p><p className="mt-1">{error}</p></div> : null}
 
-                return (
-                  <tr key={detail.item.id}>
-                    <td className="p-4 font-medium">{detail.item.title}</td>
-                    <td className="p-4">{detail.item.department_id}</td>
-                    <td className="p-4">
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                          statusStr === 'PUBLISHED'
-                            ? 'bg-green-100 text-green-800'
-                            : statusStr === 'STAGED' || statusStr === 'PROCESSED'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {statusStr}
-                      </span>
-                    </td>
-                    <td className="p-4">{versionNum}</td>
-                    <td className="p-4">
-                      <Link href={`/knowledge-studio/${detail.item.id}`} className="text-blue-600 hover:underline">
-                        View / Edit
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {!error ? (
+        <section className="wm-panel overflow-hidden">
+          <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div><h2 className="text-sm font-semibold">SOP library</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Published and staged operational knowledge</p></div>
+            <label className="relative block w-full sm:w-72"><span className="sr-only">Search SOP library</span><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="wm-input h-9 pl-9 text-xs" placeholder="Search title or department" /></label>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-muted text-muted-foreground"><BookOpenText className="h-5 w-5" /></span><p className="mt-3 text-sm font-semibold">{query ? 'No matching SOPs' : 'No SOPs published yet'}</p><p className="mt-1 text-xs text-muted-foreground">{query ? 'Try a different title or department.' : 'Upload an OWD Markdown file to begin.'}</p></div></div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left">
+                <thead className="bg-muted/60 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"><tr><th className="px-5 py-3">Workflow</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Version</th><th className="px-5 py-3 text-right">Open</th></tr></thead>
+                <tbody className="divide-y divide-border/70">
+                  {items.map((detail) => {
+                    const activeVersion = detail.published_version || detail.latest_version;
+                    const status = activeVersion?.status?.toLowerCase() || 'unknown';
+                    return (
+                      <tr key={detail.item.id} className="group transition hover:bg-emerald-50/35">
+                        <td className="px-5 py-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-muted text-muted-foreground group-hover:bg-emerald-100 group-hover:text-emerald-700"><Layers3 className="h-4 w-4" /></span><div><p className="text-sm font-semibold text-foreground">{detail.item.title}</p>{detail.item.workflow_code ? <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{detail.item.workflow_code}</p> : null}</div></div></td>
+                        <td className="px-4 py-4 text-xs text-muted-foreground">{detail.item.department_id}</td>
+                        <td className="px-4 py-4"><Badge variant={status === 'published' ? 'default' : status === 'staged' || status === 'processed' ? 'warning' : 'neutral'}>{status}</Badge></td>
+                        <td className="px-4 py-4 text-xs font-medium">v{activeVersion?.version_number || 1}</td>
+                        <td className="px-5 py-4 text-right"><Link href={`/knowledge-studio/${detail.item.id}`} aria-label={`Open ${detail.item.title}`} className="inline-grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-white hover:text-emerald-700 hover:shadow-sm"><ArrowUpRight className="h-4 w-4" /></Link></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

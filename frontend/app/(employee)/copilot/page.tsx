@@ -1,17 +1,25 @@
 'use client';
 
-import React, { useCallback, useState, useEffect, Suspense } from 'react';
-import { Mic, MicOff } from 'lucide-react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Radio, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { ChatThread } from '@/components/chat/ChatThread';
+import { apiClient, type CopilotConversationDetail, type CopilotResponse, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { WorkflowRail } from '@/components/chat/WorkflowRail';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { Badge } from '@/components/ui/badge';
 import { useSpeechRecognition, useSpeechSynthesis } from '@/hooks/useWebSpeech';
-import {
-  apiClient,
-  CopilotConversationDetail,
-  CopilotResponse,
-  WorkflowAdvanceResponse,
-} from '@/lib/api-client';
+
+function createMessageId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 function CopilotContent() {
   const { user, loading } = useRequireRole(['employee', 'admin', 'manager']);
@@ -26,14 +34,15 @@ function CopilotContent() {
   const [activeStepNumber, setActiveStepNumber] = useState<number | undefined>();
   const [activeStepTitle, setActiveStepTitle] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
-  const [messages, setMessages] = useState<
-    Array<{ sender: 'user' | 'assistant'; content: string; copilotData?: CopilotResponse }>
-  >([
+  const [abandonOpen, setAbandonOpen] = useState(false);
+  const [abandonReason, setAbandonReason] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
+      id: 'welcome',
       sender: 'assistant',
       content: sessionId
-        ? `Resuming session ${sessionId}... Fetching active operational context.`
-        : 'Welcome to WorkMate Copilot. Ask a question or request guidance on an operational SOP.',
+        ? 'Restoring this session and its active operational context…'
+        : 'Tell me what you are working on. I’ll find the verified SOP, keep you on the current step, and explain any rule that applies.',
     },
   ]);
 
@@ -46,7 +55,6 @@ function CopilotContent() {
   useEffect(() => {
     async function resumeSession() {
       if (!sessionId || loading) return;
-
       try {
         const history = await apiClient<CopilotConversationDetail>(`/copilot/history/${sessionId}`);
         setConversationId(sessionId);
@@ -56,67 +64,41 @@ function CopilotContent() {
         setActiveStepNumber(history.active_step_number ?? undefined);
         setActiveStepTitle(history.active_step_title ?? undefined);
         setMessages(history.messages.map((message) => ({
+          id: message.id,
           sender: message.sender === 'employee' ? 'user' : 'assistant',
           content: message.content,
         })));
-      } catch (err: any) {
-        setMessages([{ sender: 'assistant', content: err.message || 'Unable to load the conversation.' }]);
+      } catch (error) {
+        setMessages([{ id: 'resume-error', sender: 'assistant', content: getErrorMessage(error, 'Unable to load the conversation.') }]);
       }
     }
-
     resumeSession();
   }, [sessionId, loading]);
 
-  if (loading) return <div className="p-8">Loading context...</div>;
+  if (loading) return <LoadingState label="Loading Copilot workspace" />;
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return;
-
-    const userMsg = input.trim();
+    const userMessage = input.trim();
     speechRecognition.stopListening();
     setInput('');
     setIsSending(true);
-
-    // Optimistic user message addition
-    setMessages((prev) => [
-      ...prev,
-      { sender: 'user', content: userMsg },
-    ]);
+    setMessages((current) => [...current, { id: createMessageId('user'), sender: 'user', content: userMessage }]);
 
     try {
       const response = await apiClient<CopilotResponse>('/copilot/message', {
         method: 'POST',
-        body: JSON.stringify({
-          message: userMsg,
-          conversation_id: conversationId,
-        }),
+        body: JSON.stringify({ message: userMessage, conversation_id: conversationId }),
       });
-
-      if (response.conversation_id) {
-        setConversationId(response.conversation_id);
-      }
+      setConversationId(response.conversation_id || conversationId);
       setWorkflowSessionId(response.active_session_id ?? undefined);
       setWorkflowSessionStatus(response.active_session_status ?? undefined);
       setWorkflowDecisionOptions(response.active_decision_options || []);
       setActiveStepNumber(response.active_step_number ?? undefined);
       setActiveStepTitle(response.active_step_title ?? undefined);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'assistant',
-          content: response.answer,
-          copilotData: response,
-        },
-      ]);
-    } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'assistant',
-          content: `Error connecting to Copilot service: ${err.message || 'An unexpected error occurred.'}`,
-        },
-      ]);
+      setMessages((current) => [...current, { id: response.message_id || createMessageId('assistant'), sender: 'assistant', content: response.answer, copilotData: response }]);
+    } catch (error) {
+      setMessages((current) => [...current, { id: createMessageId('error'), sender: 'assistant', content: getErrorMessage(error, 'WorkMate could not reach the Copilot service. Please try again.') }]);
     } finally {
       setIsSending(false);
     }
@@ -125,6 +107,7 @@ function CopilotContent() {
   const handleWorkflowAction = async (
     action: 'pause' | 'resume' | 'advance' | 'abandon',
     decisionOption?: string,
+    reason?: string,
   ) => {
     if (!workflowSessionId || isSending) return;
     const selectedDecisionLabel = decisionOption
@@ -132,224 +115,119 @@ function CopilotContent() {
       : undefined;
     let body: string | undefined;
     if (action === 'abandon') {
-      const reason = window.prompt('Why are you abandoning this workflow?');
       if (!reason?.trim()) return;
       body = JSON.stringify({ reason: reason.trim() });
     } else if (action === 'advance') {
-      body = JSON.stringify({
-        decision_option: decisionOption,
-        rule_results: {},
-        values: {},
-        use_fallback: false,
-      });
+      body = JSON.stringify({ decision_option: decisionOption, rule_results: {}, values: {}, use_fallback: false });
     }
+
     if (selectedDecisionLabel) {
-      setMessages((previous) => [
-        ...previous,
-        { sender: 'user', content: `Selected SOP outcome: ${selectedDecisionLabel}` },
-      ]);
+      setMessages((current) => [...current, { id: createMessageId('decision'), sender: 'user', content: `Observed outcome: ${selectedDecisionLabel}` }]);
     }
     setIsSending(true);
     try {
-      const updated = await apiClient<WorkflowAdvanceResponse>(
-        `/copilot/session/${workflowSessionId}/${action}`,
-        { method: 'POST', body },
-      );
+      const updated = await apiClient<WorkflowAdvanceResponse>(`/copilot/session/${workflowSessionId}/${action}`, { method: 'POST', body });
       setWorkflowSessionStatus(updated.status);
-      let statusMessage = `Workflow session ${updated.status}.`;
+      let statusMessage = `Workflow ${updated.status}.`;
       if (action === 'advance') {
         setWorkflowDecisionOptions(updated.active_decision_options || []);
         setActiveStepNumber(updated.active_step_number ?? undefined);
         setActiveStepTitle(updated.active_step_title ?? undefined);
-        const outcomePrefix = selectedDecisionLabel
-          ? `Outcome recorded: ${selectedDecisionLabel}. `
-          : '';
+        const outcomePrefix = selectedDecisionLabel ? `Outcome recorded: ${selectedDecisionLabel}. ` : '';
         statusMessage = updated.status === 'completed'
           ? `${outcomePrefix}Workflow completed.`
           : updated.active_decision_options?.length
-            ? `Step completed. Choose the next outcome from the active SOP below.`
+            ? 'Step complete. Select the verified outcome you observed.'
             : updated.active_step_title
               ? `${outcomePrefix}Next step: ${updated.active_step_title}`
-              : 'Step completed.';
+              : 'Step complete.';
       }
-      setMessages((previous) => [
-        ...previous,
-        { sender: 'assistant', content: statusMessage },
-      ]);
-    } catch (err: any) {
-      setMessages((previous) => [
-        ...previous,
-        { sender: 'assistant', content: err.message || `Unable to ${action} the workflow.` },
-      ]);
+      setMessages((current) => [...current, { id: createMessageId('workflow'), sender: 'assistant', content: statusMessage }]);
+      if (action === 'abandon') {
+        setAbandonOpen(false);
+        setAbandonReason('');
+      }
+    } catch (error) {
+      setMessages((current) => [...current, { id: createMessageId('action-error'), sender: 'assistant', content: getErrorMessage(error, `Unable to ${action} the workflow.`) }]);
     } finally {
       setIsSending(false);
     }
   };
 
+  const composerPlaceholder = isSending
+    ? 'Checking published guidance…'
+    : activeStepNumber != null
+      ? 'Ask about this step or type “done”…'
+      : workflowDecisionOptions.length > 0
+        ? 'Ask about the decision or select an outcome…'
+        : 'Describe the task, issue, or SOP you need…';
+
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-white">
-      <header className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-slate-50">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            WorkMate Copilot
-            {conversationId && (
-              <span className="text-xs bg-blue-100 text-blue-800 font-normal px-2 py-0.5 rounded">
-                Session: {conversationId}
-              </span>
-            )}
-          </h1>
-          <p className="text-xs text-gray-500">Enterprise Operational Guidance Engine</p>
+    <div className="flex h-[calc(100dvh-4rem)] min-h-[38rem] flex-col overflow-hidden bg-white">
+      <header className="flex flex-none items-center justify-between gap-4 border-b border-border/80 bg-white px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">Operational Copilot</h1>
+            <Badge className="hidden sm:inline-flex"><Radio className="h-3 w-3" />Live</Badge>
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id || 'your department'}</p>
         </div>
-        <div className="flex items-center space-x-2">
-          {workflowSessionId && workflowSessionStatus === 'active' && (
-            <>
-              {workflowDecisionOptions.length === 0 && (
-                <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
-                  Complete step
-                </button>
-              )}
-              <button onClick={() => handleWorkflowAction('pause')} className="text-xs border px-2.5 py-1 rounded bg-white">
-                Pause workflow
-              </button>
-            </>
-          )}
-          {workflowSessionId && workflowSessionStatus === 'paused' && (
-            <button onClick={() => handleWorkflowAction('resume')} className="text-xs border px-2.5 py-1 rounded bg-white">
-              Resume workflow
-            </button>
-          )}
-          {workflowSessionId && ['active', 'paused'].includes(workflowSessionStatus || '') && (
-            <button onClick={() => handleWorkflowAction('abandon')} className="text-xs border border-red-200 text-red-700 px-2.5 py-1 rounded bg-white">
-              Abandon
-            </button>
-          )}
-          <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-1 rounded border border-blue-200">
-            Role: {user?.role}
-          </span>
-          <span className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded border border-gray-200">
-            Dept: {user?.department_id || 'GENERAL'}
-          </span>
+        <div className="flex flex-none items-center gap-2">
+          {conversationId ? <span className="hidden max-w-44 truncate rounded-lg bg-muted px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground md:block">{conversationId}</span> : null}
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-700" title="Grounded reasoning enabled"><Sparkles className="h-4 w-4" /></span>
         </div>
       </header>
-      {workflowSessionId
-        && ['active', 'paused'].includes(workflowSessionStatus || '')
-        && activeStepTitle
-        && (activeStepNumber != null || workflowDecisionOptions.length > 0) && (
-        <section
-          aria-label="Current workflow step"
-          aria-live="polite"
-          className="mx-4 mt-4 flex-none rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
-        >
-          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-            {activeStepNumber != null ? `Current step ${activeStepNumber}` : 'Decision required'}
-          </div>
-          <p className="mt-1 text-sm font-medium">{activeStepTitle}</p>
-          {workflowDecisionOptions.length === 0 ? (
-            <p className="mt-1 text-xs text-blue-700">
-              Complete this step only, then type &quot;done&quot; or select Complete step to continue.
-            </p>
-          ) : (
-            <div className="mt-2">
-              <p className="text-xs text-blue-700">
-                These outcomes come directly from the active SOP. Select the result you observed:
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2" aria-label="Verified SOP outcomes">
-                {workflowDecisionOptions.map((option) => (
-                  <button
-                    key={option.option_code}
-                    type="button"
-                    disabled={isSending}
-                    onClick={() => handleWorkflowAction('advance', option.option_code)}
-                    className="rounded-md border border-blue-300 bg-white px-3 py-2 text-left text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50"
-                  >
-                    {option.option_label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-      <main className="min-h-0 flex-1 overflow-hidden p-4">
-        <ChatThread
-          messages={messages}
-          onSpeak={speechSynthesis.speak}
-          speakingMessageKey={speechSynthesis.speakingKey}
-          speechSupported={speechSynthesis.isSupported}
-        />
-      </main>
-      <footer className="flex-none p-4 border-t border-gray-200 bg-slate-50">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            placeholder={
-              isSending
-                ? 'Copilot is processing...'
-                : activeStepNumber != null
-                  ? 'Ask about this step or type "done"...'
-                  : workflowDecisionOptions.length > 0
-                    ? 'Ask about the decision or select a verified outcome above...'
-                    : 'Type your operational question...'
-            }
+
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_21rem] lg:grid-rows-1">
+        <section className="order-2 flex min-h-0 flex-col lg:order-1" aria-label="Copilot conversation">
+          <main className="min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(209,250,229,0.22),transparent_28rem)]">
+            <ChatThread messages={messages} busy={isSending} onSpeak={speechSynthesis.speak} speakingMessageKey={speechSynthesis.speakingKey} speechSupported={speechSynthesis.isSupported} />
+          </main>
+          <ChatComposer
             value={input}
-            disabled={isSending}
-            aria-describedby="voice-input-status"
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder={composerPlaceholder}
+            busy={isSending}
+            listening={speechRecognition.isListening}
+            speechSupported={speechRecognition.isSupported}
+            speechError={speechRecognition.error}
+            onChange={setInput}
+            onSend={handleSend}
+            onToggleListening={speechRecognition.toggleListening}
           />
-          <button
-            type="button"
-            onClick={speechRecognition.toggleListening}
-            disabled={isSending || !speechRecognition.isSupported}
-            aria-label={
-              !speechRecognition.isSupported
-                ? 'Voice input is not supported in this browser'
-                : speechRecognition.isListening
-                  ? 'Stop voice input'
-                  : 'Start voice input'
-            }
-            aria-pressed={speechRecognition.isListening}
-            title={speechRecognition.isSupported
-              ? 'Speak your question using your browser speech service'
-              : 'Voice input is not supported in this browser'}
-            className={`inline-flex min-w-11 items-center justify-center rounded-lg border px-3 py-2 transition disabled:cursor-not-allowed disabled:opacity-40 ${
-              speechRecognition.isListening
-                ? 'border-red-300 bg-red-50 text-red-700'
-                : 'border-gray-300 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700'
-            }`}
-          >
-            {speechRecognition.isListening
-              ? <MicOff aria-hidden="true" size={18} />
-              : <Mic aria-hidden="true" size={18} />}
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={isSending}
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
-          >
-            {isSending ? 'Sending...' : 'Send'}
-          </button>
+        </section>
+        <div className="order-1 max-h-[18rem] min-h-0 overflow-hidden lg:order-2 lg:max-h-none">
+          <WorkflowRail
+            sessionId={workflowSessionId}
+            status={workflowSessionStatus}
+            stepNumber={activeStepNumber}
+            stepTitle={activeStepTitle}
+            decisionOptions={workflowDecisionOptions}
+            busy={isSending}
+            onAdvance={(decisionOption) => handleWorkflowAction('advance', decisionOption)}
+            onPause={() => handleWorkflowAction('pause')}
+            onResume={() => handleWorkflowAction('resume')}
+            onAbandon={() => setAbandonOpen(true)}
+          />
         </div>
-        <div
-          id="voice-input-status"
-          aria-live="polite"
-          className={`mt-1 min-h-4 text-xs ${speechRecognition.error ? 'text-red-600' : 'text-slate-500'}`}
-        >
-          {speechRecognition.error
-            || (speechRecognition.isListening
-              ? 'Listening… Speak now, then review the transcript before sending.'
-              : '')}
-        </div>
-      </footer>
+      </div>
+
+      <ConfirmDialog
+        open={abandonOpen}
+        title="Abandon this workflow?"
+        description="The current session will be closed and cannot be resumed. Add a short reason for the operational record."
+        confirmLabel="Abandon workflow"
+        busy={isSending}
+        value={abandonReason}
+        valueLabel="Reason"
+        valuePlaceholder="Why is this workflow being abandoned?"
+        onValueChange={setAbandonReason}
+        onConfirm={() => handleWorkflowAction('abandon', undefined, abandonReason)}
+        onClose={() => !isSending && setAbandonOpen(false)}
+      />
     </div>
   );
 }
 
 export default function CopilotPage() {
-  return (
-    <Suspense fallback={<div className="p-8">Loading Copilot...</div>}>
-      <CopilotContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<LoadingState label="Loading Copilot" />}><CopilotContent /></Suspense>;
 }

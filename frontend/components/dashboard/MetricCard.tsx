@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 
 interface MetricCardProps {
   title: string;
@@ -7,25 +8,15 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'neutral';
 }
 
-export const MetricCard: React.FC<MetricCardProps> = ({ title, value, change, trend }) => {
-  const trendColor =
-    trend === 'up'
-      ? 'bg-green-100 text-green-800'
-      : trend === 'down'
-      ? 'bg-red-100 text-red-800'
-      : 'bg-gray-100 text-gray-800';
-
+export function MetricCard({ title, value, change, trend = 'neutral' }: MetricCardProps) {
+  const TrendIcon = trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
   return (
-    <div className="p-6 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
-      <span className="text-sm font-medium text-gray-500">{title}</span>
-      <div className="mt-2 flex items-baseline justify-between">
-        <span className="text-3xl font-bold text-gray-900">{value}</span>
-        {change && (
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${trendColor}`}>
-            {change}
-          </span>
-        )}
+    <div className="wm-panel flex min-h-32 flex-col justify-between p-5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-muted-foreground">{title}</span>
+        {change ? <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${trend === 'up' ? 'bg-emerald-50 text-emerald-700' : trend === 'down' ? 'bg-red-50 text-red-700' : 'bg-muted text-muted-foreground'}`}><TrendIcon className="h-3 w-3" />{change}</span> : null}
       </div>
+      <span className="mt-5 text-2xl font-semibold tracking-[-0.035em] text-foreground">{value}</span>
     </div>
   );
-};
+}

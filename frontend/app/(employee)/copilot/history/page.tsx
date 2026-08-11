@@ -1,119 +1,67 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRequireRole } from '@/lib/auth';
-import { apiClient, CopilotHistoryResponse, CopilotSessionSummary } from '@/lib/api-client';
 import Link from 'next/link';
-import { ArrowRight, History } from 'lucide-react';
+import { ArrowUpRight, Clock3, History, MessageSquareText, Plus } from 'lucide-react';
+import { useRequireRole } from '@/lib/auth';
+import { apiClient, type CopilotHistoryResponse } from '@/lib/api-client';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export default function CopilotHistoryPage() {
   const { loading: authLoading } = useRequireRole(['employee', 'admin', 'manager']);
   const [historyData, setHistoryData] = useState<CopilotHistoryResponse | null>(null);
-  const [loadingData, setLoadingData] = useState<boolean>(true);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchHistory() {
-      try {
-        setLoadingData(true);
-        setError(null);
-        const res = await apiClient<CopilotHistoryResponse>('/copilot/history');
-        setHistoryData(res);
-      } catch (err: any) {
-        console.error('Failed to load copilot session history:', err);
-        setError(err?.message || 'Failed to load conversation history.');
-      } finally {
-        setLoadingData(false);
-      }
-    }
-
-    if (!authLoading) {
-      fetchHistory();
-    }
+    if (authLoading) return;
+    apiClient<CopilotHistoryResponse>('/copilot/history')
+      .then(setHistoryData)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : 'Failed to load conversation history.'))
+      .finally(() => setLoadingData(false));
   }, [authLoading]);
 
-  if (authLoading || loadingData) {
-    return <div className="p-8">Loading session history...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Copilot Conversation History</h1>
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-          <p className="font-semibold">Error Loading History</p>
-          <p className="text-sm">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (authLoading || loadingData) return <LoadingState label="Loading session history" />;
   const sessions = historyData?.sessions || [];
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <History className="h-6 w-6 text-blue-600" />
-            Copilot Session History
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Select a past session card to resume context and operational guidance.</p>
-        </div>
-        <Link
-          href="/copilot"
-          className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition"
-        >
-          New Chat
-        </Link>
-      </div>
+    <div className="wm-page space-y-7">
+      <PageHeader
+        eyebrow="Continuity"
+        title="Session history"
+        description="Return to earlier operational conversations with their workflow context intact."
+        action={<Button asChild><Link href="/copilot"><Plus className="h-4 w-4" />New session</Link></Button>}
+      />
 
-      {sessions.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-lg p-12 text-center text-gray-500">
-          <p className="text-lg font-medium mb-2">No Past Conversations</p>
-          <p className="text-sm mb-4">You have not started any Copilot operational guidance sessions yet.</p>
-          <Link
-            href="/copilot"
-            className="inline-block bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition"
-          >
-            Start Copilot Session
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {sessions.map((sess: CopilotSessionSummary) => {
-            const formattedDate = sess.started_at
-              ? new Date(sess.started_at).toLocaleString()
-              : 'Recently';
-            const statusUpper = sess.status ? sess.status.charAt(0).toUpperCase() + sess.status.slice(1) : 'Active';
+      {error ? <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><p className="font-semibold">History unavailable</p><p className="mt-1">{error}</p></div> : null}
 
+      {!error && sessions.length === 0 ? (
+        <div className="wm-panel grid min-h-80 place-items-center p-8 text-center">
+          <div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700"><History className="h-5 w-5" /></span><h2 className="mt-4 text-lg font-semibold">No sessions yet</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Start with an operational question and WorkMate will keep the conversation here for later.</p><Button asChild className="mt-5"><Link href="/copilot">Open Copilot</Link></Button></div>
+        </div>
+      ) : null}
+
+      {sessions.length > 0 ? (
+        <div className="grid gap-3">
+          {sessions.map((session) => {
+            const date = session.started_at ? new Date(session.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Recently';
             return (
-              <Link
-                key={sess.id}
-                href={`/copilot?session=${encodeURIComponent(sess.id)}`}
-                className="block p-5 bg-white border border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-md transition group"
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-gray-900 group-hover:text-blue-600 transition flex items-center gap-2">
-                    {sess.title || `Session #${sess.id}`}
-                    <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
-                  </span>
-                  <span className="text-xs text-gray-400">{formattedDate}</span>
+              <Link key={session.id} href={`/copilot?session=${encodeURIComponent(session.id)}`} className="group wm-panel flex flex-col gap-4 p-4 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lift sm:flex-row sm:items-center sm:p-5">
+                <span className="grid h-11 w-11 flex-none place-items-center rounded-xl bg-muted text-muted-foreground transition group-hover:bg-emerald-50 group-hover:text-emerald-700"><MessageSquareText className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-sm font-semibold text-foreground">{session.title || 'Operational guidance session'}</h2><Badge variant={session.status === 'active' ? 'default' : 'neutral'}>{session.status || 'active'}</Badge></div>
+                  {session.last_message_preview ? <p className="mt-1.5 line-clamp-1 text-xs text-muted-foreground">{session.last_message_preview}</p> : null}
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground"><span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{date}</span><span className="font-mono">{session.id}</span></div>
                 </div>
-                <p className="text-sm text-gray-600">
-                  Session ID: <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">{sess.id}</code> • Status:{' '}
-                  <span className="font-medium text-slate-800">{statusUpper}</span>
-                </p>
-                {sess.last_message_preview && (
-                  <p className="text-xs text-gray-500 italic mt-2 border-t pt-2 border-gray-100">
-                    &quot;{sess.last_message_preview}&quot;
-                  </p>
-                )}
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-xl border bg-white text-muted-foreground transition group-hover:border-emerald-200 group-hover:text-emerald-700"><ArrowUpRight className="h-4 w-4" /></span>
               </Link>
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

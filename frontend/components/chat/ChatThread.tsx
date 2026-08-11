@@ -1,110 +1,106 @@
 import React, { useEffect, useRef } from 'react';
-import { Square, Volume2 } from 'lucide-react';
-import { CopilotResponse } from '@/lib/api-client';
+import { Bot, ChevronDown, CircleAlert, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
+import type { CopilotResponse } from '@/lib/api-client';
+import { Badge } from '@/components/ui/badge';
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  content: string;
+  copilotData?: CopilotResponse;
+}
 
 interface ChatThreadProps {
-  messages: Array<{
-    sender: 'user' | 'assistant';
-    content: string;
-    copilotData?: CopilotResponse;
-  }>;
+  messages: ChatMessage[];
+  busy: boolean;
   speechSupported: boolean;
   speakingMessageKey: string | null;
   onSpeak: (text: string, messageKey: string) => void;
 }
 
-export const ChatThread: React.FC<ChatThreadProps> = ({
-  messages,
-  onSpeak,
-  speakingMessageKey,
-  speechSupported,
-}) => {
+export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speechSupported }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-
     container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, busy]);
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className="flex h-full min-h-0 flex-col space-y-4 overflow-y-auto p-4"
-      aria-live="polite"
-    >
-      {messages.map((msg, index) => {
-        const messageKey = `assistant-${index}`;
-        const isSpeaking = speakingMessageKey === messageKey;
-        return (
-          <div
-            key={index}
-            className={`flex flex-col max-w-2xl ${
-              msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
-            }`}
-          >
-          {/* Message Bubble */}
-          <div
-            className={`whitespace-pre-wrap break-words p-4 rounded-lg shadow-sm text-sm ${
-              msg.sender === 'user'
-                ? 'bg-blue-600 text-white rounded-br-none'
-                : 'bg-gray-100 text-gray-800 rounded-bl-none border border-gray-200'
-            }`}
-          >
-            {msg.content}
+    <div ref={scrollContainerRef} className="h-full min-h-0 overflow-y-auto" role="log" aria-live="polite" aria-busy={busy}>
+      <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+        {messages.map((message) => {
+          const assistant = message.sender === 'assistant';
+          const isSpeaking = speakingMessageKey === message.id;
+          const data = message.copilotData;
+          return (
+            <article key={message.id} className={`flex gap-3 ${assistant ? 'items-start' : 'items-start justify-end'}`}>
+              {assistant ? (
+                <span className="mt-0.5 grid h-8 w-8 flex-none place-items-center rounded-xl bg-[#102a22] text-emerald-300 shadow-sm"><Bot className="h-4 w-4" aria-hidden="true" /></span>
+              ) : null}
+              <div className={`min-w-0 ${assistant ? 'max-w-[min(46rem,calc(100%-2.75rem))]' : 'max-w-[min(38rem,82%)]'}`}>
+                <div className={`rounded-2xl px-4 py-3.5 text-[14px] leading-6 sm:px-5 ${assistant ? 'rounded-tl-md border border-border/80 bg-white text-foreground shadow-panel' : 'rounded-tr-md bg-[#123c30] text-white shadow-sm'}`}>
+                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
 
-            {/* Citations section */}
-            {msg.copilotData?.citations && msg.copilotData.citations.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-gray-300 text-xs text-gray-700">
-                <span className="font-semibold block mb-1">Verified source:</span>
-                <ul className="list-disc pl-4 space-y-1">
-                  {msg.copilotData.citations.map((cite, i) => (
-                    <li key={i}>
-                      <span className="font-semibold">{cite.document_title}</span>
-                      {' '}· version {cite.version_number}
-                      {cite.step_number ? ` · workflow state ${cite.step_number}` : ''}
-                    </li>
-                  ))}
-                </ul>
+                  {assistant && data?.citations?.length ? (
+                    <details className="group mt-4 border-t border-border/70 pt-3">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-semibold text-muted-foreground transition hover:text-foreground">
+                        <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />{data.citations.length} verified {data.citations.length === 1 ? 'source' : 'sources'}</span>
+                        <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+                      </summary>
+                      <ul className="mt-3 space-y-2">
+                        {data.citations.map((citation) => (
+                          <li key={citation.chunk_id} className="rounded-xl bg-muted/70 p-3">
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <span className="font-semibold text-foreground">{citation.document_title}</span>
+                              <span className="text-muted-foreground">v{citation.version_number}</span>
+                              {citation.step_number ? <span className="text-muted-foreground">· state {citation.step_number}</span> : null}
+                            </div>
+                            {citation.excerpt ? <p className="mt-1.5 line-clamp-2 text-[10px] leading-4 text-muted-foreground">{citation.excerpt}</p> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                </div>
+
+                {assistant ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+                    {data ? (
+                      <>
+                        <Badge variant={data.is_grounded ? 'default' : 'warning'}>
+                          {data.is_grounded ? <ShieldCheck className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
+                          {data.is_grounded ? 'Grounded' : 'Needs review'}
+                        </Badge>
+                        <Badge variant="neutral">{Math.round(data.confidence_score * 100)}% confidence</Badge>
+                        {data.requires_escalation ? <Badge variant="danger"><CircleAlert className="h-3 w-3" />Escalated</Badge> : null}
+                      </>
+                    ) : null}
+                    {speechSupported ? (
+                      <button type="button" onClick={() => onSpeak(message.content, message.id)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                        {isSpeaking ? <Square className="h-3 w-3" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        {isSpeaking ? 'Stop' : 'Listen'}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            )}
-          </div>
+              {!assistant ? <span className="mt-0.5 grid h-8 w-8 flex-none place-items-center rounded-xl border bg-white text-muted-foreground"><UserRound className="h-4 w-4" aria-hidden="true" /></span> : null}
+            </article>
+          );
+        })}
 
-          {msg.sender === 'assistant' && speechSupported && (
-            <button
-              type="button"
-              onClick={() => onSpeak(msg.content, messageKey)}
-              aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'}
-              className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-700"
-            >
-              {isSpeaking ? <Square aria-hidden="true" size={13} /> : <Volume2 aria-hidden="true" size={14} />}
-              {isSpeaking ? 'Stop' : 'Listen'}
-            </button>
-          )}
-
-          {/* Confidence / Escalation Badge */}
-          {msg.copilotData && (
-            <div className="mt-1 flex items-center space-x-2 text-xs">
-              <span
-                className={`px-2 py-0.5 rounded-full font-medium ${
-                  msg.copilotData.confidence_score >= 0.70
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}
-              >
-                Confidence: {(msg.copilotData.confidence_score * 100).toFixed(0)}%
-              </span>
-              {msg.copilotData.requires_escalation && (
-                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold border border-red-200">
-                  Escalation Triggered
-                </span>
-              )}
+        {busy ? (
+          <div className="flex items-start gap-3" aria-label="WorkMate is preparing a response">
+            <span className="grid h-8 w-8 flex-none place-items-center rounded-xl bg-[#102a22] text-emerald-300"><Sparkles className="h-4 w-4" /></span>
+            <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border bg-white px-4 py-4 shadow-panel">
+              {[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-600" style={{ animationDelay: `${dot * 160}ms` }} />)}
+              <span className="ml-2 text-xs text-muted-foreground">Checking verified guidance…</span>
             </div>
-          )}
           </div>
-        );
-      })}
+        ) : null}
+      </div>
     </div>
   );
-};
+}

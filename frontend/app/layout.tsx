@@ -3,8 +3,8 @@ import React from "react";
 import { AppShell } from "@/components/shared/AppShell";
 
 export const metadata = {
-  title: "WorkMate AI",
-  description: "Enterprise Procedural Operations Guidance System",
+  title: "WorkMate · Operational Intelligence",
+  description: "Verified operational guidance for every shift.",
 };
 
 export default function RootLayout({

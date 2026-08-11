@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Save, Trash2, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 export default function DocumentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -23,6 +25,7 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -87,10 +90,6 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
   };
 
   const handleArchiveDocument = async () => {
-    if (!confirm('Are you sure you want to archive this document? This will soft-delete all versions.')) {
-      return;
-    }
-
     setIsDeleting(true);
     setFeedback(null);
 
@@ -100,6 +99,7 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
       });
 
       setFeedback({ type: 'success', message: 'Document archived successfully. Redirecting...' });
+      setArchiveOpen(false);
       setTimeout(() => {
         router.push('/knowledge-studio');
       }, 1200);
@@ -110,16 +110,16 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
   };
 
   if (authLoading || loadingData) {
-    return <div className="p-8">Loading Document Details & Edit Form...</div>;
+    return <LoadingState label="Loading workflow details" />;
   }
 
   if (error || !detail) {
     return (
-      <div className="p-8 max-w-4xl mx-auto space-y-4">
-        <Link href="/knowledge-studio" className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1">
+      <div className="wm-page max-w-5xl space-y-4">
+        <Link href="/knowledge-studio" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to Knowledge Studio
         </Link>
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
           <p className="font-semibold">Document Not Found</p>
           <p className="text-sm">{error || `Could not find document with ID '${id}'.`}</p>
         </div>
@@ -131,15 +131,15 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
   const activeVer = published_version || latest_version;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
+    <div className="wm-page max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
-        <Link href="/knowledge-studio" className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1">
+        <Link href="/knowledge-studio" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to Knowledge Studio
         </Link>
         <Button
           variant="destructive"
           size="sm"
-          onClick={handleArchiveDocument}
+          onClick={() => setArchiveOpen(true)}
           disabled={isDeleting}
           className="flex items-center gap-2"
         >
@@ -165,11 +165,11 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
         </div>
       )}
 
-      <div className="border-b pb-4">
+      <div className="border-b pb-6 pt-2">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-gray-900">{item.title}</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-foreground sm:text-3xl">{item.title}</h1>
           {item.workflow_code && (
-            <span className="bg-blue-100 text-blue-800 text-xs font-mono px-2 py-0.5 rounded font-semibold">
+            <span className="rounded-lg bg-emerald-50 px-2 py-1 font-mono text-xs font-semibold text-emerald-800">
               {item.workflow_code}
             </span>
           )}
@@ -183,26 +183,26 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
 
       {/* State Machine Graph Breakdown */}
       {detail.states && detail.states.length > 0 && (
-        <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm">
-          <h2 className="text-lg font-semibold mb-3 text-gray-800 flex items-center justify-between">
+        <div className="wm-panel p-5 sm:p-6">
+          <h2 className="mb-4 flex items-center justify-between text-base font-semibold text-foreground">
             <span>Compiled OWD State Graph</span>
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
               {detail.states.length} States
             </span>
           </h2>
-          <div className="space-y-3 divide-y divide-gray-100">
+          <div className="space-y-3 divide-y divide-border/70">
             {detail.states.map((st) => (
               <div key={st.id} className="pt-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-[10px] text-emerald-800">
                       {st.state_key}
                     </span>
-                    <span className="text-sm font-semibold text-gray-800">{st.title}</span>
+                    <span className="text-sm font-semibold text-foreground">{st.title}</span>
                   </div>
-                  <span className="text-xs text-gray-400 capitalize">{st.state_type}</span>
+                  <span className="text-xs capitalize text-muted-foreground">{st.state_type}</span>
                 </div>
-                {st.description && <p className="text-xs text-gray-600 mt-1">{st.description}</p>}
+                {st.description && <p className="mt-1 text-xs leading-5 text-muted-foreground">{st.description}</p>}
               </div>
             ))}
           </div>
@@ -210,27 +210,27 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
       )}
 
       {/* Edit Form */}
-      <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm">
-        <h2 className="text-lg font-semibold mb-4 text-gray-800">Edit Metadata</h2>
+      <div className="wm-panel p-5 sm:p-6">
+        <h2 className="mb-5 text-base font-semibold text-foreground">Workflow metadata</h2>
         <form onSubmit={handleUpdateMetadata} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Workflow Title</label>
+            <label className="wm-label">Workflow title</label>
             <input
               type="text"
               required
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="wm-input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={isSaving}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Department Scope</label>
+            <label className="wm-label">Department scope</label>
             <select
               value={departmentId}
               onChange={(e) => setDepartmentId(e.target.value)}
               disabled={isSaving}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="wm-input"
             >
               {departments.map((department) => (
                 <option key={department.id} value={department.id}>
@@ -247,8 +247,8 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
       </div>
 
       {/* Version History */}
-      <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Version History</h2>
+      <div className="wm-panel p-5 sm:p-6">
+        <h2 className="mb-4 text-base font-semibold">Version history</h2>
         {!versionHistory || versionHistory.versions.length === 0 ? (
           <p className="text-sm text-gray-500">No version history records found.</p>
         ) : (
@@ -271,6 +271,15 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
           </ul>
         )}
       </div>
+      <ConfirmDialog
+        open={archiveOpen}
+        title="Archive this workflow?"
+        description="All versions will be soft-deleted and removed from employee guidance. This does not permanently erase audit history."
+        confirmLabel="Archive workflow"
+        busy={isDeleting}
+        onConfirm={handleArchiveDocument}
+        onClose={() => !isDeleting && setArchiveOpen(false)}
+      />
     </div>
   );
 }

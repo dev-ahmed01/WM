@@ -1,3 +1,88 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 150 20% 98%;
+    --foreground: 164 34% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 164 34% 11%;
+    --primary: 158 64% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 153 18% 93%;
+    --secondary-foreground: 160 42% 18%;
+    --muted: 150 12% 95%;
+    --muted-foreground: 158 10% 42%;
+    --accent: 154 30% 91%;
+    --accent-foreground: 158 52% 23%;
+    --destructive: 2 66% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 12% 88%;
+    --input: 150 12% 82%;
+    --ring: 158 64% 31%;
+    --radius: 0.875rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100vh;
+    font-family: "Segoe UI Variable", "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+
+  ::selection {
+    @apply bg-emerald-200 text-emerald-950;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-color: rgb(203 213 225) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  .wm-page {
+    @apply mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10;
+  }
+
+  .wm-panel {
+    @apply rounded-2xl border border-border/80 bg-card text-card-foreground shadow-panel;
+  }
+
+  .wm-input {
+    @apply w-full rounded-xl border border-input bg-white px-3.5 py-2.5 text-sm text-foreground shadow-sm transition placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .wm-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  .wm-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-primary;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

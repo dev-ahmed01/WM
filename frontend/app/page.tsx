@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { getRoleRedirectPath, getUserClaims } from '@/lib/auth';
+import { LoadingState } from '@/components/shared/LoadingState';
 
 export default function HomePage() {
   const router = useRouter();
@@ -13,5 +14,5 @@ export default function HomePage() {
     router.replace(claims ? getRoleRedirectPath(claims.role) : '/login');
   }, [router]);
 
-  return <div className="p-8 text-sm text-slate-600">Loading WorkMate…</div>;
+  return <LoadingState label="Opening WorkMate" />;
 }
