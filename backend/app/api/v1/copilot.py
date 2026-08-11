@@ -5,6 +5,7 @@ import re
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 
+from app.core.config import settings
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.models.copilot import (
@@ -23,6 +24,7 @@ from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
+from app.integrations.retrieval_providers import fuzzy_relevance_score
 
 copilot_logger = logging.getLogger("copilot_services")
 
@@ -57,6 +59,40 @@ def _step_guidance(position: Any, *, advanced: bool = False) -> str:
         choices = ", ".join(option.option_label for option in position.decision_options)
         return f"Step completed. Choose the next workflow outcome: {choices}."
     return "Workflow completed." if advanced else "The workflow has no pending step."
+
+
+def _match_decision_option(message: str, options: list[Any]) -> str | None:
+    """Map natural wording only when it uniquely matches a persisted graph option."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    for option in options:
+        for exact_value in (option.option_code, option.option_label):
+            if normalized == " ".join(re.findall(r"[a-z0-9]+", exact_value.casefold())):
+                return option.option_code
+    ranked = sorted(
+        (
+            (
+                fuzzy_relevance_score(
+                    message, f"{option.option_code} {option.option_label}"
+                ),
+                option.option_code,
+            )
+            for option in options
+        ),
+        reverse=True,
+    )
+    if not ranked or ranked[0][0] < 0.70:
+        return None
+    runner_up = ranked[1][0] if len(ranked) > 1 else 0.0
+    return ranked[0][1] if ranked[0][0] - runner_up >= 0.20 else None
+
+
+def _deferred_workflow_guidance(position: Any, future_source: Dict[str, Any]) -> str:
+    future_title = str(future_source.get("step_title") or "Later workflow guidance")
+    future_number = future_source.get("step_number")
+    return (
+        f"{future_title} is handled at workflow step {future_number}. "
+        f"Do not skip ahead. {_step_guidance(position)}"
+    )
 
 
 @router.get(
@@ -158,6 +194,7 @@ async def copilot_message(
     # redundant Snowflake round-trip on every interactive turn.
     history: list[Dict[str, Any]] = []
     active_session = WorkflowStateService.get_current_session(conversation_id)
+    resolved_position: Any = None
 
     # A short, explicit completion command belongs to the active state machine,
     # not to general intent detection or semantic retrieval.
@@ -242,16 +279,27 @@ async def copilot_message(
             active_decision_options=position.decision_options if position else [],
         )
 
-    # 3. Resolve the workflow state. A chat message may select an exact persisted
-    # decision option, but it never marks an operational step complete implicitly.
+    # 3. Resolve the workflow state. Natural wording may select one uniquely
+    # matched persisted option, but it never marks an operational step complete.
     if active_session and active_session.status == "active":
-        active_session = WorkflowStateService.advance_if_transition_matches(
-            active_session.id,
-            {
-                "decision_option": payload.message.strip(),
-                "values": {"message": payload.message.strip()},
-            },
-        )
+        decision_position = WorkflowStateService.get_position(active_session)
+        if decision_position.step_id:
+            # An operational step cannot advance from conversational wording.
+            resolved_position = decision_position
+        else:
+            decision_option = _match_decision_option(
+                payload.message, decision_position.decision_options
+            )
+            previous_state_id = active_session.current_state_id
+            active_session = WorkflowStateService.advance_if_transition_matches(
+                active_session.id,
+                {
+                    "decision_option": decision_option or payload.message.strip(),
+                    "values": {"message": payload.message.strip()},
+                },
+            )
+            if active_session.current_state_id == previous_state_id:
+                resolved_position = decision_position
 
     # 4. Scoped Retrieval (Published Chunks & Department Scoped)
     retrieved_chunks = await RetrievalService.retrieve_chunks(
@@ -274,7 +322,43 @@ async def copilot_message(
     # 5. Use deterministic persisted workflow guidance when the retrieved
     # source identifies the active state. This avoids waiting for a model to
     # regenerate text that already exists in the compiled workflow graph.
-    position = WorkflowStateService.get_position(active_session) if active_session else None
+    position = (
+        resolved_position
+        or (WorkflowStateService.get_position(active_session) if active_session else None)
+    )
+    evidence_is_relevant = ResponseValidationService.has_relevant_evidence(
+        retrieved_chunks, department_id
+    )
+    current_query_score = 0.0
+    if active_session and position and evidence_is_relevant:
+        current_source_index = next(
+            (
+                index
+                for index, chunk in enumerate(retrieved_chunks)
+                if str(chunk.get("workflow_version_id"))
+                == active_session.workflow_version_id
+                and str(chunk.get("state_id")) == position.state_id
+            ),
+            None,
+        )
+        if current_source_index is not None:
+            current_query_score = float(
+                retrieved_chunks[current_source_index].get("score") or 0.0
+            )
+            # The persisted active state is authoritative for current-step
+            # guidance even when the user's question primarily matches a later state.
+            retrieved_chunks[current_source_index] = {
+                **retrieved_chunks[current_source_index],
+                "score": 1.0,
+            }
+        else:
+            current_source = await AIGateway.get_workflow_state_source(
+                department_id,
+                active_session.workflow_version_id,
+                position.state_id,
+            )
+            if current_source:
+                retrieved_chunks.append(current_source)
     workflow_source = next(
         (
             chunk
@@ -286,10 +370,33 @@ async def copilot_message(
         ),
         None,
     )
-    if not ResponseValidationService.has_relevant_evidence(
-        retrieved_chunks, department_id
-    ):
+    future_workflow_source = next(
+        (
+            chunk
+            for chunk in retrieved_chunks
+            if active_session
+            and position
+            and position.step_id
+            and str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
+            and str(chunk.get("state_id")) != position.state_id
+            and int(chunk.get("step_number") or 0) > int(position.step_number or 0)
+            and float(chunk.get("score") or 0.0)
+            >= settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+            and float(chunk.get("score") or 0.0) - current_query_score >= 0.20
+        ),
+        None,
+    )
+    if not evidence_is_relevant:
         raw_response = GeneratedAnswer(answer="", source_ids=[], provider="none")
+    elif future_workflow_source and workflow_source and position:
+        raw_response = GeneratedAnswer(
+            answer=_deferred_workflow_guidance(position, future_workflow_source),
+            source_ids=[
+                str(future_workflow_source["chunk_id"]),
+                str(workflow_source["chunk_id"]),
+            ],
+            provider="workflow_deferred",
+        )
     elif workflow_source and position and position.step_id:
         raw_response = GeneratedAnswer(
             answer=position.step_title or "",
@@ -321,6 +428,7 @@ async def copilot_message(
         and active_session.status == "active"
         and position
         and position.step_id
+        and raw_response.provider != "workflow_deferred"
         and validated.is_grounded
         and any(
             str(chunk.get("workflow_version_id")) == active_session.workflow_version_id

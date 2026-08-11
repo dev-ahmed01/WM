@@ -124,5 +124,16 @@ class AIGateway:
         cls.semantic_index.clear()
 
     @classmethod
+    async def get_workflow_state_source(
+        cls,
+        department_id: str,
+        workflow_version_id: str,
+        state_id: str,
+    ) -> Dict[str, Any] | None:
+        return await cls.semantic_index.get_workflow_state_source(
+            department_id, workflow_version_id, state_id
+        )
+
+    @classmethod
     async def health(cls) -> Dict[str, Any]:
         return await cls.local_provider.health()

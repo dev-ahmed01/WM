@@ -6,11 +6,15 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.v1.copilot import router
+from app.api.v1.copilot import _match_decision_option, router
 from app.core.security import create_access_token
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
-from app.models.workflow_session import WorkflowPosition, WorkflowSession
+from app.models.workflow_session import (
+    WorkflowDecisionOption,
+    WorkflowPosition,
+    WorkflowSession,
+)
 from app.services.retrieval import RetrievalService
 from app.services.validation import CANONICAL_FALLBACK
 
@@ -55,6 +59,21 @@ def source_chunk(**overrides):
     return chunk
 
 
+def test_natural_damage_language_uniquely_matches_persisted_decision_option():
+    options = [
+        WorkflowDecisionOption(
+            option_code="OPT_DAMAGED", option_label="Yes, damaged cartons detected"
+        ),
+        WorkflowDecisionOption(
+            option_code="OPT_INTACT", option_label="No, all cartons intact"
+        ),
+    ]
+
+    assert _match_decision_option("the package is damaged", options) == "OPT_DAMAGED"
+    assert _match_decision_option("package is intact", options) == "OPT_INTACT"
+    assert _match_decision_option("cartons", options) is None
+
+
 @patch("app.api.v1.copilot.AnalyticsService.record_event")
 @patch("app.api.v1.copilot.WorkflowStateService.get_position")
 @patch("app.api.v1.copilot.WorkflowStateService.start_session")
@@ -83,7 +102,16 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     # Intent classification is advisory. Verified evidence must still start the
     # workflow when a realistic paraphrase lacks an exact command keyword.
     mock_intent.return_value = {"intent": "GENERAL_QUERY", "needs_clarification": False}
-    mock_retrieve.return_value = [source_chunk()]
+    mock_retrieve.return_value = [
+        source_chunk(),
+        source_chunk(
+            chunk_id="chunk_2",
+            state_id="state_2",
+            step_number=2,
+            step_title="Record the shipment temperature",
+            content="Record the shipment temperature.",
+        ),
+    ]
     mock_generate.return_value = GeneratedAnswer(
         "Inspect the shipment seal before unloading.", ["chunk_1"], "test"
     )
@@ -182,6 +210,95 @@ def test_done_completes_active_step_without_ai_or_retrieval():
     mark_complete.assert_called_once_with("sess_1")
     detect_intent.assert_not_awaited()
     retrieve.assert_not_awaited()
+    generate.assert_not_awaited()
+
+
+def test_future_damage_question_is_acknowledged_without_skipping_current_step():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Verify physical trailer door seal number against Bill of Lading manifest.",
+    )
+    future = source_chunk(
+        chunk_id="chunk_damage",
+        state_id="state_3",
+        step_number=3,
+        step_title="Container Damage Evaluation",
+        content="State: Container Damage Evaluation (STATE_DECISION_DAMAGE)",
+        score=1.0,
+    )
+    current_source = source_chunk(
+        content=(
+            "State: Dock Arrival and Seal Inspection. Instructions: Verify physical "
+            "trailer door seal number against Bill of Lading manifest."
+        ),
+        score=1.0,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=current_position,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.advance_if_transition_matches",
+            return_value=current,
+        ),
+        patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        patch.object(
+            AIGateway,
+            "detect_intent",
+            new_callable=AsyncMock,
+            return_value={"intent": "GENERAL_QUERY", "needs_clarification": False},
+        ),
+        patch.object(
+            RetrievalService,
+            "retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=[future],
+        ),
+        patch.object(
+            AIGateway,
+            "get_workflow_state_source",
+            new_callable=AsyncMock,
+            return_value=current_source,
+        ),
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": "the package is damaged what should I do next",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_grounded"] is True
+    assert body["requires_escalation"] is False
+    assert "Container Damage Evaluation is handled at workflow step 3" in body["answer"]
+    assert "Do not skip ahead" in body["answer"]
+    assert "Current step: Verify physical trailer door seal" in body["answer"]
+    assert body["active_step_number"] == 1
     generate.assert_not_awaited()
 
 

@@ -17,8 +17,24 @@ logger = logging.getLogger("workmate.retrieval")
 
 _STOP_WORDS = {
     "a", "an", "and", "are", "do", "for", "how", "i", "if", "in", "is", "it",
-    "give", "me", "of", "on", "please", "show", "step", "steps", "should", "the",
+    "give", "me", "next", "of", "on", "please", "show", "step", "steps", "should", "the",
     "its", "to", "what", "when", "where", "with", "you",
+}
+
+_DOMAIN_EQUIVALENTS = {
+    "box": "handling_unit",
+    "boxes": "handling_unit",
+    "carton": "handling_unit",
+    "cartons": "handling_unit",
+    "container": "handling_unit",
+    "containers": "handling_unit",
+    "package": "handling_unit",
+    "packages": "handling_unit",
+    "pallet": "handling_unit",
+    "pallets": "handling_unit",
+    "damage": "damage",
+    "damaged": "damage",
+    "damages": "damage",
 }
 
 
@@ -55,12 +71,15 @@ def search_terms(query: str) -> List[str]:
 
 def fuzzy_relevance_score(query: str, candidate_content: str) -> float:
     """Score typo-tolerant token overlap without changing or generating SOP text."""
-    query_tokens = search_terms(query)
+    query_tokens = [_DOMAIN_EQUIVALENTS.get(token, token) for token in search_terms(query)]
     if not query_tokens:
         return 0.0
-    candidate_tokens = set(
-        re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (candidate_content or "").lower())
-    )
+    candidate_tokens = {
+        _DOMAIN_EQUIVALENTS.get(token, token)
+        for token in re.findall(
+            r"[a-z0-9][a-z0-9_-]{1,}", (candidate_content or "").lower()
+        )
+    }
     qualities: List[float] = []
     for query_token in query_tokens:
         if query_token in candidate_tokens:
@@ -231,6 +250,26 @@ class LocalSemanticIndex:
     ) -> List[Dict[str, Any]]:
         candidates = await self.get_candidates(department_id)
         return self._rank_fuzzy(query, department_id, candidates, limit)
+
+    async def get_workflow_state_source(
+        self,
+        department_id: str,
+        workflow_version_id: str,
+        state_id: str,
+    ) -> Dict[str, Any] | None:
+        candidates = await self.get_candidates(department_id)
+        valid_statuses = set(allowed_statuses())
+        return next(
+            (
+                {**candidate, "score": 1.0}
+                for candidate in candidates
+                if candidate.get("department_id") == department_id
+                and str(candidate.get("status", "")).lower() in valid_statuses
+                and str(candidate.get("workflow_version_id")) == workflow_version_id
+                and str(candidate.get("state_id")) == state_id
+            ),
+            None,
+        )
 
     @staticmethod
     def _rank_fuzzy(

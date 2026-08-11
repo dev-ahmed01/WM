@@ -45,6 +45,13 @@ def test_fuzzy_relevance_recognizes_operational_typos_without_false_match():
     assert fuzzy_relevance_score("quantum nebula payroll crystallography", content) == 0.0
 
 
+def test_fuzzy_relevance_maps_package_language_to_damage_workflow_vocabulary():
+    assert fuzzy_relevance_score(
+        "the package is damaged what should I do next",
+        "State: Container Damage Evaluation",
+    ) == 1.0
+
+
 @pytest.mark.asyncio
 async def test_local_embedding_batch_request(monkeypatch):
     provider = OllamaLocalAIProvider()
