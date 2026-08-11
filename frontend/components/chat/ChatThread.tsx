@@ -19,13 +19,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
             msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
           }`}
         >
-          {/* Step Indicator */}
-          {msg.copilotData?.active_sop_id && (
-            <div className="mb-1 text-xs font-semibold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
-              SOP Step {msg.copilotData.active_step_number}: {msg.copilotData.active_step_title}
-            </div>
-          )}
-
           {msg.copilotData?.active_decision_options && msg.copilotData.active_decision_options.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Available workflow decisions">
               {msg.copilotData.active_decision_options.map((option) => (
@@ -49,11 +42,13 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ messages }) => {
             {/* Citations section */}
             {msg.copilotData?.citations && msg.copilotData.citations.length > 0 && (
               <div className="mt-3 pt-2 border-t border-gray-300 text-xs text-gray-700">
-                <span className="font-semibold block mb-1">Sources & Citations:</span>
+                <span className="font-semibold block mb-1">Verified source:</span>
                 <ul className="list-disc pl-4 space-y-1">
                   {msg.copilotData.citations.map((cite, i) => (
                     <li key={i}>
-                      <span className="font-semibold">{cite.document_title}</span> (v{cite.version_number}): &quot;{cite.excerpt}&quot;
+                      <span className="font-semibold">{cite.document_title}</span>
+                      {' '}· version {cite.version_number}
+                      {cite.step_number ? ` · workflow state ${cite.step_number}` : ''}
                     </li>
                   ))}
                 </ul>

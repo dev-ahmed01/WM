@@ -60,6 +60,28 @@ def test_position_exposes_only_persisted_decision_options(mock_state, _mock_step
     mock_options.assert_called_once_with("state_1")
 
 
+@patch("app.services.workflow_state.OWDRepository.get_decision_options", return_value=[])
+@patch("app.services.workflow_state.OWDRepository.get_next_pending_step")
+@patch("app.services.workflow_state.OWDRepository.get_state_by_id")
+def test_position_preserves_one_based_global_step_number(mock_state, mock_step, _mock_options):
+    mock_state.return_value = {
+        "id": "state_1",
+        "workflow_version_id": "ver_1",
+        "title": "Arrival inspection",
+        "state_type": "ATOMIC_STEP",
+    }
+    mock_step.return_value = {
+        "id": "step_1",
+        "ordinal_index": 1,
+        "instruction": "Inspect the seal",
+        "expected_output_type": "confirmation",
+    }
+
+    position = WorkflowStateService.get_position(WorkflowSession(**session_row()))
+
+    assert position.step_number == 1
+
+
 @patch("app.services.workflow_state.OWDRepository.record_analytics_event")
 @patch("app.services.workflow_state.WorkflowSessionRepository.get_by_id")
 @patch("app.services.workflow_state.WorkflowSessionRepository.create")

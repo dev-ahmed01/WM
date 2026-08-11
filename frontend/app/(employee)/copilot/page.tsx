@@ -16,6 +16,8 @@ function CopilotContent() {
   const [workflowSessionId, setWorkflowSessionId] = useState<string | undefined>();
   const [workflowSessionStatus, setWorkflowSessionStatus] = useState<CopilotResponse['active_session_status']>();
   const [workflowDecisionOptions, setWorkflowDecisionOptions] = useState<NonNullable<CopilotResponse['active_decision_options']>>([]);
+  const [activeStepNumber, setActiveStepNumber] = useState<number | undefined>();
+  const [activeStepTitle, setActiveStepTitle] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
   const [messages, setMessages] = useState<
     Array<{ sender: 'user' | 'assistant'; content: string; copilotData?: CopilotResponse }>
@@ -38,6 +40,8 @@ function CopilotContent() {
         setWorkflowSessionId(history.active_session_id);
         setWorkflowSessionStatus(history.active_session_status);
         setWorkflowDecisionOptions(history.active_decision_options || []);
+        setActiveStepNumber(history.active_step_number);
+        setActiveStepTitle(history.active_step_title);
         setMessages(history.messages.map((message) => ({
           sender: message.sender === 'employee' ? 'user' : 'assistant',
           content: message.content,
@@ -80,6 +84,8 @@ function CopilotContent() {
       setWorkflowSessionId(response.active_session_id);
       setWorkflowSessionStatus(response.active_session_status);
       setWorkflowDecisionOptions(response.active_decision_options || []);
+      setActiveStepNumber(response.active_step_number);
+      setActiveStepTitle(response.active_step_title);
 
       setMessages((prev) => [
         ...prev,
@@ -110,14 +116,16 @@ function CopilotContent() {
       if (!reason?.trim()) return;
       body = JSON.stringify({ reason: reason.trim() });
     } else if (action === 'advance') {
-      const decisionOption = window.prompt(
-        workflowDecisionOptions.length > 0
-          ? `Choose a decision by code or label:\n${workflowDecisionOptions.map((option) => `${option.option_code}: ${option.option_label}`).join('\n')}`
-          : 'Leave blank to complete the current step.',
-      );
-      if (decisionOption === null) return;
+      let decisionOption: string | undefined;
+      if (workflowDecisionOptions.length > 0) {
+        const selectedOption = window.prompt(
+          `Choose a decision by code or label:\n${workflowDecisionOptions.map((option) => `${option.option_code}: ${option.option_label}`).join('\n')}`,
+        );
+        if (selectedOption === null) return;
+        decisionOption = selectedOption.trim() || undefined;
+      }
       body = JSON.stringify({
-        decision_option: decisionOption.trim() || undefined,
+        decision_option: decisionOption,
         rule_results: {},
         values: {},
         use_fallback: false,
@@ -130,9 +138,23 @@ function CopilotContent() {
         { method: 'POST', body },
       );
       setWorkflowSessionStatus(updated.status);
+      let statusMessage = `Workflow session ${updated.status}.`;
+      if (action === 'advance' && conversationId) {
+        const detail = await apiClient<CopilotConversationDetail>(`/copilot/history/${conversationId}`);
+        setWorkflowSessionId(detail.active_session_id);
+        setWorkflowSessionStatus(detail.active_session_status);
+        setWorkflowDecisionOptions(detail.active_decision_options || []);
+        setActiveStepNumber(detail.active_step_number);
+        setActiveStepTitle(detail.active_step_title);
+        statusMessage = detail.active_session_status === 'completed'
+          ? 'Workflow completed.'
+          : detail.active_step_title
+            ? `Step completed. Next: ${detail.active_step_title}`
+            : 'Step completed. Choose the next workflow outcome.';
+      }
       setMessages((previous) => [
         ...previous,
-        { sender: 'assistant', content: `Workflow session ${updated.status}.` },
+        { sender: 'assistant', content: statusMessage },
       ]);
     } catch (err: any) {
       setMessages((previous) => [
@@ -162,7 +184,7 @@ function CopilotContent() {
           {workflowSessionId && workflowSessionStatus === 'active' && (
             <>
               <button onClick={() => handleWorkflowAction('advance')} className="text-xs border border-blue-200 text-blue-700 px-2.5 py-1 rounded bg-white">
-                Complete / advance
+                Complete step
               </button>
               <button onClick={() => handleWorkflowAction('pause')} className="text-xs border px-2.5 py-1 rounded bg-white">
                 Pause workflow
@@ -187,6 +209,20 @@ function CopilotContent() {
           </span>
         </div>
       </header>
+      {workflowSessionId && ['active', 'paused'].includes(workflowSessionStatus || '') && activeStepTitle && (
+        <section
+          aria-label="Current workflow step"
+          className="mx-4 mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950"
+        >
+          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+            Current step {activeStepNumber}
+          </div>
+          <p className="mt-1 text-sm font-medium">{activeStepTitle}</p>
+          <p className="mt-1 text-xs text-blue-700">
+            Complete this step only, then type &quot;done&quot; or select Complete step to continue.
+          </p>
+        </section>
+      )}
       <main className="flex-1 overflow-hidden p-4">
         <ChatThread messages={messages} />
       </main>
@@ -195,7 +231,13 @@ function CopilotContent() {
           <input
             type="text"
             className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            placeholder={isSending ? 'Copilot is processing...' : 'Type your operational question...'}
+            placeholder={
+              isSending
+                ? 'Copilot is processing...'
+                : activeStepTitle
+                  ? 'Ask about this step or type "done"...'
+                  : 'Type your operational question...'
+            }
             value={input}
             disabled={isSending}
             onChange={(e) => setInput(e.target.value)}

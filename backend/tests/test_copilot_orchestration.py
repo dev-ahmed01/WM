@@ -105,10 +105,81 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     body = response.json()
     assert body["active_session_id"] == "sess_1"
     assert body["active_step_title"] == "Inspect the shipment seal"
+    assert body["answer"].startswith("Current step: Inspect the shipment seal")
+    assert 'type "done"' in body["answer"]
     assert body["citations"][0]["chunk_id"] == "chunk_1"
     mock_start.assert_called_once_with(
         conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
     )
+
+
+def test_done_completes_active_step_without_ai_or_retrieval():
+    current = workflow_session()
+    advanced = workflow_session().model_copy(update={"current_state_id": "state_2"})
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect the shipment seal",
+    )
+    next_position = WorkflowPosition(
+        state_id="state_2",
+        state_title="Temperature check",
+        state_type="ATOMIC_STEP",
+        step_id="step_2",
+        step_number=2,
+        step_title="Record the shipment temperature",
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[]),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.update_message_intent"
+        ) as update_intent,
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            side_effect=[current_position, next_position],
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.mark_step_complete",
+            return_value=advanced,
+        ) as mark_complete,
+        patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "done"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"].startswith("Step completed. Next step:")
+    assert body["active_step_number"] == 2
+    assert body["active_step_title"] == "Record the shipment temperature"
+    assert body["requires_escalation"] is False
+    update_intent.assert_called_once_with("user_msg", "WORKFLOW_STEP_COMPLETE")
+    mark_complete.assert_called_once_with("sess_1")
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+    generate.assert_not_awaited()
 
 
 @patch("app.api.v1.copilot.EscalationService.escalate", new_callable=AsyncMock)

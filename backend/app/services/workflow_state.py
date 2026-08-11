@@ -95,7 +95,9 @@ class WorkflowStateService:
             state_title=state["title"],
             state_type=state["state_type"],
             step_id=step.get("id") if step else None,
-            step_number=int(step.get("ordinal_index", 0)) + 1 if step else None,
+            # Compiled OWD step ordinals are persisted as one-based global
+            # sequence numbers. Preserve that value for user-facing progress.
+            step_number=int(step.get("ordinal_index", 0)) if step else None,
             step_title=step.get("instruction") if step else state["title"],
             expected_output_type=step.get("expected_output_type") if step else None,
             decision_options=decision_options,

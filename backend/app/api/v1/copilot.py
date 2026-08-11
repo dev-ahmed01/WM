@@ -1,6 +1,7 @@
 """FastAPI Router for WorkMate Copilot Message Endpoint."""
 
 import logging
+import re
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 
@@ -25,6 +26,36 @@ from app.integrations.ai_gateway import AIGateway
 copilot_logger = logging.getLogger("copilot_services")
 
 router = APIRouter(prefix="/copilot", tags=["WorkMate Copilot"])
+
+_STEP_COMPLETION_COMMANDS = {
+    "complete",
+    "completed",
+    "done",
+    "finished",
+    "next",
+    "step complete",
+    "step completed",
+}
+
+
+def _is_step_completion_message(message: str) -> bool:
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    return normalized in _STEP_COMPLETION_COMMANDS
+
+
+def _step_guidance(position: Any, *, advanced: bool = False) -> str:
+    if position is None:
+        return "Workflow completed." if advanced else "The workflow is ready."
+    if position.step_id:
+        prefix = "Step completed. Next step:" if advanced else "Current step:"
+        return (
+            f"{prefix} {position.step_title} "
+            'When finished, type "done" or select Complete step to continue.'
+        )
+    if position.decision_options:
+        choices = ", ".join(option.option_label for option in position.decision_options)
+        return f"Step completed. Choose the next workflow outcome: {choices}."
+    return "Workflow completed." if advanced else "The workflow has no pending step."
 
 
 @router.get(
@@ -125,6 +156,52 @@ async def copilot_message(
     history = ConversationRepository.get_history(conversation_id)
     active_session = WorkflowStateService.get_current_session(conversation_id)
 
+    # A short, explicit completion command belongs to the active state machine,
+    # not to general intent detection or semantic retrieval.
+    if active_session and active_session.status == "active":
+        current_position = WorkflowStateService.get_position(active_session)
+        if current_position.step_id and _is_step_completion_message(payload.message):
+            ConversationRepository.update_message_intent(
+                user_message_id, "WORKFLOW_STEP_COMPLETE"
+            )
+            active_session = WorkflowStateService.mark_step_complete(active_session.id)
+            next_position = WorkflowStateService.get_position(active_session)
+            answer = _step_guidance(next_position, advanced=True)
+            msg_id = ConversationRepository.persist_message(
+                conversation_id=conversation_id,
+                sender="ai",
+                content=answer,
+                confidence_score=1.0,
+            )
+            try:
+                AnalyticsService.record_event(
+                    event_type="copilot.workflow_step_completed",
+                    conversation_message_id=msg_id,
+                    payload={
+                        "user_id": user_id,
+                        "department_id": department_id,
+                        "workflow_session_id": active_session.id,
+                        "completed_step_id": current_position.step_id,
+                    },
+                )
+            except Exception:
+                copilot_logger.exception("Workflow completion telemetry write failed")
+            return CopilotResponse(
+                conversation_id=conversation_id,
+                message_id=msg_id,
+                answer=answer,
+                citations=[],
+                confidence_score=1.0,
+                is_grounded=True,
+                requires_escalation=False,
+                active_session_id=active_session.id,
+                active_session_status=active_session.status,
+                active_sop_id=active_session.workflow_version_id,
+                active_step_number=next_position.step_number,
+                active_step_title=next_position.step_title,
+                active_decision_options=next_position.decision_options,
+            )
+
     # 2. Intent Detection & Clarification Check
     intent_result = await AIGateway.detect_intent(message=payload.message, history=history)
     detected_intent = str(intent_result.get("intent") or "GENERAL_QUERY")
@@ -210,6 +287,22 @@ async def copilot_message(
         user_department_id=department_id,
     )
 
+    position = WorkflowStateService.get_position(active_session) if active_session else None
+    cited_chunk_ids = {citation.chunk_id for citation in validated.citations}
+    if (
+        active_session
+        and active_session.status == "active"
+        and position
+        and position.step_id
+        and validated.is_grounded
+        and any(
+            str(chunk.get("workflow_version_id")) == active_session.workflow_version_id
+            and str(chunk.get("chunk_id")) in cited_chunk_ids
+            for chunk in retrieved_chunks
+        )
+    ):
+        validated.answer = _step_guidance(position)
+
     # 7. Persist AI Message & Trigger Real Escalation if required
     msg_id = ConversationRepository.persist_message(
         conversation_id=conversation_id,
@@ -254,7 +347,6 @@ async def copilot_message(
         copilot_logger.exception("Copilot telemetry write failed")
 
     # 9. Return CopilotResponse matching frontend contract
-    position = WorkflowStateService.get_position(active_session) if active_session else None
     return CopilotResponse(
         conversation_id=conversation_id,
         message_id=msg_id,
