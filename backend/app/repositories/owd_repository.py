@@ -107,6 +107,29 @@ class OWDRepository:
             ) from exc
 
     @staticmethod
+    def get_last_step_ordinal(workflow_version_id: str) -> Optional[int]:
+        """Return the highest persisted global step number in a workflow graph."""
+        query = """
+            SELECT MAX(st.ordinal_index)
+            FROM KNOWLEDGE_STUDIO.workflow_steps st
+            JOIN KNOWLEDGE_STUDIO.workflow_states ws ON ws.id = st.state_id
+            WHERE ws.workflow_version_id = %s
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (workflow_version_id,))
+                    row = cur.fetchone()
+                    return int(row[0]) if row and row[0] is not None else None
+        except Exception as exc:
+            raise DatabaseException(
+                message=(
+                    "Failed to fetch the final step number for workflow version "
+                    f"{workflow_version_id}: {exc}"
+                )
+            ) from exc
+
+    @staticmethod
     def get_decision_options(state_id: str) -> List[Dict[str, Any]]:
         """Return the persisted user-selectable edges for a decision state."""
         query = """

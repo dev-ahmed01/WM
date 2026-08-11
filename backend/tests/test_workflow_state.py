@@ -166,7 +166,8 @@ def test_complete_through_step_advances_sequentially_with_attestation():
     ):
         result = WorkflowStateService.complete_through_step("sess_1", 2)
 
-    assert result.current_state_id == "state_2"
+    assert result.session.current_state_id == "state_2"
+    assert result.completed_step_numbers == [1, 2]
     assert mark_complete.call_count == 2
     for call in mark_complete.call_args_list:
         assert call.args[0] == "sess_1"

@@ -179,6 +179,40 @@ class KnowledgeRepository:
             raise WorkMateException(message=f"Failed to fetch published version: {str(exc)}") from exc
 
     @staticmethod
+    def list_published_catalog(department_id: str) -> List[Dict[str, Any]]:
+        """Return one stable, executable published version per department workflow."""
+        query = """
+            SELECT workflow_id, workflow_code, title, description, department_id,
+                   category, workflow_version_id, version_number
+            FROM (
+                SELECT w.id AS workflow_id, w.workflow_code, w.title,
+                       w.description, w.department_id, w.category,
+                       wv.id AS workflow_version_id, wv.version_number,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY w.id
+                           ORDER BY wv.version_number DESC, wv.published_at DESC
+                       ) AS published_rank
+                FROM KNOWLEDGE_STUDIO.workflows w
+                JOIN KNOWLEDGE_STUDIO.workflow_versions wv
+                  ON wv.workflow_id = w.id
+                 AND LOWER(wv.status) = 'published'
+                WHERE w.department_id = %s
+            )
+            WHERE published_rank = 1
+            ORDER BY LOWER(title), LOWER(workflow_code)
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (department_id,))
+                    columns = [column[0].lower() for column in cur.description]
+                    return [dict(zip(columns, row)) for row in cur.fetchall()]
+        except Exception as exc:
+            raise WorkMateException(
+                message=f"Failed to list the published workflow catalog: {exc}"
+            ) from exc
+
+    @staticmethod
     def get_version_history(knowledge_item_id: str) -> List[Dict[str, Any]]:
         query = """
             SELECT id, workflow_id, version_number, semantic_version, stage_file_uri, ast_hash, status, created_at, published_at

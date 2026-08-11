@@ -1,7 +1,8 @@
 """Deterministic execution engine for compiled OWD state graphs."""
 
 import logging
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 
@@ -11,6 +12,13 @@ from app.repositories.owd_repository import OWDRepository
 from app.repositories.workflow_session_repository import WorkflowSessionRepository
 
 workflow_logger = logging.getLogger("copilot_services")
+
+
+@dataclass(frozen=True)
+class WorkflowCompletionResult:
+    session: WorkflowSession
+    completed_step_numbers: List[int] = field(default_factory=list)
+    stopped_at_decision: bool = False
 
 
 class WorkflowStateService:
@@ -170,7 +178,9 @@ class WorkflowStateService:
         return WorkflowStateService._reload(session_id)
 
     @staticmethod
-    def complete_through_step(session_id: str, target_step_number: int) -> WorkflowSession:
+    def complete_through_step(
+        session_id: str, target_step_number: int
+    ) -> WorkflowCompletionResult:
         """Record an explicit completion attestation through a numbered atomic step.
 
         This advances sequentially through persisted steps only. It never invents a
@@ -195,18 +205,20 @@ class WorkflowStateService:
             )
 
         session = WorkflowSession(**session_data)
+        completed_step_numbers: List[int] = []
         for _ in range(100):
             position = WorkflowStateService.get_position(session)
             if session.status != "active":
-                return session
+                return WorkflowCompletionResult(session, completed_step_numbers)
             if not position.step_id:
-                raise WorkflowStateService._conflict(
-                    "A verified decision is required before the requested step. "
-                    "Select the observed outcome, then continue."
+                return WorkflowCompletionResult(
+                    session,
+                    completed_step_numbers,
+                    stopped_at_decision=bool(position.decision_options),
                 )
             current_number = int(position.step_number or 0)
             if current_number > target_step_number:
-                return session
+                return WorkflowCompletionResult(session, completed_step_numbers)
 
             session = WorkflowStateService.mark_step_complete(
                 session_id,
@@ -215,8 +227,9 @@ class WorkflowStateService:
                     "completion_target_step": target_step_number,
                 },
             )
+            completed_step_numbers.append(current_number)
             if current_number == target_step_number:
-                return session
+                return WorkflowCompletionResult(session, completed_step_numbers)
 
         raise WorkflowStateService._conflict(
             "The requested completion range is too large to process safely."

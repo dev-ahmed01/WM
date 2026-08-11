@@ -24,6 +24,7 @@ from app.models.workflow_session import (
 )
 from app.services.retrieval import RetrievalService
 from app.services.validation import CANONICAL_FALLBACK
+from app.services.workflow_state import WorkflowCompletionResult
 
 
 app = FastAPI()
@@ -278,7 +279,9 @@ def test_complete_through_command_records_attestation_without_ai_or_retrieval():
         ),
         patch(
             "app.api.v1.copilot.WorkflowStateService.complete_through_step",
-            return_value=current,
+            return_value=WorkflowCompletionResult(
+                session=current, completed_step_numbers=[1, 2]
+            ),
         ) as complete_through,
         patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
         patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
@@ -292,7 +295,7 @@ def test_complete_through_command_records_attestation_without_ai_or_retrieval():
 
     assert response.status_code == 200
     body = response.json()
-    assert "work through step 2 is complete" in body["answer"]
+    assert "steps 1 through 2" in body["answer"]
     assert body["active_decision_options"][0]["option_code"] == "OPT_DAMAGED"
     assert body["requires_escalation"] is False
     complete_through.assert_called_once_with("sess_1", 2)
@@ -368,17 +371,15 @@ def test_numbered_sop_request_uses_published_department_catalog():
             return_value=None,
         ),
         patch(
-            "app.api.v1.copilot.KnowledgeRepository.list_items",
-            return_value=(
-                [
-                    {
-                        "title": "Receive shipment",
-                        "workflow_code": "SOP_INB_101",
-                        "description": "Inbound receiving and inspection.",
-                    }
-                ],
-                1,
-            ),
+            "app.api.v1.copilot.KnowledgeRepository.list_published_catalog",
+            return_value=[
+                {
+                    "title": "Receive shipment",
+                    "workflow_code": "SOP_INB_101",
+                    "description": "Inbound receiving and inspection.",
+                    "workflow_version_id": "ver_1",
+                }
+            ],
         ) as list_items,
         patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
         patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
@@ -393,9 +394,145 @@ def test_numbered_sop_request_uses_published_department_catalog():
     body = response.json()
     assert body["answer"].startswith("Published SOP 1: Receive shipment")
     assert body["requires_escalation"] is False
-    list_items.assert_called_once_with(
-        department_id="dept_ops", status_filter="published", page=1, limit=20
+    list_items.assert_called_once_with("dept_ops")
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_named_sop_request_starts_catalog_workflow_without_embeddings():
+    session = workflow_session()
+    position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Inspect the shipment seal",
     )
+    catalog = [
+        {
+            "workflow_id": "workflow_1",
+            "workflow_code": "SOP_INB_101",
+            "title": "receive_shipment_v1_1",
+            "description": "Inbound receiving, seal verification, and inventory intake.",
+            "workflow_version_id": "ver_1",
+            "version_number": 4,
+        }
+    ]
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=None,
+        ),
+        patch(
+            "app.api.v1.copilot.KnowledgeRepository.list_published_catalog",
+            return_value=catalog,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.start_session",
+            return_value=session,
+        ) as start_session,
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=position,
+        ),
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"message": "get me receive shipment sop"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"].startswith("Using receive_shipment_v1_1")
+    assert body["active_step_number"] == 1
+    assert body["confidence_score"] == 1.0
+    start_session.assert_called_once_with(
+        conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
+    )
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_all_steps_done_stops_at_persisted_decision_without_escalation():
+    current = workflow_session()
+    decision_position = WorkflowPosition(
+        state_id="state_decision",
+        state_title="Container damage evaluation",
+        state_type="DECISION",
+        step_title="Container damage evaluation",
+        decision_options=[
+            WorkflowDecisionOption(
+                option_code="OPT_DAMAGED",
+                option_label="Yes, damaged cartons detected",
+            ),
+            WorkflowDecisionOption(
+                option_code="OPT_INTACT",
+                option_label="No, all cartons intact",
+            ),
+        ],
+    )
+    completion = WorkflowCompletionResult(
+        session=current,
+        completed_step_numbers=[1, 2],
+        stopped_at_decision=True,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            side_effect=[decision_position, decision_position],
+        ),
+        patch(
+            "app.api.v1.copilot.OWDRepository.get_last_step_ordinal",
+            return_value=6,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.complete_through_step",
+            return_value=completion,
+        ) as complete_through,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "all the steps are done"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "steps 1 through 2" in body["answer"]
+    assert "verified outcome is required" in body["answer"]
+    assert len(body["active_decision_options"]) == 2
+    assert body["requires_escalation"] is False
+    complete_through.assert_called_once_with("sess_1", 6)
     detect_intent.assert_not_awaited()
     retrieve.assert_not_awaited()
 

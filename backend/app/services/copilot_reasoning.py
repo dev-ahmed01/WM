@@ -81,6 +81,44 @@ class CopilotReasoningService:
             else message.strip()
         )
 
+    @classmethod
+    def focus_operational_query(cls, message: str) -> str:
+        """Drop conversational lead-in before a clear exception/topic anchor."""
+        if cls.classify_move(message) != "exception":
+            return message.strip()
+        tokens = re.findall(r"[a-z0-9_-]+", (message or "").casefold())
+        anchors = {
+            "box",
+            "boxes",
+            "broken",
+            "carton",
+            "cartons",
+            "container",
+            "containers",
+            "damage",
+            "damaged",
+            "error",
+            "failed",
+            "failure",
+            "mismatch",
+            "missing",
+            "package",
+            "packages",
+            "pallet",
+            "pallets",
+            "seal",
+            "temperature",
+            "thermometer",
+            "wrong",
+        }
+        first_anchor = next(
+            (index for index, token in enumerate(tokens) if token in anchors), None
+        )
+        if first_anchor is None:
+            return message.strip()
+        focused = " ".join(tokens[first_anchor:]).strip()
+        return focused or message.strip()
+
     @staticmethod
     def compact_history(
         history: Sequence[Dict[str, Any]], limit: int

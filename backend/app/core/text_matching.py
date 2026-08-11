@@ -6,10 +6,12 @@ from typing import List
 
 
 _STOP_WORDS = {
-    "a", "an", "and", "are", "do", "does", "for", "how", "i", "if", "in", "is", "it",
-    "give", "me", "navigate", "next", "of", "on", "open", "please", "show", "sop", "start",
-    "step", "steps", "should", "the", "its", "need", "not", "purpose", "reason", "to", "what",
-    "when", "where", "why", "with", "workflow", "you",
+    "a", "about", "all", "an", "and", "are", "can", "could", "currently", "do", "does",
+    "fetch", "find", "for", "get", "give", "how", "i", "if", "in", "is", "it", "launch",
+    "load", "me", "navigate", "need", "next", "now", "of", "on", "open", "please", "procedure",
+    "process", "show", "sop", "start", "step", "steps", "take",
+    "its", "not", "purpose", "reason", "should", "tell", "the", "this", "to", "trying",
+    "want", "what", "when", "where", "why", "with", "workflow", "would", "you",
 }
 
 _DOMAIN_EQUIVALENTS = {

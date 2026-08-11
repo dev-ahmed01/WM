@@ -19,12 +19,14 @@ from app.models.copilot import (
 )
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.knowledge_repository import KnowledgeRepository
+from app.repositories.owd_repository import OWDRepository
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowStateService
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
+from app.services.workflow_intent import WorkflowIntentService
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
 
@@ -165,6 +167,30 @@ def _persist_control_reply(
     )
 
 
+def _completion_reply(
+    completion: Any, position: Any, target: int, *, mention_target: bool = True
+) -> str:
+    completed = completion.completed_step_numbers
+    if not completed:
+        recorded = "No additional steps were recorded."
+    elif len(completed) == 1:
+        recorded = f"Recorded your completion attestation for step {completed[0]}."
+    else:
+        recorded = (
+            f"Recorded your completion attestation for steps {completed[0]} "
+            f"through {completed[-1]}."
+        )
+    if completion.stopped_at_decision:
+        continuation = (
+            f"continue toward step {target}." if mention_target else "continue."
+        )
+        return (
+            f"{recorded} A verified outcome is required before I can {continuation} "
+            f"{_step_guidance(position, advanced=True)}"
+        )
+    return f"{recorded} {_step_guidance(position, advanced=True)}"
+
+
 @router.get(
     "/history",
     response_model=CopilotHistoryResponse,
@@ -264,17 +290,29 @@ async def copilot_message(
     started_workflow_this_turn = False
     active_session = WorkflowStateService.get_current_session(conversation_id)
     resolved_position: Any = None
+    prechecked_position: Any = None
 
-    # A numbered catalog request is a discovery action, not an execution
-    # command. Resolve it deterministically against published department SOPs.
+    # Catalog selection is deterministic and remains available when embeddings
+    # or the local model are slow. Only one unambiguous published match can run.
     requested_sop_index = _requested_sop_index(payload.message)
-    if requested_sop_index is not None:
-        catalog, total = KnowledgeRepository.list_items(
-            department_id=department_id,
-            status_filter="published",
-            page=1,
-            limit=20,
+    catalog: list[Dict[str, Any]] = []
+    should_check_catalog = bool(
+        requested_sop_index is not None
+        or WorkflowIntentService.is_workflow_request(payload.message)
+        or (
+            active_session is None
+            and WorkflowIntentService.is_catalog_candidate(payload.message)
         )
+    )
+    if should_check_catalog:
+        try:
+            catalog = KnowledgeRepository.list_published_catalog(department_id)
+        except Exception:
+            copilot_logger.exception(
+                "Published workflow catalog lookup failed; continuing with grounded retrieval"
+            )
+
+    if requested_sop_index is not None:
         catalog_position = requested_sop_index - 1
         if 0 <= catalog_position < len(catalog):
             item = catalog[catalog_position]
@@ -286,7 +324,7 @@ async def copilot_message(
             if description:
                 answer += f" {description}"
             answer += f' To begin guided execution, say "start {item["title"]}".'
-        elif total:
+        elif catalog:
             available = ", ".join(
                 f"{index + 1}. {item['title']}"
                 for index, item in enumerate(catalog[:5])
@@ -307,19 +345,92 @@ async def copilot_message(
             position=position,
         )
 
+    workflow_match = WorkflowIntentService.match_published_workflow(
+        payload.message, catalog
+    )
+    if workflow_match:
+        matched_version_id = str(workflow_match["workflow_version_id"])
+        if active_session and active_session.workflow_version_id != matched_version_id:
+            position = WorkflowStateService.get_position(active_session)
+            answer = (
+                f"I found {workflow_match['title']} ({workflow_match['workflow_code']}), "
+                "but another workflow is currently active. Pause or abandon the active "
+                "workflow before starting a different SOP. "
+                f"{_step_guidance(position)}"
+            )
+            intent = "WORKFLOW_SELECTION_CONFLICT"
+        else:
+            if not active_session:
+                active_session = WorkflowStateService.start_session(
+                    conversation_id=conversation_id,
+                    workflow_version_id=matched_version_id,
+                    user_id=user_id,
+                )
+                started_workflow_this_turn = True
+                intent = "WORKFLOW_START"
+            else:
+                intent = "WORKFLOW_RESUME"
+            position = WorkflowStateService.get_position(active_session)
+            answer = (
+                f"Using {workflow_match['title']} ({workflow_match['workflow_code']}). "
+                f"{_step_guidance(position)}"
+            )
+        copilot_logger.info(
+            "Resolved workflow catalog intent '%s' with score %.3f",
+            intent,
+            float(workflow_match.get("match_score") or 0.0),
+        )
+        return _persist_control_reply(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            intent=intent,
+            answer=answer,
+            active_session=active_session,
+            position=position,
+        )
+
     if active_session and active_session.status == "active":
         current_position = WorkflowStateService.get_position(active_session)
-        resolved_position = current_position
+        prechecked_position = current_position
+        if WorkflowIntentService.is_all_steps_completion(payload.message):
+            final_step = OWDRepository.get_last_step_ordinal(
+                active_session.workflow_version_id
+            )
+            if final_step is None:
+                answer = f"This workflow has no executable steps. {_step_guidance(current_position)}"
+                return _persist_control_reply(
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    intent="WORKFLOW_ALL_STEPS_COMPLETE",
+                    answer=answer,
+                    active_session=active_session,
+                    position=current_position,
+                )
+            completion = WorkflowStateService.complete_through_step(
+                active_session.id, final_step
+            )
+            active_session = completion.session
+            next_position = WorkflowStateService.get_position(active_session)
+            answer = _completion_reply(
+                completion, next_position, final_step, mention_target=False
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_ALL_STEPS_COMPLETE",
+                answer=answer,
+                active_session=active_session,
+                position=next_position,
+            )
+
         completion_target = _completion_through_target(payload.message)
         if completion_target is not None:
-            active_session = WorkflowStateService.complete_through_step(
+            completion = WorkflowStateService.complete_through_step(
                 active_session.id, completion_target
             )
+            active_session = completion.session
             next_position = WorkflowStateService.get_position(active_session)
-            answer = (
-                f"Recorded your attestation that work through step {completion_target} "
-                f"is complete. {_step_guidance(next_position, advanced=True)}"
-            )
+            answer = _completion_reply(completion, next_position, completion_target)
             return _persist_control_reply(
                 conversation_id=conversation_id,
                 user_message_id=user_message_id,
@@ -366,7 +477,7 @@ async def copilot_message(
     # A short, explicit completion command belongs to the active state machine,
     # not to general intent detection or semantic retrieval.
     if active_session and active_session.status == "active":
-        current_position = resolved_position or WorkflowStateService.get_position(active_session)
+        current_position = prechecked_position or WorkflowStateService.get_position(active_session)
         if current_position.step_id and _is_step_completion_message(payload.message):
             ConversationRepository.update_message_intent(
                 user_message_id, "WORKFLOW_STEP_COMPLETE"
@@ -420,6 +531,7 @@ async def copilot_message(
     ][-settings.COPILOT_HISTORY_LIMIT :]
     reasoning_move = CopilotReasoningService.classify_move(payload.message)
     retrieval_query = CopilotReasoningService.resolve_query(payload.message, history)
+    retrieval_query = CopilotReasoningService.focus_operational_query(retrieval_query)
 
     # 2. Intent Detection & Clarification Check
     intent_result = await AIGateway.detect_intent(message=payload.message, history=history)

@@ -1,0 +1,64 @@
+"""Deterministic workflow intent and noisy-query regression tests."""
+
+import pytest
+
+from app.core.text_matching import fuzzy_relevance_score
+from app.services.copilot_reasoning import CopilotReasoningService
+from app.services.workflow_intent import WorkflowIntentService
+
+
+CATALOG = [
+    {
+        "workflow_id": "workflow_1",
+        "workflow_code": "SOP_INB_101",
+        "title": "receive_shipment_v1_1",
+        "description": "Inbound receiving, seal verification, temperature logging, and inventory intake.",
+        "workflow_version_id": "ver_1",
+        "version_number": 4,
+    }
+]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "get me receive shipment",
+        "get me receive shipment sop",
+        "I need the receive shipment sop",
+        "please fetch the recive shipmnt procedure",
+        "receive shipment",
+    ],
+)
+def test_catalog_match_understands_equivalent_workflow_requests(message):
+    match = WorkflowIntentService.match_published_workflow(message, CATALOG)
+    assert match is not None
+    assert match["workflow_version_id"] == "ver_1"
+
+
+def test_operational_damage_question_is_not_mistaken_for_workflow_selection():
+    assert (
+        WorkflowIntentService.match_published_workflow(
+            "package is damaged what should I do", CATALOG
+        )
+        is None
+    )
+
+
+def test_noisy_damage_query_keeps_enough_verified_relevance():
+    focused = CopilotReasoningService.focus_operational_query(
+        "turn all this the package is damaged what should I do"
+    )
+    assert focused == "package is damaged what should i do"
+    score = fuzzy_relevance_score(
+        focused,
+        "Container Damage Evaluation. Yes, damaged cartons detected.",
+    )
+    assert score >= 0.90
+
+
+def test_all_steps_completion_requires_an_attestation_not_a_question():
+    assert WorkflowIntentService.is_all_steps_completion("all the steps are done")
+    assert WorkflowIntentService.is_all_steps_completion("the entire workflow is complete")
+    assert WorkflowIntentService.is_all_steps_completion("I finished every step")
+    assert WorkflowIntentService.is_all_steps_completion("everything is completed")
+    assert not WorkflowIntentService.is_all_steps_completion("are all the steps done?")
