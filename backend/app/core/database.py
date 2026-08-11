@@ -4,11 +4,17 @@
 
 import contextlib
 import logging
+from queue import Empty, Full, LifoQueue
+from threading import BoundedSemaphore
 from typing import Generator, Any
 import snowflake.connector
 from app.core.config import settings
 
 logger = logging.getLogger("workmate.database")
+
+_POOL_SIZE = max(1, settings.SNOWFLAKE_POOL_SIZE)
+_connection_pool: LifoQueue[Any] = LifoQueue(maxsize=_POOL_SIZE)
+_pool_slots = BoundedSemaphore(_POOL_SIZE)
 
 
 def create_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
@@ -33,14 +39,49 @@ def create_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(**connect_kwargs)
 
 
+def _is_closed(conn: Any) -> bool:
+    state = getattr(conn, "is_closed", False)
+    try:
+        return state() is True if callable(state) else state is True
+    except Exception:
+        return True
+
+
+def _close_connection(conn: Any) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def close_snowflake_pool() -> None:
+    """Close all currently idle pooled sessions (primarily shutdown/test cleanup)."""
+    while True:
+        try:
+            _close_connection(_connection_pool.get_nowait())
+        except Empty:
+            return
+
+
 @contextlib.contextmanager
 def get_snowflake_connection() -> Generator[snowflake.connector.SnowflakeConnection, None, None]:
-    """Context manager yielding an active Snowflake database connection with reconnect handling."""
+    """Yield an exclusive pooled Snowflake connection and recycle it on success."""
     conn: Any = None
+    failed = False
+    acquired = _pool_slots.acquire(timeout=settings.SNOWFLAKE_POOL_ACQUIRE_TIMEOUT_SECONDS)
+    if not acquired:
+        raise TimeoutError("Timed out waiting for an available Snowflake connection")
     try:
-        conn = create_snowflake_connection()
+        try:
+            conn = _connection_pool.get_nowait()
+        except Empty:
+            conn = create_snowflake_connection()
+        if _is_closed(conn):
+            _close_connection(conn)
+            conn = create_snowflake_connection()
         yield conn
     except Exception as exc:
+        failed = True
         if conn is not None:
             try:
                 with conn.cursor() as rollback_cursor:
@@ -51,10 +92,14 @@ def get_snowflake_connection() -> Generator[snowflake.connector.SnowflakeConnect
         raise
     finally:
         if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            if failed or _is_closed(conn):
+                _close_connection(conn)
+            else:
+                try:
+                    _connection_pool.put_nowait(conn)
+                except Full:
+                    _close_connection(conn)
+        _pool_slots.release()
 
 
 def get_db() -> Generator[Any, None, None]:

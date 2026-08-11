@@ -261,7 +261,6 @@ async def copilot_message(
 
     if (
         not active_session
-        and detected_intent == "SOP_GUIDANCE"
         and ResponseValidationService.has_relevant_evidence(retrieved_chunks, department_id)
     ):
         workflow_version_id = retrieved_chunks[0].get("workflow_version_id")

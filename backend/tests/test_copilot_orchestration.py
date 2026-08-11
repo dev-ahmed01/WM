@@ -80,7 +80,9 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     _mock_analytics,
 ):
     session = workflow_session()
-    mock_intent.return_value = {"intent": "SOP_GUIDANCE", "needs_clarification": False}
+    # Intent classification is advisory. Verified evidence must still start the
+    # workflow when a realistic paraphrase lacks an exact command keyword.
+    mock_intent.return_value = {"intent": "GENERAL_QUERY", "needs_clarification": False}
     mock_retrieve.return_value = [source_chunk()]
     mock_generate.return_value = GeneratedAnswer(
         "Inspect the shipment seal before unloading.", ["chunk_1"], "test"
@@ -98,7 +100,7 @@ def test_retrieval_starts_workflow_and_returns_real_position(
     response = client.post(
         "/api/v1/copilot/message",
         headers={"Authorization": f"Bearer {TOKEN}"},
-        json={"message": "How do I receive this shipment?"},
+        json={"message": "Inbound trailer at dock, seal needs checking"},
     )
 
     assert response.status_code == 200

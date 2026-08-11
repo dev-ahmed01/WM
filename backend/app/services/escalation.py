@@ -26,6 +26,9 @@ class EscalationService:
             reason=reason
         )
 
+        if not settings.N8N_NOTIFICATIONS_ENABLED:
+            return escalation_id
+
         # Trigger n8n supervisor notification webhook asynchronously
         n8n_webhook_url = f"{settings.N8N_WEBHOOK_BASE_URL.rstrip('/')}/webhook/escalation-webhook"
         payload = {

@@ -1,6 +1,7 @@
 """Provider-neutral retrieval with a disposable local semantic index."""
 
 import asyncio
+from difflib import SequenceMatcher
 import logging
 import math
 import re
@@ -17,7 +18,7 @@ logger = logging.getLogger("workmate.retrieval")
 _STOP_WORDS = {
     "a", "an", "and", "are", "do", "for", "how", "i", "if", "in", "is", "it",
     "give", "me", "of", "on", "please", "show", "step", "steps", "should", "the",
-    "to", "what", "when", "where", "with", "you",
+    "its", "to", "what", "when", "where", "with", "you",
 }
 
 
@@ -30,13 +31,60 @@ def allowed_statuses() -> Tuple[str, ...]:
     return statuses or ("published",)
 
 
+def _is_stop_word(term: str) -> bool:
+    if term in _STOP_WORDS:
+        return True
+    if len(term) < 3:
+        return False
+    return any(
+        abs(len(term) - len(stop_word)) <= 1
+        and term[0] == stop_word[0]
+        and SequenceMatcher(None, term, stop_word).ratio() >= 0.82
+        for stop_word in _STOP_WORDS
+    )
+
+
 def search_terms(query: str) -> List[str]:
     terms = re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (query or "").lower())
     result: List[str] = []
     for term in terms:
-        if term not in _STOP_WORDS and term not in result:
+        if not _is_stop_word(term) and term not in result:
             result.append(term)
     return result[:8]
+
+
+def fuzzy_relevance_score(query: str, candidate_content: str) -> float:
+    """Score typo-tolerant token overlap without changing or generating SOP text."""
+    query_tokens = search_terms(query)
+    if not query_tokens:
+        return 0.0
+    candidate_tokens = set(
+        re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (candidate_content or "").lower())
+    )
+    qualities: List[float] = []
+    for query_token in query_tokens:
+        if query_token in candidate_tokens:
+            qualities.append(1.0)
+            continue
+        if len(query_token) < 4:
+            continue
+        threshold = 0.72 if len(query_token) >= 6 else 0.74
+        best = max(
+            (
+                SequenceMatcher(None, query_token, candidate_token).ratio()
+                for candidate_token in candidate_tokens
+                if candidate_token
+                and candidate_token[0] == query_token[0]
+                and abs(len(candidate_token) - len(query_token)) <= 2
+            ),
+            default=0.0,
+        )
+        if best >= threshold:
+            qualities.append(best)
+    # Requiring up to four independently matching terms prevents a single
+    # incidental fuzzy match from crossing the response safety threshold.
+    denominator = min(len(query_tokens), 4)
+    return round(min(1.0, sum(sorted(qualities, reverse=True)[:4]) / denominator), 6)
 
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
@@ -121,6 +169,9 @@ class LocalSemanticIndex:
     def __init__(self, provider: LocalAIProvider):
         self.provider = provider
         self._entries: Dict[Tuple[str, Tuple[str, ...], str], SemanticIndexEntry] = {}
+        self._candidate_entries: Dict[
+            Tuple[str, Tuple[str, ...], str], List[Dict[str, Any]]
+        ] = {}
         self._locks: Dict[Tuple[str, Tuple[str, ...], str], asyncio.Lock] = {}
 
     def _key(self, department_id: str) -> Tuple[str, Tuple[str, ...], str]:
@@ -129,22 +180,30 @@ class LocalSemanticIndex:
     def invalidate_department(self, department_id: str) -> None:
         for key in [key for key in self._entries if key[0] == department_id]:
             self._entries.pop(key, None)
+        for key in [key for key in self._candidate_entries if key[0] == department_id]:
+            self._candidate_entries.pop(key, None)
 
     def clear(self) -> None:
         self._entries.clear()
+        self._candidate_entries.clear()
 
-    async def rebuild(self, department_id: str) -> SemanticIndexEntry:
+    async def get_candidates(self, department_id: str) -> List[Dict[str, Any]]:
         key = self._key(department_id)
+        cached = self._candidate_entries.get(key)
+        if cached is not None:
+            return cached
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
+            cached = self._candidate_entries.get(key)
+            if cached is not None:
+                return cached
             statuses = key[1]
             page_size = max(1, settings.LOCAL_AI_CANDIDATE_LIMIT)
             max_candidates = max(page_size, settings.LOCAL_AI_INDEX_MAX_CANDIDATES)
             candidates: List[Dict[str, Any]] = []
             offset = 0
             while len(candidates) < max_candidates:
-                remaining = max_candidates - len(candidates)
-                current_size = min(page_size, remaining)
+                current_size = min(page_size, max_candidates - len(candidates))
                 page = await asyncio.to_thread(
                     CandidateRepository.load_page,
                     department_id,
@@ -156,15 +215,54 @@ class LocalSemanticIndex:
                 offset += len(page)
                 if len(page) < current_size:
                     break
-            embeddings: List[List[float]] = []
-            for start in range(0, len(candidates), page_size):
-                batch = candidates[start : start + page_size]
-                embeddings.extend(
-                    await self.provider.embed([str(candidate["content"]) for candidate in batch])
-                )
-            entry = SemanticIndexEntry(candidates=candidates, embeddings=embeddings)
-            self._entries[key] = entry
-            return entry
+            self._candidate_entries[key] = candidates
+            return candidates
+
+    def fuzzy_search_cached(
+        self, query: str, department_id: str, limit: int
+    ) -> List[Dict[str, Any]]:
+        candidates = self._candidate_entries.get(self._key(department_id))
+        if candidates is None:
+            return []
+        return self._rank_fuzzy(query, department_id, candidates, limit)
+
+    async def fuzzy_search(
+        self, query: str, department_id: str, limit: int
+    ) -> List[Dict[str, Any]]:
+        candidates = await self.get_candidates(department_id)
+        return self._rank_fuzzy(query, department_id, candidates, limit)
+
+    @staticmethod
+    def _rank_fuzzy(
+        query: str,
+        department_id: str,
+        candidates: Sequence[Dict[str, Any]],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        valid_statuses = set(allowed_statuses())
+        ranked = [
+            {**candidate, "score": fuzzy_relevance_score(query, str(candidate.get("content", "")))}
+            for candidate in candidates
+            if candidate.get("department_id") == department_id
+            and str(candidate.get("status", "")).lower() in valid_statuses
+        ]
+        ranked = [candidate for candidate in ranked if candidate["score"] > 0]
+        ranked.sort(key=lambda item: (-item["score"], item.get("step_number") or 0))
+        return ranked[:limit]
+
+    async def rebuild(self, department_id: str) -> SemanticIndexEntry:
+        key = self._key(department_id)
+        candidates = await self.get_candidates(department_id)
+        page_size = max(1, settings.LOCAL_AI_CANDIDATE_LIMIT)
+        embeddings: List[List[float]] = []
+        for start in range(0, len(candidates), page_size):
+            batch = candidates[start : start + page_size]
+            embeddings.extend(
+                await self.provider.embed([str(candidate["content"]) for candidate in batch])
+            )
+        entry = SemanticIndexEntry(candidates=candidates, embeddings=embeddings)
+        self._entries[key] = entry
+        return entry
 
     async def get_or_rebuild(self, department_id: str) -> SemanticIndexEntry:
         key = self._key(department_id)

@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     SNOWFLAKE_DATABASE: str = "WORKMATE_AI"
     SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
     SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
+    SNOWFLAKE_POOL_SIZE: int = 4
+    SNOWFLAKE_POOL_ACQUIRE_TIMEOUT_SECONDS: float = 5.0
     SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
     OWD_CLI_USER_ID: str = "usr_admin001"
 
@@ -43,7 +45,7 @@ class Settings(BaseSettings):
     LOCAL_AI_BASE_URL: str = "http://ollama:11434"
     LOCAL_CHAT_MODEL: str = "qwen2.5:3b"
     LOCAL_EMBEDDING_MODEL: str = "nomic-embed-text"
-    LOCAL_AI_TIMEOUT_SECONDS: float = 30.0
+    LOCAL_AI_TIMEOUT_SECONDS: float = 8.0
     LOCAL_AI_CANDIDATE_LIMIT: int = 100
     LOCAL_AI_INDEX_MAX_CANDIDATES: int = 5000
     LOCAL_AI_MIN_SIMILARITY: float = 0.35
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
     # Orchestration Settings
     N8N_BASE_URL: str = "http://localhost:5678"
     N8N_WEBHOOK_BASE_URL: str = "http://localhost:5678"
+    N8N_NOTIFICATIONS_ENABLED: bool = False
 
     @model_validator(mode="after")
     def validate_runtime_security(self) -> Self:

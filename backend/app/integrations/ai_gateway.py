@@ -59,6 +59,14 @@ class AIGateway:
         if not query.strip() or not department_id.strip():
             return []
         effective_limit = max(1, min(limit, settings.COPILOT_RETRIEVAL_LIMIT, 20))
+        cached_fuzzy = cls.semantic_index.fuzzy_search_cached(
+            query, department_id, effective_limit
+        )
+        if cached_fuzzy and float(cached_fuzzy[0].get("score", 0.0)) >= (
+            settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+        ):
+            logger.info("Using strong cached typo-tolerant retrieval result")
+            return cached_fuzzy
         lexical_results: List[Dict[str, Any]] = []
         try:
             lexical_results = await cls.sql_provider.search(
@@ -74,6 +82,17 @@ class AIGateway:
                 "Scoped SQL retrieval unavailable; trying local semantic retrieval: %s",
                 type(exc).__name__,
             )
+        try:
+            fuzzy_results = await cls.semantic_index.fuzzy_search(
+                query, department_id, effective_limit
+            )
+            if fuzzy_results and float(fuzzy_results[0].get("score", 0.0)) >= (
+                settings.COPILOT_MIN_CONFIDENCE_THRESHOLD
+            ):
+                logger.info("Using strong typo-tolerant retrieval result")
+                return fuzzy_results
+        except Exception as exc:
+            logger.warning("Typo-tolerant retrieval unavailable: %s", type(exc).__name__)
         if settings.LOCAL_AI_ENABLED:
             try:
                 results = await cls.semantic_index.search(query, department_id, effective_limit)

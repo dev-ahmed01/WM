@@ -1,7 +1,24 @@
 """Unit tests for Snowflake database connection layer."""
 
 from unittest.mock import patch, MagicMock
-from app.core.database import create_snowflake_connection, get_snowflake_connection, get_db, ping, ping_snowflake_connection
+
+import pytest
+
+from app.core.database import (
+    close_snowflake_pool,
+    create_snowflake_connection,
+    get_snowflake_connection,
+    get_db,
+    ping,
+    ping_snowflake_connection,
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_connection_pool():
+    close_snowflake_pool()
+    yield
+    close_snowflake_pool()
 
 
 @patch("snowflake.connector.connect")
@@ -21,6 +38,33 @@ def test_get_snowflake_connection_context_manager(mock_factory):
 
     with get_snowflake_connection() as conn:
         assert conn is mock_conn
+    mock_conn.close.assert_not_called()
+    close_snowflake_pool()
+    mock_conn.close.assert_called_once()
+
+
+@patch("app.core.database.create_snowflake_connection")
+def test_successful_contexts_reuse_connection(mock_factory):
+    mock_conn = MagicMock()
+    mock_factory.return_value = mock_conn
+
+    with get_snowflake_connection() as first:
+        assert first is mock_conn
+    with get_snowflake_connection() as second:
+        assert second is mock_conn
+
+    mock_factory.assert_called_once_with()
+
+
+@patch("app.core.database.create_snowflake_connection")
+def test_failed_context_discards_connection(mock_factory):
+    mock_conn = MagicMock()
+    mock_factory.return_value = mock_conn
+
+    with pytest.raises(RuntimeError, match="query failed"):
+        with get_snowflake_connection():
+            raise RuntimeError("query failed")
+
     mock_conn.close.assert_called_once()
 
 

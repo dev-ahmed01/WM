@@ -11,6 +11,7 @@ from app.integrations.retrieval_providers import (
     CandidateRepository,
     LocalSemanticIndex,
     SqlLexicalRetrievalProvider,
+    fuzzy_relevance_score,
     search_terms,
 )
 
@@ -20,6 +21,28 @@ def test_workflow_request_keeps_only_meaningful_search_terms():
         "receive",
         "shipment",
     ]
+
+
+def test_search_terms_ignore_misspelled_question_words():
+    assert search_terms("Wat shoud I do wen an inboud traler arives") == [
+        "inboud",
+        "traler",
+        "arives",
+    ]
+
+
+def test_fuzzy_relevance_recognizes_operational_typos_without_false_match():
+    content = (
+        "Dock Arrival and Seal Inspection. Inbound trailer arrives. "
+        "Verify physical trailer door seal number against the manifest."
+    )
+    score = fuzzy_relevance_score(
+        "Wat shoud I do wen an inboud traler arives and I ned to varify its seel?",
+        content,
+    )
+
+    assert score >= 0.70
+    assert fuzzy_relevance_score("quantum nebula payroll crystallography", content) == 0.0
 
 
 @pytest.mark.asyncio
@@ -163,6 +186,7 @@ async def test_index_filters_cross_department_and_non_published_after_ranking(mo
 async def test_strong_sql_result_skips_semantic_retrieval(monkeypatch):
     semantic = AsyncMock(side_effect=ConnectionError("offline"))
     monkeypatch.setattr(AIGateway.semantic_index, "search", semantic)
+    monkeypatch.setattr(AIGateway.semantic_index, "fuzzy_search_cached", MagicMock(return_value=[]))
     monkeypatch.setattr(
         AIGateway.sql_provider,
         "search",
@@ -177,6 +201,8 @@ async def test_strong_sql_result_skips_semantic_retrieval(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_weak_sql_result_can_use_semantic_retrieval(monkeypatch):
+    monkeypatch.setattr(AIGateway.semantic_index, "fuzzy_search_cached", MagicMock(return_value=[]))
+    monkeypatch.setattr(AIGateway.semantic_index, "fuzzy_search", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         AIGateway.sql_provider,
         "search",
@@ -193,17 +219,43 @@ async def test_weak_sql_result_can_use_semantic_retrieval(monkeypatch):
     assert result == [{"chunk_id": "semantic", "score": 0.86}]
 
 
+@pytest.mark.asyncio
+async def test_strong_typo_match_skips_slow_semantic_retrieval(monkeypatch):
+    semantic = AsyncMock(side_effect=AssertionError("semantic path should not run"))
+    monkeypatch.setattr(AIGateway.semantic_index, "fuzzy_search_cached", MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        AIGateway.sql_provider,
+        "search",
+        AsyncMock(return_value=[{"chunk_id": "sql", "score": 0.25}]),
+    )
+    monkeypatch.setattr(
+        AIGateway.semantic_index,
+        "fuzzy_search",
+        AsyncMock(return_value=[{"chunk_id": "fuzzy", "score": 0.91}]),
+    )
+    monkeypatch.setattr(AIGateway.semantic_index, "search", semantic)
+
+    result = await AIGateway.search("inboud traler seel", "dept_ops", 5)
+
+    assert result == [{"chunk_id": "fuzzy", "score": 0.91}]
+    semantic.assert_not_awaited()
+
+
 def test_index_invalidation_removes_only_published_department_cache():
     index = LocalSemanticIndex(MagicMock())
     key_ops = ("dept_ops", ("published",), "nomic-embed-text")
     key_hr = ("dept_hr", ("published",), "nomic-embed-text")
     index._entries[key_ops] = MagicMock()
     index._entries[key_hr] = MagicMock()
+    index._candidate_entries[key_ops] = []
+    index._candidate_entries[key_hr] = []
 
     index.invalidate_department("dept_ops")
 
     assert key_ops not in index._entries
     assert key_hr in index._entries
+    assert key_ops not in index._candidate_entries
+    assert key_hr in index._candidate_entries
 
 
 def test_public_managed_ai_url_is_rejected(monkeypatch):
