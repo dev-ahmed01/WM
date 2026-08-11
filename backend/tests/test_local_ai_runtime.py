@@ -231,6 +231,29 @@ async def test_sql_fallback_returns_workflow_version_identity(monkeypatch):
     assert params[2:6] == ["published", "dept_ops", "dept_ops", "published"]
 
 
+@pytest.mark.asyncio
+async def test_sql_fallback_does_not_dilute_multiple_matches_in_long_question(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+    cursor.description = []
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    monkeypatch.setattr(
+        "app.integrations.retrieval_providers.get_snowflake_connection",
+        MagicMock(return_value=context),
+    )
+
+    await SqlLexicalRetrievalProvider().search(
+        "inbound trailer arrives verify seal procedure", "dept_ops", 5
+    )
+
+    sql, _params = cursor.execute.call_args.args
+    assert "LEAST(1.0" in sql
+    assert "/ 4.0" in sql
+
+
 def test_gateway_can_invalidate_all_department_indexes(monkeypatch):
     clear = MagicMock()
     monkeypatch.setattr(AIGateway.semantic_index, "clear", clear)

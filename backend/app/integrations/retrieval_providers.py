@@ -204,7 +204,13 @@ class SqlLexicalRetrievalProvider:
         status_placeholders = ", ".join(["%s"] * len(statuses))
         score_parts = ["IFF(LOWER(sm.search_content) LIKE %s, 1, 0)" for _ in terms]
         where_parts = ["LOWER(sm.search_content) LIKE %s" for _ in terms]
-        score_expression = f"(({' + '.join(score_parts)}) / {len(terms)}.0)"
+        # Long natural-language questions contain contextual terms that should
+        # not dilute several strong lexical matches below the safety gate.
+        # One incidental match in a long query still scores at most 0.25.
+        relevance_term_count = min(len(terms), 4)
+        score_expression = (
+            f"LEAST(1.0, (({' + '.join(score_parts)}) / {relevance_term_count}.0))"
+        )
         sql = f"""
             SELECT sm.id AS chunk_id,
                    w.id AS document_id,
