@@ -201,6 +201,25 @@ class CopilotReasoningService:
         return fallback
 
     @classmethod
+    def describes_completed_action(
+        cls, message: str, source: Dict[str, Any]
+    ) -> bool:
+        """Identify a user's attestation that they performed the matched step."""
+        normalized = cls._normalized(message)
+        tokens = set(normalized.split())
+        has_completion_language = bool(
+            tokens & {"complete", "completed", "done", "finished"}
+            or tokens & {"have", "has", "already"}
+        )
+        if not has_completion_language or "next" not in tokens:
+            return False
+        sections = cls.evidence_sections(str(source.get("content") or ""))
+        instruction = cls._without_code(sections.get("instructions", ""))
+        return bool(
+            instruction and fuzzy_relevance_score(message, instruction) >= 0.45
+        )
+
+    @classmethod
     def resolve_query(
         cls, message: str, history: Sequence[Dict[str, Any]]
     ) -> str:

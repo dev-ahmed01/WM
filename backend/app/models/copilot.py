@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Optional, List, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.workflow_session import WorkflowDecisionOption
 
@@ -24,6 +24,8 @@ class CopilotResponse(BaseModel):
     conversation_id: str
     message_id: str
     answer: str
+    spoken_answer: Optional[str] = None
+    sop_details: Optional[str] = None
     citations: List[Citation]
     confidence_score: float
     is_grounded: bool
@@ -35,6 +37,12 @@ class CopilotResponse(BaseModel):
     active_step_title: Optional[str] = None
     active_decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @model_validator(mode="after")
+    def default_spoken_answer(self) -> "CopilotResponse":
+        if not self.spoken_answer:
+            self.spoken_answer = self.answer
+        return self
 
 class ValidatedResponse(BaseModel):
     answer: str

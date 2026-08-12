@@ -415,7 +415,10 @@ def test_numbered_sop_request_uses_published_department_catalog():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"].startswith("Published SOP 1: Receive shipment")
+    assert body["answer"].startswith("Inbound receiving and inspection.")
+    assert body["spoken_answer"] == body["answer"]
+    assert "SOP_INB_101" not in body["spoken_answer"]
+    assert body["sop_details"] == "SOP 1: Receive shipment | SOP_INB_101"
     assert body["requires_escalation"] is False
     list_items.assert_called_once_with("dept_ops")
     detect_intent.assert_not_awaited()
@@ -480,7 +483,10 @@ def test_named_sop_request_starts_catalog_workflow_without_embeddings():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"].startswith("Using receive_shipment_v1_1")
+    assert body["answer"].startswith("Current step: Inspect the shipment seal")
+    assert body["spoken_answer"] == body["answer"]
+    assert "receive_shipment_v1_1" not in body["spoken_answer"]
+    assert body["sop_details"] == "SOP: receive_shipment_v1_1 | SOP_INB_101"
     assert body["active_step_number"] == 1
     assert body["confidence_score"] == 1.0
     start_session.assert_called_once_with(
@@ -774,11 +780,112 @@ def test_future_damage_question_returns_direct_verified_guidance_without_advanci
     body = response.json()
     assert body["is_grounded"] is True
     assert body["requires_escalation"] is False
-    assert "Verified guidance from workflow step 4" in body["answer"]
-    assert "Apply physical red quarantine tape" in body["answer"]
-    assert "without changing your recorded position at step 1" in body["answer"]
+    assert body["answer"] == (
+        "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1."
+    )
     assert "Do not skip ahead" not in body["answer"]
     assert body["active_step_number"] == 1
+    generate.assert_not_awaited()
+
+
+def test_completed_future_action_answers_with_persisted_following_step_without_metadata():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Verify physical trailer door seal number against Bill of Lading manifest.",
+    )
+    future = source_chunk(
+        chunk_id="chunk_quarantine",
+        state_id="state_4",
+        step_number=4,
+        step_title="Quality Quarantine Hold",
+        content=(
+            "State: Quality Quarantine Hold | Instructions: STEP_APPLY_TAPE "
+            "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1."
+        ),
+        score=0.9,
+    )
+    current_source = source_chunk(score=0.2)
+    next_source = source_chunk(
+        chunk_id="chunk_end",
+        state_id="state_end",
+        step_number=6,
+        step_title="Receiving Completed",
+        content="Receiving Completed (STATE_END)",
+        score=1.0,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[]),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=current_position,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.advance_if_transition_matches",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.OWDRepository.get_next_state_transition",
+            return_value={"to_state_id": "state_end", "is_terminal": True},
+        ),
+        patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        patch.object(
+            AIGateway,
+            "detect_intent",
+            new_callable=AsyncMock,
+            return_value={"intent": "GENERAL_QUERY", "needs_clarification": False},
+        ),
+        patch.object(
+            RetrievalService,
+            "retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=[future, current_source],
+        ),
+        patch.object(
+            AIGateway,
+            "get_workflow_state_source",
+            new_callable=AsyncMock,
+            return_value=next_source,
+        ) as get_state_source,
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": "I have transported the packages to bay q 1 what should I do next",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "Receiving is now completed."
+    assert body["spoken_answer"] == body["answer"]
+    assert "Title:" not in body["answer"]
+    assert "Keywords:" not in body["answer"]
+    assert body["active_step_number"] == 1
+    assert "STATE_END" not in body["answer"]
+    assert body["citations"][0]["chunk_id"] == "chunk_end"
+    get_state_source.assert_awaited_once_with("dept_ops", "ver_1", "state_end")
     generate.assert_not_awaited()
 
 

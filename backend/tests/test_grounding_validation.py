@@ -46,7 +46,10 @@ def test_retrieved_chunk_does_not_validate_unrelated_instruction():
     )
 
     assert escalated is True
-    assert validated.answer.startswith("Verified extract")
+    assert validated.answer.startswith("I found this verified instruction for review")
+    assert "Inspect the security seal before unloading the shipment." in validated.answer
+    assert "Title:" not in validated.answer
+    assert "Keywords:" not in validated.answer
     assert "Disable the fire alarm" not in validated.answer
 
 
@@ -78,7 +81,8 @@ def test_missing_source_identifier_is_rejected():
     )
 
     assert escalated is True
-    assert validated.answer.startswith("Verified extract")
+    assert validated.answer.startswith("I found this verified instruction for review")
+    assert "Title:" not in validated.answer
 
 
 def test_missing_citation_metadata_produces_canonical_fallback():

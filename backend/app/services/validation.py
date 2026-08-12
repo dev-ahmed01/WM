@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 from app.core.config import settings
 from app.integrations.ai_provider import GeneratedAnswer
 from app.models.copilot import Citation, ValidatedResponse
+from app.services.copilot_reasoning import CopilotReasoningService
 
 validation_logger = logging.getLogger("copilot_services")
 
@@ -164,9 +165,10 @@ class ResponseValidationService:
         if not source_map:
             return cls._canonical()
         top = max(source_map.values(), key=lambda chunk: float(chunk["score"]))
+        verified_instruction = CopilotReasoningService.concise_extract("", top)
         answer = (
-            f"Verified extract from '{top['document_title']}' (v{top['version_number']}, "
-            f"step {top['step_number']}): {str(top['content']).strip()}"
+            "I found this verified instruction for review, but it may not fully "
+            f"answer your question: {verified_instruction}"
         )
         return (
             ValidatedResponse(

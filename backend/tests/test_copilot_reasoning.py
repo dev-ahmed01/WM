@@ -90,6 +90,24 @@ def test_concise_extract_never_dumps_serialized_metadata():
     assert "Keywords:" not in answer
 
 
+def test_completed_future_action_can_request_the_verified_following_step():
+    future_source = {
+        "content": (
+            "State: Quality Quarantine Hold | Instructions: STEP_APPLY_TAPE "
+            "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1."
+        )
+    }
+
+    assert CopilotReasoningService.describes_completed_action(
+        "I have transported the packages to bay q 1; what should I do next?",
+        future_source,
+    )
+    assert not CopilotReasoningService.describes_completed_action(
+        "Should I transport the packages to bay q 1 next?",
+        future_source,
+    )
+
+
 def test_agent_context_marks_history_separately_from_workflow_authority():
     context = CopilotReasoningService.agent_context(
         move="reason",

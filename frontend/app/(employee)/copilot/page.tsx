@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Badge } from '@/components/ui/badge';
 import { useSpeechRecognition, useSpeechSynthesis } from '@/hooks/useWebSpeech';
+import { presentCopilotMessage } from '@/lib/copilot-presentation';
 
 function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -91,7 +92,13 @@ function CopilotContent() {
       setActiveStepTitle(response.active_step_title ?? undefined);
       const assistantMessageId = response.message_id || createMessageId('assistant');
       setMessages((current) => [...current, { id: assistantMessageId, sender: 'assistant', content: response.answer, copilotData: response }]);
-      if (speakReply) speechSynthesis.speak(response.answer, assistantMessageId);
+      if (speakReply) {
+        const spokenText = presentCopilotMessage(response.answer, {
+          spokenAnswer: response.spoken_answer,
+          sopDetails: response.sop_details,
+        }).spokenText;
+        speechSynthesis.speak(spokenText, assistantMessageId);
+      }
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'WorkMate could not reach the Copilot service. Please try again.');
       const errorMessageId = createMessageId('error');

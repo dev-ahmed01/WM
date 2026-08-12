@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Bot, ChevronDown, CircleAlert, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
 import type { CopilotResponse } from '@/lib/api-client';
+import { presentCopilotMessage } from '@/lib/copilot-presentation';
 import { Badge } from '@/components/ui/badge';
 
 export interface ChatMessage {
@@ -34,6 +35,10 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
           const assistant = message.sender === 'assistant';
           const isSpeaking = speakingMessageKey === message.id;
           const data = message.copilotData;
+          const presentation = presentCopilotMessage(message.content, {
+            spokenAnswer: data?.spoken_answer,
+            sopDetails: data?.sop_details,
+          });
           return (
             <article key={message.id} className={`flex gap-3 ${assistant ? 'items-start' : 'items-start justify-end'}`}>
               {assistant ? (
@@ -41,7 +46,7 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
               ) : null}
               <div className={`min-w-0 ${assistant ? 'max-w-[min(46rem,calc(100%-2.75rem))]' : 'max-w-[min(38rem,82%)]'}`}>
                 <div className={`rounded-2xl px-4 py-3.5 text-[14px] leading-6 sm:px-5 ${assistant ? 'rounded-tl-md border border-border/80 bg-white text-foreground shadow-panel' : 'rounded-tr-md bg-[#123c30] text-white shadow-sm'}`}>
-                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  <p className="whitespace-pre-wrap break-words">{presentation.displayText}</p>
 
                   {assistant && data?.citations?.length ? (
                     <details className="group mt-4 border-t border-border/70 pt-3">
@@ -63,6 +68,13 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
                       </ul>
                     </details>
                   ) : null}
+
+                  {assistant && presentation.sopDetails ? (
+                    <div className="mt-3 border-t border-border/70 pt-3 text-[10px] leading-4 text-muted-foreground">
+                      <span className="font-semibold text-foreground/80">SOP details</span>
+                      <span className="ml-1.5">{presentation.sopDetails}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {assistant ? (
@@ -78,7 +90,7 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
                       </>
                     ) : null}
                     {speechSupported ? (
-                      <button type="button" onClick={() => onSpeak(message.content, message.id)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                      <button type="button" onClick={() => onSpeak(presentation.spokenText, message.id)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
                         {isSpeaking ? <Square className="h-3 w-3" /> : <Volume2 className="h-3.5 w-3.5" />}
                         {isSpeaking ? 'Stop' : 'Listen'}
                       </button>

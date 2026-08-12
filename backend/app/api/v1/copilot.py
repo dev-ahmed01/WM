@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 
 from app.core.config import settings
@@ -135,20 +135,23 @@ def _match_decision_option(message: str, options: list[Any]) -> str | None:
     return ranked[0][1] if ranked[0][0] - runner_up >= 0.20 else None
 
 
-def _future_workflow_guidance(
-    query: str, position: Any, future_source: Dict[str, Any]
-) -> str:
-    """Answer from a later verified step without changing recorded progress."""
+def _future_workflow_guidance(query: str, future_source: Dict[str, Any]) -> str:
+    """Return only the verified instruction that is useful to the employee."""
     future_title = str(future_source.get("step_title") or "Workflow guidance")
-    future_number = future_source.get("step_number")
     guidance = CopilotReasoningService.concise_extract(query, future_source)
     if not guidance:
         guidance = future_title
-    return (
-        f"Verified guidance from workflow step {future_number}: {guidance} "
-        f"This answers your question without changing your recorded position "
-        f"at step {position.step_number}."
-    )
+    return guidance
+
+
+def _terminal_workflow_guidance(terminal_source: Dict[str, Any]) -> str:
+    """Turn a persisted terminal state into a short, speakable completion reply."""
+    title = str(terminal_source.get("step_title") or "").strip()
+    if not title:
+        title = CopilotReasoningService.concise_extract("", terminal_source)
+    title = re.sub(r"\s*\([A-Z0-9_-]+\)\s*$", "", title).strip()
+    subject = re.sub(r"\b(?:complete|completed|finished)\b.*$", "", title, flags=re.I).strip()
+    return f"{subject or 'This workflow'} is now completed."
 
 
 def _persist_control_reply(
@@ -157,6 +160,8 @@ def _persist_control_reply(
     user_message_id: str,
     intent: str,
     answer: str,
+    spoken_answer: Optional[str] = None,
+    sop_details: Optional[str] = None,
     active_session: Any = None,
     position: Any = None,
 ) -> CopilotResponse:
@@ -172,6 +177,8 @@ def _persist_control_reply(
         conversation_id=conversation_id,
         message_id=message_id,
         answer=answer,
+        spoken_answer=spoken_answer,
+        sop_details=sop_details,
         citations=[],
         confidence_score=1.0,
         is_grounded=True,
@@ -333,17 +340,19 @@ async def copilot_message(
             )
 
     if requested_sop_index is not None:
+        sop_details = None
         catalog_position = requested_sop_index - 1
         if 0 <= catalog_position < len(catalog):
             item = catalog[catalog_position]
             description = str(item.get("description") or "").strip()
-            answer = (
-                f"Published SOP {requested_sop_index}: {item['title']} "
-                f"({item['workflow_code']})."
-            )
+            answer = description or "This published SOP is available for guided execution."
             if description:
-                answer += f" {description}"
+                answer = description
             answer += f' To begin guided execution, say "start {item["title"]}".'
+            sop_details = (
+                f"SOP {requested_sop_index}: {item['title']} | "
+                f"{item['workflow_code']}"
+            )
         elif catalog:
             available = ", ".join(
                 f"{index + 1}. {item['title']}"
@@ -361,6 +370,7 @@ async def copilot_message(
             user_message_id=user_message_id,
             intent="SOP_CATALOG_LOOKUP",
             answer=answer,
+            sop_details=sop_details,
             active_session=active_session,
             position=position,
         )
@@ -369,14 +379,15 @@ async def copilot_message(
         payload.message, catalog
     )
     if workflow_match:
+        sop_details = (
+            f"SOP: {workflow_match['title']} | {workflow_match['workflow_code']}"
+        )
         matched_version_id = str(workflow_match["workflow_version_id"])
         if active_session and active_session.workflow_version_id != matched_version_id:
             position = WorkflowStateService.get_position(active_session)
             answer = (
-                f"I found {workflow_match['title']} ({workflow_match['workflow_code']}), "
-                "but another workflow is currently active. Pause or abandon the active "
-                "workflow before starting a different SOP. "
-                f"{_step_guidance(position)}"
+                "Another workflow is currently active. Pause or abandon it before "
+                f"starting this SOP. {_step_guidance(position)}"
             )
             intent = "WORKFLOW_SELECTION_CONFLICT"
         else:
@@ -391,10 +402,7 @@ async def copilot_message(
             else:
                 intent = "WORKFLOW_RESUME"
             position = WorkflowStateService.get_position(active_session)
-            answer = (
-                f"Using {workflow_match['title']} ({workflow_match['workflow_code']}). "
-                f"{_step_guidance(position)}"
-            )
+            answer = _step_guidance(position)
             if intent == "WORKFLOW_START":
                 answer += (
                     " If you are already partway through, tell me your current step "
@@ -411,6 +419,8 @@ async def copilot_message(
             user_message_id=user_message_id,
             intent=intent,
             answer=answer,
+            spoken_answer=answer,
+            sop_details=sop_details,
             active_session=active_session,
             position=position,
         )
@@ -909,13 +919,41 @@ async def copilot_message(
         ),
         default=None,
     )
+    future_guidance_answer: Optional[str] = None
+    if (
+        future_workflow_source
+        and active_session
+        and CopilotReasoningService.describes_completed_action(
+            retrieval_query, future_workflow_source
+        )
+    ):
+        completed_state_id = str(future_workflow_source.get("state_id") or "")
+        transition = OWDRepository.get_next_state_transition(completed_state_id, {})
+        if transition and transition.get("to_state_id"):
+            next_source = await AIGateway.get_workflow_state_source(
+                department_id,
+                active_session.workflow_version_id,
+                str(transition["to_state_id"]),
+            )
+            if next_source:
+                if not any(
+                    str(chunk.get("chunk_id")) == str(next_source.get("chunk_id"))
+                    for chunk in retrieved_chunks
+                ):
+                    retrieved_chunks.append(next_source)
+                future_workflow_source = next_source
+                if bool(transition.get("is_terminal")):
+                    future_guidance_answer = _terminal_workflow_guidance(next_source)
+                copilot_logger.info(
+                    "Answered from verified state after user-completed state '%s'",
+                    completed_state_id,
+                )
     if not evidence_is_relevant:
         raw_response = GeneratedAnswer(answer="", source_ids=[], provider="none")
     elif future_workflow_source and workflow_source and position:
         raw_response = GeneratedAnswer(
-            answer=_future_workflow_guidance(
-                retrieval_query, position, future_workflow_source
-            ),
+            answer=future_guidance_answer
+            or _future_workflow_guidance(retrieval_query, future_workflow_source),
             source_ids=[str(future_workflow_source["chunk_id"])],
             provider="workflow_deferred",
         )

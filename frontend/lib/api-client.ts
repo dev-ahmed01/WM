@@ -32,6 +32,8 @@ export interface CopilotResponse {
   conversation_id?: string;
   message_id: string;
   answer: string;
+  spoken_answer?: string | null;
+  sop_details?: string | null;
   citations: Citation[];
   confidence_score: number;
   is_grounded: boolean;
