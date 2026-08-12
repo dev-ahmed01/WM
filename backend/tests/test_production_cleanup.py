@@ -26,6 +26,7 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
     assert metadata.cortex_search_metadata == {}
 
 
+<<<<<<< HEAD
 def test_deployment_orders_runtime_prerequisites_and_separates_cortex(monkeypatch):
     assert deploy_owd_schema.MIGRATION_FILES[-2:] == [
         "12_runtime_alignment.sql",
@@ -36,6 +37,15 @@ def test_deployment_orders_runtime_prerequisites_and_separates_cortex(monkeypatc
         "11_cortex_search_service.sql",
         "12_runtime_alignment.sql",
         "13_runtime_prerequisites.sql",
+=======
+def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
+    assert deploy_owd_schema.MIGRATION_FILES[-5:] == [
+        "12_runtime_alignment.sql",
+        "13_runtime_prerequisites.sql",
+        "14_runtime_integrity.sql",
+        "15_active_workflow_versions.sql",
+        "16_flexible_owd_authoring_metadata.sql",
+>>>>>>> 74ae002 (feat(compiler): add JSON/table OWD format adapter and flexible authoring metadata migration)
     ]
     monkeypatch.setattr(
         deploy_owd_schema.settings,

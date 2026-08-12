@@ -175,8 +175,18 @@ class StateParser:
                     ))
 
             state_type = str(props.get("type", "ATOMIC_STEP")).upper()
-            is_init = bool(props.get("is_initial", i == 0))
-            is_term = bool(props.get("is_terminal", state_type == "END" or i == len(state_blocks) - 1))
+            def parse_bool(value: Any, default: bool) -> bool:
+                if value is None:
+                    return default
+                if isinstance(value, bool):
+                    return value
+                return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+            is_init = parse_bool(props.get("is_initial"), i == 0)
+            is_term = parse_bool(
+                props.get("is_terminal"),
+                state_type == "END" or i == len(state_blocks) - 1,
+            )
 
             states.append(
                 State(

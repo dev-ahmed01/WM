@@ -36,6 +36,12 @@ MIGRATION_FILES = [
     "10_enterprise_document_layer.sql",
     "12_runtime_alignment.sql",
     "13_runtime_prerequisites.sql",
+<<<<<<< HEAD
+=======
+    "14_runtime_integrity.sql",
+    "15_active_workflow_versions.sql",
+    "16_flexible_owd_authoring_metadata.sql",
+>>>>>>> 74ae002 (feat(compiler): add JSON/table OWD format adapter and flexible authoring metadata migration)
 ]
 
 
