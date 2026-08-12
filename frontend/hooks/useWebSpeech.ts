@@ -65,16 +65,21 @@ function recognitionErrorMessage(error: string): string {
   }
 }
 
-export function useSpeechRecognition(onTranscript: (transcript: string) => void) {
+export function useSpeechRecognition(
+  onTranscriptChange: (transcript: string) => void,
+  onFinalTranscript: (transcript: string) => void,
+) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const transcriptHandlerRef = useRef(onTranscript);
+  const transcriptChangeHandlerRef = useRef(onTranscriptChange);
+  const finalTranscriptHandlerRef = useRef(onFinalTranscript);
   const [isSupported, setIsSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    transcriptHandlerRef.current = onTranscript;
-  }, [onTranscript]);
+    transcriptChangeHandlerRef.current = onTranscriptChange;
+    finalTranscriptHandlerRef.current = onFinalTranscript;
+  }, [onFinalTranscript, onTranscriptChange]);
 
   useEffect(() => {
     setIsSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
@@ -107,7 +112,7 @@ export function useSpeechRecognition(onTranscript: (transcript: string) => void)
 
     const recognition = new Recognition();
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = navigator.language || 'en-US';
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setIsListening(true);
@@ -121,16 +126,27 @@ export function useSpeechRecognition(onTranscript: (transcript: string) => void)
         setError(recognitionErrorMessage(event.error));
       }
     };
+    let finalSubmitted = false;
     recognition.onresult = (event) => {
       const finalParts: string[] = [];
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const interimParts: string[] = [];
+      let hasFinalResult = false;
+      for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
         if (result.isFinal && result.length > 0) {
           finalParts.push(result[0].transcript);
+          hasFinalResult = true;
+        } else if (result.length > 0) {
+          interimParts.push(result[0].transcript);
         }
       }
-      const transcript = finalParts.join(' ').trim();
-      if (transcript) transcriptHandlerRef.current(transcript);
+      const finalTranscript = finalParts.join(' ').trim();
+      const visibleTranscript = [...finalParts, ...interimParts].join(' ').trim();
+      if (visibleTranscript) transcriptChangeHandlerRef.current(visibleTranscript);
+      if (hasFinalResult && interimParts.length === 0 && finalTranscript && !finalSubmitted) {
+        finalSubmitted = true;
+        finalTranscriptHandlerRef.current(finalTranscript);
+      }
     };
 
     recognitionRef.current = recognition;

@@ -90,6 +90,9 @@ class CopilotReasoningService:
                     state_id = str(retrieved[0])
             if instruction and state_id:
                 return {"instruction": instruction, "state_id": state_id}
+            # Only the immediately preceding assistant turn can be completed by
+            # a short contextual command such as "done".
+            return None
         return None
 
     @classmethod

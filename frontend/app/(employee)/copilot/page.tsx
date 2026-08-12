@@ -109,11 +109,17 @@ function CopilotContent() {
     }
   }, [conversationId, isSending, speechSynthesis.speak]);
 
-  const handleTranscript = useCallback((transcript: string) => {
+  const handleTranscriptChange = useCallback((transcript: string) => {
+    setInput(transcript);
+  }, []);
+  const handleFinalTranscript = useCallback((transcript: string) => {
     setInput(transcript);
     void submitMessage(transcript, true);
   }, [submitMessage]);
-  const speechRecognition = useSpeechRecognition(handleTranscript);
+  const speechRecognition = useSpeechRecognition(
+    handleTranscriptChange,
+    handleFinalTranscript,
+  );
 
   const handleSend = () => {
     speechRecognition.stopListening();

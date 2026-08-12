@@ -2,6 +2,7 @@
 
 import logging
 import re
+from difflib import SequenceMatcher
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 
@@ -47,7 +48,25 @@ _STEP_COMPLETION_COMMANDS = {
 
 def _is_step_completion_message(message: str) -> bool:
     normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
-    return normalized in _STEP_COMPLETION_COMMANDS
+    if normalized in _STEP_COMPLETION_COMMANDS:
+        return True
+    tokens = normalized.split()
+    if (
+        not tokens
+        or len(tokens) > 4
+        or "?" in message
+        or set(tokens) & {"not", "never", "cannot", "cant", "havent"}
+        or tokens[0] in {"are", "can", "could", "is", "should", "would"}
+    ):
+        return False
+    completion_words = ("complete", "completed", "done", "finished")
+    return any(
+        len(token) >= 3
+        and token[0] == candidate[0]
+        and SequenceMatcher(None, token, candidate).ratio() >= 0.78
+        for token in tokens
+        for candidate in completion_words
+    )
 
 
 def _completion_through_target(message: str) -> int | None:
@@ -632,6 +651,31 @@ async def copilot_message(
     if active_session and active_session.status == "active":
         current_position = prechecked_position or WorkflowStateService.get_position(active_session)
         if current_position.step_id and _is_step_completion_message(payload.message):
+            history = [
+                item
+                for item in ConversationRepository.get_history(
+                    conversation_id, limit=settings.COPILOT_HISTORY_LIMIT + 1
+                )
+                if str(item.get("id")) != user_message_id
+            ][-settings.COPILOT_HISTORY_LIMIT :]
+            prior_guidance = CopilotReasoningService.last_verified_instruction(history)
+            if prior_guidance and prior_guidance["state_id"] != current_position.state_id:
+                followup_reply = await _verified_followup_reply(
+                    message=payload.message,
+                    prior_state_id=prior_guidance["state_id"],
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    department_id=department_id,
+                    role=role,
+                    active_session=active_session,
+                    position=current_position,
+                    advance=True,
+                )
+                if followup_reply:
+                    copilot_logger.info(
+                        "Applied completion command to adjacent verified guidance state"
+                    )
+                    return followup_reply
             ConversationRepository.update_message_intent(
                 user_message_id, "WORKFLOW_STEP_COMPLETE"
             )
@@ -675,13 +719,14 @@ async def copilot_message(
 
     # Load only bounded prior context after the fast completion-command path.
     # The just-persisted user message is excluded, and history is never evidence.
-    history = [
-        item
-        for item in ConversationRepository.get_history(
-            conversation_id, limit=settings.COPILOT_HISTORY_LIMIT + 1
-        )
-        if str(item.get("id")) != user_message_id
-    ][-settings.COPILOT_HISTORY_LIMIT :]
+    if not history:
+        history = [
+            item
+            for item in ConversationRepository.get_history(
+                conversation_id, limit=settings.COPILOT_HISTORY_LIMIT + 1
+            )
+            if str(item.get("id")) != user_message_id
+        ][-settings.COPILOT_HISTORY_LIMIT :]
 
     # A follow-up to the last cited instruction should use that persisted
     # provenance, even if broad semantic retrieval is slow or unavailable.

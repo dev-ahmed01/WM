@@ -65,6 +65,16 @@ def test_fuzzy_relevance_keeps_raw_domain_words_for_typo_matching():
     ) >= 0.80
 
 
+def test_fuzzy_relevance_ignores_possessive_fillers_around_multiple_typos():
+    query = "my packges are damagd, what should I do?"
+
+    assert search_terms(query) == ["packges", "damagd"]
+    assert fuzzy_relevance_score(
+        query,
+        "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1.",
+    ) >= 0.80
+
+
 @pytest.mark.asyncio
 async def test_local_embedding_batch_request(monkeypatch):
     provider = OllamaLocalAIProvider()
