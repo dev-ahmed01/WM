@@ -36,11 +36,12 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
 
 
 def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
-    assert deploy_owd_schema.MIGRATION_FILES[-4:] == [
+    assert deploy_owd_schema.MIGRATION_FILES[-5:] == [
         "12_runtime_alignment.sql",
         "13_runtime_prerequisites.sql",
         "14_runtime_integrity.sql",
         "15_active_workflow_versions.sql",
+        "16_flexible_owd_authoring_metadata.sql",
     ]
     assert deploy_owd_schema.ordered_migrations() == deploy_owd_schema.MIGRATION_FILES
     monkeypatch.setattr(

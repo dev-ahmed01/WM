@@ -18,6 +18,7 @@ from app.compiler.parsers.user_context_parser import UserContextParser
 from app.compiler.parsers.analytics_parser import AnalyticsParser
 from app.compiler.parsers.relationship_parser import RelationshipParser
 from app.compiler.parsers.reference_parser import ReferenceParser
+from app.compiler.parsers.json_table_adapter import JsonTableOWDAdapter
 from app.compiler.utils import calculate_source_hash, sanitize_code
 
 logger = logging.getLogger("compiler.parser.ast_builder")
@@ -36,8 +37,9 @@ class ASTBuilder:
         default_version: int = 1,
     ) -> UnifiedAST:
         """Runs DocumentLoader -> Sub-Parsers -> UnifiedAST pipeline."""
-        normalized, spec_version, sections = DocumentLoader.load_and_detect(markdown_text)
-        raw_hash = calculate_source_hash(normalized)
+        adapted_markdown = JsonTableOWDAdapter.adapt(markdown_text, department_id=department_id)
+        normalized, spec_version, sections = DocumentLoader.load_and_detect(adapted_markdown)
+        raw_hash = calculate_source_hash(markdown_text)
 
         # 1. Section 1: Document Metadata
         metadata = MetadataParser.parse(normalized, default_code=workflow_code)
