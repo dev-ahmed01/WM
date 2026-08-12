@@ -37,6 +37,8 @@ from app.models.knowledge import (
     IngestionStatusResponse,
     UpdateKnowledgeItemRequest,
     KnowledgeDeleteResponse,
+    KnowledgePermanentDeleteRequest,
+    KnowledgePermanentDeleteResponse,
     KnowledgeVersionResponse,
     WorkflowStateResponse,
 )
@@ -407,3 +409,58 @@ async def delete_knowledge_item(id: str) -> KnowledgeDeleteResponse:
 
     KnowledgeRepository.soft_delete_item(id)
     return KnowledgeDeleteResponse(id=id)
+
+
+@router.delete(
+    "/{id}/permanent",
+    response_model=KnowledgePermanentDeleteResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def permanently_delete_knowledge_item(
+    id: str,
+    payload: KnowledgePermanentDeleteRequest,
+) -> KnowledgePermanentDeleteResponse:
+    """Permanently delete one workflow graph after an explicit code confirmation."""
+    item = KnowledgeRepository.get_item_by_id(id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "NOT_FOUND",
+                "message": f"Workflow item '{id}' not found.",
+                "details": None,
+            },
+        )
+
+    workflow_code = str(item.get("workflow_code") or "")
+    if payload.confirmation.strip() != workflow_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "CONFIRMATION_MISMATCH",
+                "message": f"Type the workflow code '{workflow_code}' exactly to delete it permanently.",
+                "details": None,
+            },
+        )
+
+    result = KnowledgeRepository.permanently_delete_item(str(item["id"]))
+    stage_files_deleted = 0
+    stage_cleanup_warning = None
+    try:
+        stage_files_deleted = IngestionService.remove_staged_files(
+            result.get("stage_file_uris", [])
+        )
+    except WorkMateException as exc:
+        stage_cleanup_warning = exc.message
+        ingestion_logger.warning(
+            "Workflow '%s' deleted with staged-file cleanup warning",
+            item["id"],
+        )
+
+    AIGateway.invalidate_department(str(item["department_id"]))
+    return KnowledgePermanentDeleteResponse(
+        id=str(item["id"]),
+        deleted_counts=result.get("deleted_counts", {}),
+        stage_files_deleted=stage_files_deleted,
+        stage_cleanup_warning=stage_cleanup_warning,
+    )

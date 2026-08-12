@@ -99,3 +99,28 @@ class IngestionService:
             raise WorkMateException(message=f"Failed to stage document in Snowflake: {str(exc)}") from exc
 
     stage_file_in_snowflake = stage_file
+
+    @staticmethod
+    def remove_staged_files(stage_file_uris: list[str]) -> int:
+        """Remove exact workflow source paths after their database transaction commits."""
+        unique_uris = list(dict.fromkeys(uri.strip() for uri in stage_file_uris if uri.strip()))
+        for stage_uri in unique_uris:
+            if not re.fullmatch(
+                r"@[A-Za-z_][A-Za-z0-9_$]*(?:/[A-Za-z0-9._-]+)+",
+                stage_uri,
+            ):
+                raise WorkMateException(message="Invalid staged SOP path; file cleanup refused.")
+
+        removed_count = 0
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    for stage_uri in unique_uris:
+                        cur.execute(f"REMOVE {stage_uri}")
+                        removed_count += len(cur.fetchall())
+            return removed_count
+        except WorkMateException:
+            raise
+        except Exception as exc:
+            ingestion_logger.error("Failed to remove staged SOP files: %s", type(exc).__name__)
+            raise WorkMateException(message="Workflow records were deleted, but staged file cleanup failed.") from exc

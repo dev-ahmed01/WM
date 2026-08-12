@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel: string;
   busy?: boolean;
+  confirmDisabled?: boolean;
   tone?: 'default' | 'danger';
   value?: string;
   valueLabel?: string;
@@ -17,7 +18,7 @@ interface ConfirmDialogProps {
   onClose: () => void;
 }
 
-export function ConfirmDialog({ open, title, description, confirmLabel, busy, tone = 'danger', value, valueLabel, valuePlaceholder, onValueChange, onConfirm, onClose }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, description, confirmLabel, busy, confirmDisabled = false, tone = 'danger', value, valueLabel, valuePlaceholder, onValueChange, onConfirm, onClose }: ConfirmDialogProps) {
   useEffect(() => {
     if (!open) return undefined;
 
@@ -47,7 +48,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, busy, to
         ) : null}
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy} autoFocus={!onValueChange}>Cancel</Button>
-          <Button type="button" variant={tone === 'danger' ? 'destructive' : 'default'} onClick={onConfirm} disabled={busy || (onValueChange ? !value?.trim() : false)}>{busy ? 'Working…' : confirmLabel}</Button>
+          <Button type="button" variant={tone === 'danger' ? 'destructive' : 'default'} onClick={onConfirm} disabled={busy || confirmDisabled || (onValueChange ? !value?.trim() : false)}>{busy ? 'Working…' : confirmLabel}</Button>
         </div>
       </section>
     </div>

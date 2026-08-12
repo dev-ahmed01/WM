@@ -2,11 +2,11 @@
 
 import React, { use, useEffect, useState } from 'react';
 import { useRequireRole } from '@/lib/auth';
-import { apiClient, KnowledgeItemDetail, KnowledgeVersionHistory, KnowledgeVersion } from '@/lib/api-client';
+import { apiClient, KnowledgeItemDetail, KnowledgePermanentDeleteResponse, KnowledgeVersionHistory, KnowledgeVersion } from '@/lib/api-client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Save, Trash2, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Save, Trash2, Archive, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
@@ -26,6 +26,9 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -109,6 +112,29 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const handlePermanentDelete = async () => {
+    const workflowCode = detail?.item.workflow_code || '';
+    if (!workflowCode || deleteConfirmation.trim() !== workflowCode || isPermanentlyDeleting) return;
+
+    setIsPermanentlyDeleting(true);
+    setFeedback(null);
+    try {
+      const response = await apiClient<KnowledgePermanentDeleteResponse>(`/knowledge/${id}/permanent`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmation: deleteConfirmation.trim() }),
+      });
+      const message = response.stage_cleanup_warning
+        ? `Workflow data was permanently deleted. ${response.stage_cleanup_warning}`
+        : 'Workflow and staged source files were permanently deleted.';
+      setFeedback({ type: response.stage_cleanup_warning ? 'error' : 'success', message: `${message} Redirecting...` });
+      setPermanentDeleteOpen(false);
+      setTimeout(() => router.replace('/knowledge-studio'), 900);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to permanently delete workflow.' });
+      setIsPermanentlyDeleting(false);
+    }
+  };
+
   if (authLoading || loadingData) {
     return <LoadingState label="Loading workflow details" />;
   }
@@ -132,20 +158,32 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="wm-page max-w-5xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/knowledge-studio" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
           <ArrowLeft className="h-4 w-4" /> Back to Knowledge Studio
         </Link>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => setArchiveOpen(true)}
-          disabled={isDeleting}
-          className="flex items-center gap-2"
-        >
-          <Trash2 className="h-4 w-4" />
-          {isDeleting ? 'Archiving...' : 'Archive Document'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setArchiveOpen(true)}
+            disabled={isDeleting || isPermanentlyDeleting}
+            className="flex items-center gap-2"
+          >
+            <Archive className="h-4 w-4" />
+            {isDeleting ? 'Archiving...' : 'Archive'}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setPermanentDeleteOpen(true)}
+            disabled={isDeleting || isPermanentlyDeleting}
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isPermanentlyDeleting ? 'Deleting...' : 'Delete permanently'}
+          </Button>
+        </div>
       </div>
 
       {feedback && (
@@ -279,6 +317,25 @@ export default function DocumentDetailsPage({ params }: { params: Promise<{ id: 
         busy={isDeleting}
         onConfirm={handleArchiveDocument}
         onClose={() => !isDeleting && setArchiveOpen(false)}
+      />
+      <ConfirmDialog
+        open={permanentDeleteOpen}
+        title="Permanently delete this workflow?"
+        description={`This cannot be undone. All versions, compiled steps, rules, AI prompts, permissions, search data, workflow sessions, execution records, analytics, and staged source files for this SOP will be removed. Chat messages remain as historical records. Type ${item.workflow_code} to confirm.`}
+        confirmLabel="Delete permanently"
+        busy={isPermanentlyDeleting}
+        confirmDisabled={!item.workflow_code || deleteConfirmation.trim() !== item.workflow_code}
+        value={deleteConfirmation}
+        valueLabel={`Workflow code: ${item.workflow_code}`}
+        valuePlaceholder={item.workflow_code || 'Workflow code'}
+        onValueChange={setDeleteConfirmation}
+        onConfirm={handlePermanentDelete}
+        onClose={() => {
+          if (!isPermanentlyDeleting) {
+            setPermanentDeleteOpen(false);
+            setDeleteConfirmation('');
+          }
+        }}
       />
     </div>
   );

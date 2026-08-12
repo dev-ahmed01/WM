@@ -396,6 +396,205 @@ class KnowledgeRepository:
             raise WorkMateException(message=f"Failed to soft-delete workflow item: {str(exc)}") from exc
 
     @staticmethod
+    def permanently_delete_item(item_id: str) -> Dict[str, Any]:
+        """Delete one SOP and its workflow-dependent records in a single transaction.
+
+        Conversations and conversation messages are intentionally retained. Their
+        rendered text and embedded citations remain available as historical audit
+        context, while executable workflow sessions and graph data are removed.
+        """
+        version_filter = (
+            "SELECT id FROM KNOWLEDGE_STUDIO.workflow_versions WHERE workflow_id = %s"
+        )
+        state_filter = f"""
+            SELECT id FROM KNOWLEDGE_STUDIO.workflow_states
+            WHERE workflow_version_id IN ({version_filter})
+        """
+        step_filter = f"""
+            SELECT id FROM KNOWLEDGE_STUDIO.workflow_steps
+            WHERE state_id IN ({state_filter})
+        """
+        session_filter = f"""
+            SELECT id FROM WORKMATE_COPILOT.workflow_sessions
+            WHERE workflow_version_id IN ({version_filter})
+        """
+        execution_filter = f"""
+            SELECT id FROM WORKMATE_COPILOT.workflow_step_executions
+            WHERE session_id IN ({session_filter})
+        """
+
+        statements: List[Tuple[str, str, Tuple[Any, ...]]] = [
+            (
+                "workflow_evidence_submissions",
+                f"DELETE FROM WORKMATE_COPILOT.workflow_evidence_submissions WHERE step_execution_id IN ({execution_filter})",
+                (item_id,),
+            ),
+            (
+                "escalation_records",
+                f"DELETE FROM WORKMATE_COPILOT.escalation_records WHERE session_id IN ({session_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_step_executions",
+                f"DELETE FROM WORKMATE_COPILOT.workflow_step_executions WHERE session_id IN ({session_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_analytics_events",
+                f"DELETE FROM INTELLIGENCE_HUB.workflow_analytics_events WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "analytics_events",
+                f"DELETE FROM INTELLIGENCE_HUB.analytics_events WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_sessions",
+                f"DELETE FROM WORKMATE_COPILOT.workflow_sessions WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "knowledge_document_lineage",
+                f"DELETE FROM KNOWLEDGE_STUDIO.knowledge_document_lineage WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "knowledge_document_chunks",
+                f"DELETE FROM KNOWLEDGE_STUDIO.knowledge_document_chunks WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "knowledge_document_ai_metadata",
+                f"DELETE FROM KNOWLEDGE_STUDIO.knowledge_document_ai_metadata WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "knowledge_document_contents",
+                f"DELETE FROM KNOWLEDGE_STUDIO.knowledge_document_contents WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "knowledge_documents",
+                "DELETE FROM KNOWLEDGE_STUDIO.knowledge_documents WHERE workflow_id = %s",
+                (item_id,),
+            ),
+            (
+                "workflow_evidence_specs",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_evidence_specs WHERE step_id IN ({step_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_ai_conversation",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_ai_conversation WHERE step_id IN ({step_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_decision_options",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_decision_options WHERE state_id IN ({state_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_decisions",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_decisions WHERE state_id IN ({state_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_transitions",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_transitions WHERE from_state_id IN ({state_filter}) OR to_state_id IN ({state_filter})",
+                (item_id, item_id),
+            ),
+            (
+                "workflow_rules",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_rules WHERE state_id IN ({state_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_escalation_policies",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_escalation_policies WHERE state_id IN ({state_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_analytics",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_analytics WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_relationships",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_relationships WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_references",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_references WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_role_permissions",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_role_permissions WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_search_metadata",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_search_metadata WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_steps",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_steps WHERE state_id IN ({state_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_states",
+                f"DELETE FROM KNOWLEDGE_STUDIO.workflow_states WHERE workflow_version_id IN ({version_filter})",
+                (item_id,),
+            ),
+            (
+                "workflow_versions",
+                "DELETE FROM KNOWLEDGE_STUDIO.workflow_versions WHERE workflow_id = %s",
+                (item_id,),
+            ),
+            (
+                "workflows",
+                "DELETE FROM KNOWLEDGE_STUDIO.workflows WHERE id = %s",
+                (item_id,),
+            ),
+        ]
+
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    deleted_counts: Dict[str, int] = {}
+                    cur.execute("BEGIN")
+                    try:
+                        cur.execute(
+                            "SELECT DISTINCT stage_file_uri FROM KNOWLEDGE_STUDIO.workflow_versions WHERE workflow_id = %s",
+                            (item_id,),
+                        )
+                        stage_file_uris = [
+                            str(row[0]) for row in cur.fetchall() if row[0]
+                        ]
+                        for label, statement, params in statements:
+                            cur.execute(statement, params)
+                            deleted_counts[label] = max(0, int(cur.rowcount or 0))
+                        if deleted_counts.get("workflows") != 1:
+                            raise WorkMateException(message=f"Workflow item '{item_id}' was not found.")
+                        cur.execute("COMMIT")
+                    except Exception:
+                        cur.execute("ROLLBACK")
+                        raise
+                    return {
+                        "deleted_counts": deleted_counts,
+                        "stage_file_uris": stage_file_uris,
+                    }
+        except WorkMateException:
+            raise
+        except Exception as exc:
+            raise WorkMateException(
+                message=f"Failed to permanently delete workflow item: {str(exc)}"
+            ) from exc
+
+    @staticmethod
     def get_workflow_states(version_id: str) -> List[Dict[str, Any]]:
         """Retrieves state machine nodes for a workflow version."""
         query = """

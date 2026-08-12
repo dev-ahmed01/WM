@@ -1,6 +1,6 @@
 """Pydantic schemas for OWD enterprise workflows, versions, states, steps, uploads, and compilation reports."""
 
-from typing import Optional, List
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -113,3 +113,15 @@ class UploadResponse(BaseModel):
 class KnowledgeDeleteResponse(BaseModel):
     id: str
     message: str = "Workflow item soft-deleted (version status set to archived)."
+
+
+class KnowledgePermanentDeleteRequest(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=128)
+
+
+class KnowledgePermanentDeleteResponse(BaseModel):
+    id: str
+    message: str = "Workflow and all dependent SOP data permanently deleted."
+    deleted_counts: Dict[str, int] = Field(default_factory=dict)
+    stage_files_deleted: int = 0
+    stage_cleanup_warning: Optional[str] = None

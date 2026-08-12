@@ -133,6 +133,14 @@ export interface KnowledgeVersionHistory {
   versions: KnowledgeVersion[];
 }
 
+export interface KnowledgePermanentDeleteResponse {
+  id: string;
+  message: string;
+  deleted_counts: Record<string, number>;
+  stage_files_deleted: number;
+  stage_cleanup_warning?: string | null;
+}
+
 export interface CopilotSessionSummary {
   id: string;
   title: string;

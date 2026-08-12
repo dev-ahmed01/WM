@@ -110,3 +110,69 @@ def test_upload_uses_server_version_and_publishes(
 def test_legacy_ingestion_callback_is_removed():
     response = client.post("/api/v1/knowledge/anything/ingestion-callback", json={})
     assert response.status_code == 404
+
+
+@patch("app.api.v1.knowledge_studio.KnowledgeRepository.permanently_delete_item")
+@patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_item_by_id")
+def test_permanent_delete_requires_exact_workflow_code(get_item, permanently_delete):
+    get_item.return_value = {
+        "id": "workflow-id",
+        "workflow_code": "SOP_INB_101",
+        "department_id": "dept_inbound",
+    }
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/knowledge/workflow-id/permanent",
+        headers=headers(ADMIN_TOKEN),
+        json={"confirmation": "sop_inb_101"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error_code"] == "CONFIRMATION_MISMATCH"
+    permanently_delete.assert_not_called()
+
+
+@patch("app.api.v1.knowledge_studio.AIGateway.invalidate_department")
+@patch.object(IngestionService, "remove_staged_files", return_value=2)
+@patch("app.api.v1.knowledge_studio.KnowledgeRepository.permanently_delete_item")
+@patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_item_by_id")
+def test_permanent_delete_removes_graph_stage_and_cache(
+    get_item, permanently_delete, remove_staged_files, invalidate_department
+):
+    get_item.return_value = {
+        "id": "workflow-id",
+        "workflow_code": "SOP_INB_101",
+        "department_id": "dept_inbound",
+    }
+    permanently_delete.return_value = {
+        "deleted_counts": {"workflows": 1, "workflow_versions": 2},
+        "stage_file_uris": ["@RAW_OWD_STAGE/SOP_INB_101/v1/source.md"],
+    }
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/knowledge/workflow-id/permanent",
+        headers=headers(ADMIN_TOKEN),
+        json={"confirmation": "SOP_INB_101"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted_counts"]["workflows"] == 1
+    assert response.json()["stage_files_deleted"] == 2
+    permanently_delete.assert_called_once_with("workflow-id")
+    remove_staged_files.assert_called_once_with(
+        ["@RAW_OWD_STAGE/SOP_INB_101/v1/source.md"]
+    )
+    invalidate_department.assert_called_once_with("dept_inbound")
+
+
+def test_permanent_delete_is_admin_only():
+    response = client.request(
+        "DELETE",
+        "/api/v1/knowledge/workflow-id/permanent",
+        headers=headers(EMPLOYEE_TOKEN),
+        json={"confirmation": "SOP_INB_101"},
+    )
+
+    assert response.status_code == 403
