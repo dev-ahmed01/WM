@@ -376,6 +376,73 @@ class OllamaLocalAIProvider:
             "authoritative": False,
         }
 
+    async def classify_verified_instruction_followup(
+        self, message: str, verified_instruction: str
+    ) -> Dict[str, Any]:
+        """Reason about a follow-up while leaving graph traversal to the backend."""
+        prompt = {
+            "task": "classify_verified_instruction_followup",
+            "verified_instruction": verified_instruction[:700],
+            "employee_message": message[:700],
+            "rule": (
+                "Decide whether the employee says they already performed the verified "
+                "instruction, is asking whether/how to perform it, or is discussing "
+                "something unrelated. Understand paraphrases, typos, tense, and pronouns. "
+                "A question like 'should I move it?' is not completion. Never invent a step."
+            ),
+            "required_output": {
+                "relation": "completed|asking|unrelated|unclear",
+                "asks_next": "bool",
+                "confidence": "0..1",
+            },
+        }
+        payload = await self._request_json(
+            "POST",
+            "/api/chat",
+            timeout_seconds=min(settings.LOCAL_AI_TIMEOUT_SECONDS, 2.0),
+            json={
+                "model": settings.LOCAL_CHAT_MODEL,
+                "stream": False,
+                "format": "json",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return only the requested JSON. Interpret conversation meaning; "
+                            "never authorize a workflow transition or invent instructions."
+                        ),
+                    },
+                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                ],
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": 1024,
+                    "num_predict": 48,
+                },
+                "keep_alive": "15m",
+            },
+        )
+        response_message = payload.get("message", {})
+        parsed = (
+            json.loads(str(response_message.get("content", "{}")))
+            if isinstance(response_message, dict)
+            else {}
+        )
+        if not isinstance(parsed, dict):
+            raise ValueError("Local verified-follow-up classifier returned invalid JSON")
+        allowed_relations = {"completed", "asking", "unrelated", "unclear"}
+        relation = str(parsed.get("relation") or "unclear")
+        try:
+            confidence = max(0.0, min(float(parsed.get("confidence", 0.0)), 1.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        return {
+            "relation": relation if relation in allowed_relations else "unclear",
+            "asks_next": bool(parsed.get("asks_next", False)),
+            "confidence": confidence,
+            "authoritative": False,
+        }
+
     @staticmethod
     def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
         if not left or len(left) != len(right):

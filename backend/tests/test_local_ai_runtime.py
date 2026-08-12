@@ -214,6 +214,38 @@ async def test_workflow_planner_returns_bounded_non_authoritative_action(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_verified_followup_classifier_returns_bounded_semantics(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(
+        return_value={
+            "message": {
+                "content": (
+                    '{"relation":"completed","asks_next":true,"confidence":0.94}'
+                )
+            }
+        }
+    )
+    monkeypatch.setattr(provider, "_request_json", request)
+
+    result = await provider.classify_verified_instruction_followup(
+        "moved it over there, what now?",
+        "Transport the pallet to Bay Q-1.",
+    )
+
+    assert result == {
+        "relation": "completed",
+        "asks_next": True,
+        "confidence": 0.94,
+        "authoritative": False,
+    }
+    body = request.await_args.kwargs["json"]
+    assert body["format"] == "json"
+    assert body["options"]["temperature"] == 0
+    assert "never authorize" in body["messages"][0]["content"]
+    assert "moved it over there" in body["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_health_reports_installed_and_missing_models(monkeypatch):
     provider = OllamaLocalAIProvider()
     monkeypatch.setattr(

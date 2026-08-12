@@ -53,9 +53,22 @@ class ConversationRepository:
             raise DatabaseException(message=f"Failed to create conversation session: {str(e)}")
 
     @staticmethod
+    def _structured_value(value: Any, fallback: Any) -> Any:
+        """Normalize Snowflake ARRAY/VARIANT values for reasoning and API models."""
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except (TypeError, ValueError):
+                return fallback
+        return value
+
+    @staticmethod
     def load_history(conversation_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         query = """
-            SELECT id, sender, message_text AS content, confidence_score, created_at
+            SELECT id, sender, message_text AS content, confidence_score,
+                   retrieved_state_ids, citations, created_at
             FROM WORKMATE_COPILOT.conversation_messages
             WHERE conversation_id = %s
             ORDER BY created_at DESC
@@ -68,6 +81,13 @@ class ConversationRepository:
                     rows = cur.fetchall()
                     columns = [col[0].lower() for col in cur.description]
                     messages = [dict(zip(columns, row)) for row in rows]
+                    for message in messages:
+                        message["retrieved_state_ids"] = ConversationRepository._structured_value(
+                            message.get("retrieved_state_ids"), []
+                        )
+                        message["citations"] = ConversationRepository._structured_value(
+                            message.get("citations"), []
+                        )
                     return list(reversed(messages))
         except Exception as e:
             raise DatabaseException(message=f"Failed to load conversation history: {str(e)}")

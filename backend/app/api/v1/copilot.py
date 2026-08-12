@@ -192,6 +192,84 @@ def _persist_control_reply(
     )
 
 
+async def _verified_followup_reply(
+    *,
+    message: str,
+    prior_state_id: str,
+    conversation_id: str,
+    user_message_id: str,
+    department_id: str,
+    role: str,
+    active_session: Any,
+    position: Any,
+    advance: bool = True,
+) -> Optional[CopilotResponse]:
+    """Follow a cited workflow node without trusting the model with graph authority."""
+    transition = (
+        OWDRepository.get_next_state_transition(prior_state_id, {}) if advance else None
+    )
+    source_state_id = (
+        str(transition["to_state_id"])
+        if transition and transition.get("to_state_id")
+        else prior_state_id
+    )
+    if advance and not transition:
+        return None
+    next_source = await AIGateway.get_workflow_state_source(
+        department_id, active_session.workflow_version_id, source_state_id
+    )
+    if not next_source:
+        return None
+    if not advance:
+        instruction = CopilotReasoningService.concise_extract(message, next_source)
+        answer = f"Before moving on, complete this verified instruction: {instruction}"
+    else:
+        answer = (
+            _terminal_workflow_guidance(next_source)
+            if bool(transition and transition.get("is_terminal"))
+            else _future_workflow_guidance(message, next_source)
+        )
+    validated, requires_escalation = ResponseValidationService.validate_response(
+        raw_response=GeneratedAnswer(
+            answer=answer,
+            source_ids=[str(next_source["chunk_id"])],
+            provider="verified_conversation_followup",
+        ),
+        retrieved_chunks=[next_source],
+        user_role=role,
+        user_department_id=department_id,
+    )
+    if requires_escalation or not validated.is_grounded:
+        return None
+    ConversationRepository.update_message_intent(
+        user_message_id, "WORKFLOW_VERIFIED_FOLLOWUP"
+    )
+    message_id = ConversationRepository.persist_message(
+        conversation_id=conversation_id,
+        sender="ai",
+        content=validated.answer,
+        confidence_score=validated.confidence_score,
+        retrieved_state_ids=[str(next_source["state_id"])],
+        citations=[citation.model_dump() for citation in validated.citations],
+        escalated=False,
+    )
+    return CopilotResponse(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        answer=validated.answer,
+        citations=validated.citations,
+        confidence_score=validated.confidence_score,
+        is_grounded=True,
+        requires_escalation=False,
+        active_session_id=active_session.id,
+        active_session_status=active_session.status,
+        active_sop_id=active_session.workflow_version_id,
+        active_step_number=position.step_number,
+        active_step_title=position.step_title,
+        active_decision_options=position.decision_options,
+    )
+
+
 def _completion_reply(
     completion: Any, position: Any, target: int, *, mention_target: bool = True
 ) -> str:
@@ -604,6 +682,53 @@ async def copilot_message(
         )
         if str(item.get("id")) != user_message_id
     ][-settings.COPILOT_HISTORY_LIMIT :]
+
+    # A follow-up to the last cited instruction should use that persisted
+    # provenance, even if broad semantic retrieval is slow or unavailable.
+    if active_session and active_session.status == "active":
+        prior_guidance = CopilotReasoningService.last_verified_instruction(history)
+        if prior_guidance and CopilotReasoningService.should_reason_about_verified_followup(
+            payload.message, prior_guidance["instruction"]
+        ):
+            followup_plan = await AIGateway.classify_verified_instruction_followup(
+                payload.message, prior_guidance["instruction"]
+            )
+            if float(followup_plan.get("confidence") or 0.0) == 0.0:
+                followup_plan = CopilotReasoningService.fallback_verified_followup_plan(
+                    payload.message, prior_guidance["instruction"]
+                )
+            copilot_logger.info(
+                "Verified follow-up plan relation=%s next=%s confidence=%.3f",
+                followup_plan.get("relation"),
+                bool(followup_plan.get("asks_next")),
+                float(followup_plan.get("confidence") or 0.0),
+            )
+            followup_advances = CopilotReasoningService.verified_followup_is_actionable(
+                payload.message, prior_guidance["instruction"], followup_plan
+            )
+            followup_reminds = CopilotReasoningService.verified_followup_needs_reminder(
+                payload.message, followup_plan
+            )
+            if followup_advances or followup_reminds:
+                planner_position = prechecked_position or WorkflowStateService.get_position(
+                    active_session
+                )
+                followup_reply = await _verified_followup_reply(
+                    message=payload.message,
+                    prior_state_id=prior_guidance["state_id"],
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    department_id=department_id,
+                    role=role,
+                    active_session=active_session,
+                    position=planner_position,
+                    advance=followup_advances,
+                )
+                if followup_reply:
+                    copilot_logger.info(
+                        "Answered from persisted verified conversational provenance"
+                    )
+                    return followup_reply
 
     # Natural, context-dependent completion claims are interpreted by the local
     # model as a structured proposal. The model never receives graph identifiers
@@ -1024,7 +1149,7 @@ async def copilot_message(
         retrieved_state_ids=[
             str(chunk["state_id"])
             for chunk in retrieved_chunks
-            if chunk.get("state_id")
+            if chunk.get("state_id") and str(chunk.get("chunk_id")) in cited_chunk_ids
         ],
         citations=[citation.model_dump() for citation in validated.citations],
         escalated=requires_escalation,

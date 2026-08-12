@@ -131,6 +131,7 @@ class ResponseValidationService:
                 step_number=chunk["step_number"],
                 chunk_id=str(chunk["chunk_id"]),
                 excerpt=str(chunk["content"])[:300],
+                state_id=(str(chunk["state_id"]) if chunk.get("state_id") else None),
             )
             for chunk in chunks
         ]

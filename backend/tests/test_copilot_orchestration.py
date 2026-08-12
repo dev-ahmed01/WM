@@ -889,6 +889,114 @@ def test_completed_future_action_answers_with_persisted_following_step_without_m
     generate.assert_not_awaited()
 
 
+def test_semantic_followup_uses_prior_verified_state_when_retrieval_is_unavailable():
+    current = workflow_session()
+    current_position = WorkflowPosition(
+        state_id="state_1",
+        state_title="Arrival inspection",
+        state_type="ATOMIC_STEP",
+        step_id="step_1",
+        step_number=1,
+        step_title="Verify the trailer seal against the manifest.",
+    )
+    prior_instruction = (
+        "Apply physical red quarantine tape to damaged pallet and transport to Bay Q-1."
+    )
+    history = [
+        {"id": "prior_user", "sender": "employee", "content": "package damaged"},
+        {
+            "id": "prior_ai",
+            "sender": "ai",
+            "content": prior_instruction,
+            "retrieved_state_ids": ["state_4"],
+            "citations": [{"state_id": "state_4"}],
+        },
+    ]
+    terminal_source = source_chunk(
+        chunk_id="chunk_end",
+        state_id="state_end",
+        step_number=6,
+        step_title="Receiving Completed",
+        content="Receiving Completed (STATE_END)",
+        score=1.0,
+    )
+
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ) as persist_message,
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_history",
+            return_value=history,
+        ),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=current,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_position",
+            return_value=current_position,
+        ),
+        patch(
+            "app.api.v1.copilot.OWDRepository.get_next_state_transition",
+            return_value={"to_state_id": "state_end", "is_terminal": True},
+        ),
+        patch.object(
+            AIGateway,
+            "classify_verified_instruction_followup",
+            new_callable=AsyncMock,
+            return_value={
+                "relation": "completed",
+                "asks_next": True,
+                "confidence": 0.94,
+                "authoritative": False,
+            },
+        ) as classify_followup,
+        patch.object(
+            AIGateway,
+            "get_workflow_state_source",
+            new_callable=AsyncMock,
+            return_value=terminal_source,
+        ),
+        patch.object(
+            RetrievalService, "retrieve_chunks", new_callable=AsyncMock
+        ) as retrieve,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect,
+        patch.object(AIGateway, "generate_response", new_callable=AsyncMock) as generate,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": "transported to BAY q1 whats the next step",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "Receiving is now completed."
+    assert body["is_grounded"] is True
+    assert body["requires_escalation"] is False
+    assert body["active_step_number"] == 1
+    assert body["citations"][0]["state_id"] == "state_end"
+    classify_followup.assert_awaited_once_with(
+        "transported to BAY q1 whats the next step", prior_instruction
+    )
+    retrieve.assert_not_awaited()
+    detect.assert_not_awaited()
+    generate.assert_not_awaited()
+    assert persist_message.call_args_list[1].kwargs["retrieved_state_ids"] == [
+        "state_end"
+    ]
+
+
 def test_contextual_why_uses_active_rule_without_broad_retrieval():
     current = workflow_session()
     current_position = WorkflowPosition(

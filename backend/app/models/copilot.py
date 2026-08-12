@@ -15,6 +15,7 @@ class Citation(BaseModel):
     step_number: Optional[Union[int, str]] = None
     chunk_id: str
     excerpt: str
+    state_id: Optional[str] = None
 
 class CopilotMessageRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Existing conversation ID or null to create new")
@@ -74,6 +75,8 @@ class CopilotHistoryMessage(BaseModel):
     sender: str
     content: str
     confidence_score: float
+    retrieved_state_ids: List[str] = Field(default_factory=list)
+    citations: List[Citation] = Field(default_factory=list)
     created_at: datetime
 
 

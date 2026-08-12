@@ -81,6 +81,30 @@ class AIGateway:
             return fallback
 
     @classmethod
+    async def classify_verified_instruction_followup(
+        cls, message: str, verified_instruction: str
+    ) -> Dict[str, Any]:
+        """Classify how a follow-up relates to the last verified instruction."""
+        fallback = {
+            "relation": "unclear",
+            "asks_next": False,
+            "confidence": 0.0,
+            "authoritative": False,
+        }
+        if not settings.LOCAL_AI_ENABLED:
+            return fallback
+        try:
+            return await cls.local_provider.classify_verified_instruction_followup(
+                message, verified_instruction
+            )
+        except Exception as exc:
+            logger.warning(
+                "Local verified-follow-up reasoning unavailable; using safe fallback: %s",
+                type(exc).__name__,
+            )
+            return fallback
+
+    @classmethod
     async def search(cls, query: str, department_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         if not query.strip() or not department_id.strip():
             return []

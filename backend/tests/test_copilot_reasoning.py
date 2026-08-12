@@ -106,6 +106,101 @@ def test_completed_future_action_can_request_the_verified_following_step():
         "Should I transport the packages to bay q 1 next?",
         future_source,
     )
+    assert not CopilotReasoningService.describes_completed_action(
+        "I have not transported the packages to bay q 1 yet; what next?",
+        future_source,
+    )
+
+
+def test_verified_guidance_provenance_is_recovered_from_history():
+    history = [
+        {
+            "sender": "ai",
+            "content": "Apply quarantine tape and transport the pallet to Bay Q-1.",
+            "retrieved_state_ids": ["state_4"],
+            "citations": [{"state_id": "state_4"}],
+        }
+    ]
+
+    assert CopilotReasoningService.last_verified_instruction(history) == {
+        "instruction": "Apply quarantine tape and transport the pallet to Bay Q-1.",
+        "state_id": "state_4",
+    }
+
+
+def test_verified_followup_routing_uses_meaning_not_exact_command_text():
+    instruction = "Apply quarantine tape and transport the pallet to Bay Q-1."
+
+    assert CopilotReasoningService.should_reason_about_verified_followup(
+        "transported to BAY q1 whats the next step", instruction
+    )
+    assert CopilotReasoningService.should_reason_about_verified_followup(
+        "I did that, then what?", instruction
+    )
+    assert CopilotReasoningService.should_reason_about_verified_followup(
+        "moved it there, what now?", instruction
+    )
+    assert not CopilotReasoningService.should_reason_about_verified_followup(
+        "what is next for payroll", instruction
+    )
+
+
+def test_verified_followup_fallback_understands_past_tense_but_not_a_question():
+    instruction = "Apply quarantine tape and transport the pallet to Bay Q-1."
+
+    completed = CopilotReasoningService.fallback_verified_followup_plan(
+        "transported to BAY q1 whats the next step", instruction
+    )
+    asking = CopilotReasoningService.fallback_verified_followup_plan(
+        "should I transport it to Bay Q-1 next", instruction
+    )
+
+    assert completed["relation"] == "completed"
+    assert completed["asks_next"] is True
+    assert completed["confidence"] >= 0.72
+    assert asking["relation"] == "unclear"
+
+    typo = CopilotReasoningService.fallback_verified_followup_plan(
+        "trnsported to bay q1, wat nxt", instruction
+    )
+    assert typo["relation"] == "completed"
+
+    contextual = CopilotReasoningService.fallback_verified_followup_plan(
+        "moved it there, what now?", instruction
+    )
+    assert contextual["relation"] == "completed"
+
+
+def test_model_followup_plan_still_requires_user_evidence():
+    plan = {
+        "relation": "completed",
+        "asks_next": True,
+        "confidence": 0.95,
+    }
+    instruction = "Apply quarantine tape and transport the pallet to Bay Q-1."
+
+    assert CopilotReasoningService.verified_followup_is_actionable(
+        "moved it there, what next", instruction, plan
+    )
+    assert not CopilotReasoningService.verified_followup_is_actionable(
+        "what comes next in payroll", instruction, plan
+    )
+    assert not CopilotReasoningService.verified_followup_is_actionable(
+        "should I transport it next",
+        instruction,
+        {"relation": "asking", "asks_next": True, "confidence": 0.99},
+    )
+
+
+def test_verified_followup_reminds_incomplete_users_without_advancing():
+    assert CopilotReasoningService.verified_followup_needs_reminder(
+        "I have not moved it yet, what next?",
+        {"relation": "unclear", "asks_next": True, "confidence": 0.0},
+    )
+    assert CopilotReasoningService.verified_followup_needs_reminder(
+        "Should I move it next?",
+        {"relation": "asking", "asks_next": True, "confidence": 0.93},
+    )
 
 
 def test_agent_context_marks_history_separately_from_workflow_authority():

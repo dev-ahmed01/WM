@@ -24,6 +24,14 @@ class CopilotReasoningService:
     def _normalized(text: str) -> str:
         return " ".join(re.findall(r"[a-z0-9]+", (text or "").casefold()))
 
+    @staticmethod
+    def _has_navigation_signal(tokens: Sequence[str]) -> bool:
+        return any(
+            SequenceMatcher(None, token, candidate).ratio() >= 0.75
+            for token in tokens
+            for candidate in ("next", "then", "further", "now")
+        )
+
     @classmethod
     def classify_move(cls, message: str) -> str:
         normalized = cls._normalized(message)
@@ -60,6 +68,118 @@ class CopilotReasoningService:
             or len(tokens) <= 3
             and bool(set(tokens) & {"it", "that", "then", "this", "why"})
         )
+
+    @classmethod
+    def last_verified_instruction(
+        cls, history: Sequence[Dict[str, Any]]
+    ) -> Dict[str, str] | None:
+        """Recover the latest grounded instruction and its persisted workflow state."""
+        for item in reversed(history):
+            if str(item.get("sender") or "").lower() != "ai":
+                continue
+            instruction = str(item.get("content") or "").strip()
+            citations = item.get("citations") or []
+            state_id = ""
+            for citation in citations if isinstance(citations, list) else []:
+                if isinstance(citation, dict) and citation.get("state_id"):
+                    state_id = str(citation["state_id"])
+                    break
+            if not state_id:
+                retrieved = item.get("retrieved_state_ids") or []
+                if isinstance(retrieved, list) and len(retrieved) == 1:
+                    state_id = str(retrieved[0])
+            if instruction and state_id:
+                return {"instruction": instruction, "state_id": state_id}
+        return None
+
+    @classmethod
+    def should_reason_about_verified_followup(
+        cls, message: str, verified_instruction: str
+    ) -> bool:
+        """Route likely action follow-ups to semantic classification, not phrase matching."""
+        normalized = cls._normalized(message)
+        token_list = normalized.split()
+        tokens = set(token_list)
+        asks_next = cls._has_navigation_signal(token_list)
+        if not asks_next:
+            return False
+        contextual_reference = bool(tokens & {"it", "that", "this", "there"})
+        return bool(
+            contextual_reference
+            or fuzzy_relevance_score(message, verified_instruction) >= 0.20
+        )
+
+    @classmethod
+    def fallback_verified_followup_plan(
+        cls, message: str, verified_instruction: str
+    ) -> Dict[str, Any]:
+        """Safe grammar-based fallback when the semantic classifier is unavailable."""
+        normalized = cls._normalized(message)
+        tokens = normalized.split()
+        token_set = set(tokens)
+        asks_next = cls._has_navigation_signal(tokens)
+        negated = bool(token_set & {"not", "never", "cannot", "cant", "havent"})
+        instruction_tokens = cls._normalized(verified_instruction).split()
+        past_action_match = any(
+            token.endswith("ed")
+            and any(
+                SequenceMatcher(None, token, instruction_token).ratio() >= 0.78
+                for instruction_token in instruction_tokens
+                if len(instruction_token) >= 4
+            )
+            for token in tokens
+        )
+        contextual_past_action = bool(
+            token_set & {"it", "that", "this", "there"}
+            and any(len(token) >= 4 and token.endswith("ed") for token in tokens)
+        )
+        generic_attestation = bool(
+            token_set & {"complete", "completed", "done", "finished", "performed"}
+        )
+        completed = asks_next and not negated and (
+            past_action_match or contextual_past_action or generic_attestation
+        )
+        return {
+            "relation": "completed" if completed else "unclear",
+            "asks_next": asks_next,
+            "confidence": 0.76 if completed else 0.0,
+            "authoritative": False,
+        }
+
+    @classmethod
+    def verified_followup_is_actionable(
+        cls,
+        message: str,
+        verified_instruction: str,
+        plan: Dict[str, Any],
+    ) -> bool:
+        """Validate model semantics against the user's words before graph lookup."""
+        if (
+            str(plan.get("relation")) != "completed"
+            or not bool(plan.get("asks_next"))
+            or float(plan.get("confidence") or 0.0) < 0.72
+        ):
+            return False
+        tokens = set(cls._normalized(message).split())
+        return bool(
+            tokens & {"it", "that", "this", "there"}
+            or fuzzy_relevance_score(message, verified_instruction) >= 0.20
+        )
+
+    @classmethod
+    def verified_followup_needs_reminder(
+        cls, message: str, plan: Dict[str, Any]
+    ) -> bool:
+        """Keep incomplete or asking users on the last verified instruction."""
+        tokens = set(cls._normalized(message).split())
+        explicitly_incomplete = bool(
+            tokens & {"not", "never", "cannot", "cant", "havent"}
+        )
+        semantic_question = bool(
+            str(plan.get("relation")) == "asking"
+            and float(plan.get("confidence") or 0.0) >= 0.72
+        )
+        return bool(plan.get("asks_next")) and (explicitly_incomplete or semantic_question)
 
     @classmethod
     def should_plan_workflow_action(
@@ -207,6 +327,8 @@ class CopilotReasoningService:
         """Identify a user's attestation that they performed the matched step."""
         normalized = cls._normalized(message)
         tokens = set(normalized.split())
+        if tokens & {"not", "never", "cannot", "cant", "havent"}:
+            return False
         has_completion_language = bool(
             tokens & {"complete", "completed", "done", "finished"}
             or tokens & {"have", "has", "already"}

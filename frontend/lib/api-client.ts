@@ -26,6 +26,7 @@ export interface Citation {
   step_number?: number | string;
   chunk_id: string;
   excerpt: string;
+  state_id?: string | null;
 }
 
 export interface CopilotResponse {
