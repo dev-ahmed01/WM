@@ -120,8 +120,21 @@ class FasterWhisperSpeechRecognitionService:
                     language=requested_language,
                     beam_size=settings.WHISPER_BEAM_SIZE,
                     vad_filter=True,
+                    without_timestamps=True,
                     condition_on_previous_text=False,
-                    hotwords=settings.WHISPER_HOTWORDS or None,
+                    initial_prompt=(
+                        settings.WHISPER_HINDI_PROMPT
+                        if requested_language != "en"
+                        else None
+                    ),
+                    # A fixed language already removes the cost and uncertainty
+                    # of auto-detection. Hotwords are most useful only while the
+                    # model must infer the language itself.
+                    hotwords=(
+                        settings.WHISPER_HOTWORDS or None
+                        if requested_language is None
+                        else None
+                    ),
                 )
                 realized_segments = list(segments)
             except Exception as exc:

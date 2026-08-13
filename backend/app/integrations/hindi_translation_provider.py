@@ -48,38 +48,51 @@ class CTranslate2HindiProvider:
             return self._translator, self._tokenizer
 
     def _translate_sync(self, text: str, source: str, target: str) -> str:
+        return self._translate_many_sync([text], source, target)[0]
+
+    def _translate_many_sync(
+        self, texts: list[str], source: str, target: str
+    ) -> list[str]:
         if {source, target} != {"en", "hi"}:
             raise ValueError(f"Unsupported translation direction: {source}->{target}")
         with self._inference_lock:
             translator, tokenizer = self._load()
             source_tokens = [
-                f"__{source}__",
-                *tokenizer.encode(text, out_type=str),
-                "</s>",
+                [f"__{source}__", *tokenizer.encode(text, out_type=str), "</s>"]
+                for text in texts
             ]
-            target_prefix = [f"__{target}__"]
+            target_prefix = [[f"__{target}__"] for _ in texts]
             result = translator.translate_batch(
-                [source_tokens],
-                target_prefix=[target_prefix],
+                source_tokens,
+                target_prefix=target_prefix,
                 beam_size=settings.HINDI_TRANSLATION_BEAM_SIZE,
                 max_decoding_length=512,
                 repetition_penalty=1.05,
-            )[0]
-            target_tokens = [
-                token
-                for token in result.hypotheses[0][1:]
-                if token not in {"</s>", "<pad>"} and not token.startswith("__")
-            ]
-            translation = tokenizer.decode(target_tokens).strip()
-        if not translation:
+            )
+            translations = []
+            for item in result:
+                target_tokens = [
+                    token
+                    for token in item.hypotheses[0][1:]
+                    if token not in {"</s>", "<pad>"} and not token.startswith("__")
+                ]
+                translations.append(tokenizer.decode(target_tokens).strip())
+        if any(not translation for translation in translations):
             raise RuntimeError("Hindi translator returned empty text")
-        return translation
+        return translations
 
     async def translate_text(
         self, text: str, source_language: str, target_language: str
     ) -> str:
         return await run_in_threadpool(
             self._translate_sync, text, source_language, target_language
+        )
+
+    async def translate_texts(
+        self, texts: list[str], source_language: str, target_language: str
+    ) -> list[str]:
+        return await run_in_threadpool(
+            self._translate_many_sync, texts, source_language, target_language
         )
 
     async def warm(self) -> None:

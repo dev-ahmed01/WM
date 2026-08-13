@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.copilot import router
 from app.core.security import create_access_token
-from app.models.copilot import CopilotResponse
+from app.models.copilot import CopilotResponse, SopSuggestion
 from app.models.voice import TranscriptionResult
 from app.services.speech_recognition_service import get_speech_recognition_service
 from app.services.speech_recognition_service import FasterWhisperSpeechRecognitionService
@@ -151,6 +151,67 @@ def test_voice_can_return_text_before_audio_is_synthesized():
     assert response.json()["audio_url"] is None
     assert response.json()["synthesis_ms"] == 0
     assert persist.call_args.kwargs["audio_id"] is None
+
+
+def test_hindi_voice_localizes_sop_suggestion_menu_in_one_batch():
+    class MenuTranslation(FakeTranslation):
+        async def translate_many_from_english(self, texts, target_language):
+            assert target_language == "hi"
+            assert texts == [
+                "Choose the closest verified SOP.",
+                "Damage Inspection",
+                "Inspect damaged goods before stocking.",
+            ]
+            return [
+                "निकटतम सत्यापित प्रक्रिया चुनें।",
+                "क्षति निरीक्षण",
+                "भंडारण से पहले क्षतिग्रस्त सामान की जाँच करें।",
+            ]
+
+    result = copilot_result().model_copy(
+        update={
+            "answer": "Choose the closest verified SOP.",
+            "sop_suggestions": [
+                SopSuggestion(
+                    workflow_code="WH_REC_003",
+                    title="Damage Inspection",
+                    description="Inspect damaged goods before stocking.",
+                    match_score=0.9,
+                )
+            ],
+        }
+    )
+    app.dependency_overrides[get_speech_recognition_service] = FakeSpeechRecognition
+    app.dependency_overrides[get_translation_service] = MenuTranslation
+    app.dependency_overrides[get_text_to_speech_service] = FakeSpeechOutput
+    try:
+        with (
+            patch(
+                "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+                return_value="conv_voice",
+            ),
+            patch(
+                "app.api.v1.copilot.copilot_message",
+                new_callable=AsyncMock,
+                return_value=result,
+            ),
+            patch("app.api.v1.copilot.VoiceRepository.persist_interaction"),
+            patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        ):
+            response = client.post(
+                "/api/v1/copilot/voice",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                data={"language": "auto", "synthesize": "false"},
+                files={"audio": ("voice.webm", b"audio bytes", "audio/webm")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    suggestion = response.json()["copilot"]["sop_suggestions"][0]
+    assert suggestion["title"] == "क्षति निरीक्षण"
+    assert suggestion["description"].startswith("भंडारण से पहले")
+    assert suggestion["workflow_code"] == "WH_REC_003"
 
 
 def test_deferred_speech_is_authorized_and_attached_to_interaction():
@@ -328,7 +389,8 @@ def test_compact_voice_defaults_fit_the_constrained_runtime():
     from app.core.config import settings
 
     assert settings.VOICE_SUPPORTED_LANGUAGES == "en,hi"
-    assert settings.WHISPER_MODEL == "small"
+    assert settings.WHISPER_MODEL == "base"
+    assert settings.WHISPER_FALLBACK_MODEL == "tiny"
     assert settings.WHISPER_BEAM_SIZE == 1
     assert settings.WHISPER_CPU_THREADS == 4
     assert settings.VOICE_MODEL_REUSE_MIN_MEMORY_GB == 3.5

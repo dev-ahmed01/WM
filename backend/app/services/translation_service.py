@@ -10,10 +10,15 @@ from app.integrations.hindi_translation_provider import CTranslate2HindiProvider
 SUPPORTED_LANGUAGES = frozenset({"en", "hi"})
 _HINDI_OPERATIONAL_WORDS = (
     "मुझे",
+    "पैकेज",
     "सामान",
+    "क्षतिग्रस्त",
+    "नुकसान",
     "प्राप्त",
     "करने",
     "प्रक्रिया",
+    "क्या",
+    "चाहिए",
     "बता",
     "बताइए",
 )
@@ -77,6 +82,25 @@ class TranslationService:
         if target == "en":
             return text
         return await self._translate(text, "en", target)
+
+    async def translate_many_from_english(
+        self, texts: list[str], target_language: str
+    ) -> list[str]:
+        """Translate UI response fields together to avoid repeated model calls."""
+        target = self._validate_language(target_language)
+        if target == "en":
+            return texts
+        if not texts or any(not text.strip() for text in texts):
+            raise TranslationError("Cannot translate empty text")
+        batch = getattr(self.provider, "translate_texts", None)
+        try:
+            if batch is not None:
+                return await batch(texts, "en", target)
+            return [await self._translate(text, "en", target) for text in texts]
+        except TranslationError:
+            raise
+        except Exception as exc:
+            raise TranslationError(f"Translation from en to {target} failed") from exc
 
     async def _translate(self, text: str, source: str, target: str) -> str:
         if not text.strip():

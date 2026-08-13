@@ -208,32 +208,8 @@ def _requested_sop_index(message: str) -> int | None:
 def _workflow_confirmation_explanation(
     message: str, workflow: Dict[str, Any]
 ) -> str:
-    """Explain a grounded workflow match without reading catalog metadata aloud."""
-    request = " ".join(message.strip().split()).rstrip(".?!")
-    if len(request) > 140:
-        request = f"{request[:137].rstrip()}..."
-
-    coverage = next(
-        (
-            str(workflow.get(field) or "").strip().rstrip(".")
-            for field in ("description", "state_title", "step_title")
-            if str(workflow.get(field) or "").strip()
-        ),
-        " ".join(
-            str(
-                workflow.get("title")
-                or workflow.get("document_title")
-                or "this operational process"
-            ).replace("_", " ").split()
-        ),
-    )
-    coverage = _naturalize_sop_coverage(coverage)
-    return (
-        f'It sounds like you need help with "{request}". '
-        f"I matched that to a verified procedure covering {coverage}. "
-        "Is that the guidance you are looking for? "
-        "Reply yes to use it or no and tell me what is different."
-    )
+    """Request a safe confirmation without echoing the user's wording."""
+    return "I found a verified procedure. Use it? Reply yes or no."
 
 
 def _naturalize_sop_coverage(coverage: str) -> str:
@@ -594,16 +570,40 @@ async def copilot_voice(
 
         if detected_language == "en":
             response_text = copilot_response.answer
+            translated_copilot = copilot_response
         else:
             started = time.perf_counter()
-            response_text = await translation_service.translate_from_english(
-                copilot_response.answer, detected_language
-            )
+            suggestions = copilot_response.sop_suggestions
+            translated_suggestions = []
+            if suggestions:
+                fields = [copilot_response.answer]
+                for suggestion in suggestions:
+                    fields.extend([suggestion.title, suggestion.description])
+                translated_fields = await translation_service.translate_many_from_english(
+                    fields, detected_language
+                )
+                response_text = translated_fields[0]
+                for index, suggestion in enumerate(suggestions):
+                    translated_suggestions.append(
+                        suggestion.model_copy(
+                            update={
+                                "title": translated_fields[1 + index * 2],
+                                "description": translated_fields[2 + index * 2],
+                            }
+                        )
+                    )
+            else:
+                response_text = await translation_service.translate_from_english(
+                    copilot_response.answer, detected_language
+                )
             translation_ms += round((time.perf_counter() - started) * 1000)
-
-        translated_copilot = copilot_response.model_copy(
-            update={"answer": response_text, "spoken_answer": response_text}
-        )
+            translated_copilot = copilot_response.model_copy(
+                update={
+                    "answer": response_text,
+                    "spoken_answer": response_text,
+                    "sop_suggestions": translated_suggestions,
+                }
+            )
 
         if synthesize and speech_output.supports(detected_language):
             started = time.perf_counter()
@@ -1051,10 +1051,12 @@ async def copilot_message(
         payload.message, catalog
     )
     if not workflow_match and active_session is None:
-        if not explicit_workflow_request:
-            workflow_match = WorkflowIntentService.match_published_workflow(
-                payload.message, catalog, proposal_mode=True
-            )
+        # Natural questions often contain request verbs ("need", "show") even
+        # when they describe a concrete problem. Proposal mode is confirmation-
+        # gated, so it is safe to use for both named requests and situations.
+        workflow_match = WorkflowIntentService.match_published_workflow(
+            payload.message, catalog, proposal_mode=True
+        )
         if not workflow_match:
             ranked_options = WorkflowIntentService.rank_published_workflows(
                 payload.message, catalog, limit=3

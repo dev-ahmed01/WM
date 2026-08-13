@@ -168,11 +168,9 @@ def test_retrieval_requires_sop_confirmation_before_starting(
     body = response.json()
     assert body["active_session_id"] is None
     assert body["active_step_title"] is None
-    assert body["answer"].startswith(
-        'It sounds like you need help with "Inbound trailer at dock, seal needs checking".'
-    )
-    assert "matched that to a verified procedure covering" in body["answer"]
-    assert "Is that the guidance you are looking for?" in body["answer"]
+    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
+    assert "Use it? Reply yes or no." in body["answer"]
+    assert "Inbound trailer at dock" not in body["answer"]
     assert "Receiving SOP" not in body["spoken_answer"]
     assert body["citations"] == []
     mock_generate.assert_not_awaited()
@@ -493,14 +491,9 @@ def test_named_sop_request_requires_confirmation_without_starting():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"].startswith(
-        'It sounds like you need help with "get me receive shipment sop".'
-    )
-    assert (
-        "covering inbound receiving, seal verification, and inventory intake"
-        in body["answer"]
-    )
-    assert "Is that the guidance you are looking for?" in body["answer"]
+    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
+    assert "Use it? Reply yes or no." in body["answer"]
+    assert "get me receive shipment sop" not in body["answer"]
     assert "receive_shipment_v1_1" not in body["spoken_answer"]
     assert "SOP_INB_101" not in body["spoken_answer"]
     assert body["spoken_answer"] == body["answer"]
@@ -672,6 +665,43 @@ def test_uncertain_confirmation_followup_explains_pending_sop_from_catalog():
     assert persist.call_args_list[-1].kwargs["intent"] == "SOP_CONFIRM:ver_damage"
     start_session.assert_not_called()
     detect.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_natural_damage_question_prefers_unique_verified_sop_over_menu():
+    catalog = [
+        {
+            "workflow_code": "WH_REC_003",
+            "title": "Damage Inspection",
+            "description": "Inspect damaged goods before they enter sellable stock.",
+            "workflow_version_id": "ver_damage",
+        },
+        {
+            "workflow_code": "WH_PICK_004",
+            "title": "Cluster Picking",
+            "description": "Pick packages for several orders.",
+            "workflow_version_id": "ver_cluster",
+        },
+    ]
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1"),
+        patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"]),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None),
+        patch("app.api.v1.copilot.KnowledgeRepository.list_published_catalog", return_value=catalog),
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"message": "Package damaged, what I need to do"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sop_suggestions"] == []
+    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
+    assert body["sop_details"] == "SOP: Damage Inspection | WH_REC_003"
     retrieve.assert_not_awaited()
 
 

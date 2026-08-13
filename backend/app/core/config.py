@@ -60,8 +60,11 @@ class Settings(BaseSettings):
     VOICE_MAX_AUDIO_BYTES: int = 25 * 1024 * 1024
     VOICE_AUDIO_DIR: str = "/app/data/voice/audio"
     VOICE_AUDIO_TTL_SECONDS: int = 3600
-    WHISPER_MODEL: str = "small"
-    WHISPER_FALLBACK_MODEL: str = "base"
+    # The multilingual base model is the best CPU latency/accuracy trade-off for
+    # the current sub-4 GB deployment. A larger model remains configurable for
+    # GPU or higher-memory installations.
+    WHISPER_MODEL: str = "base"
+    WHISPER_FALLBACK_MODEL: str = "tiny"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_DOWNLOAD_ROOT: str = "/app/data/voice/whisper"
@@ -75,6 +78,11 @@ class Settings(BaseSettings):
         "goods shipment trailer seal manifest warehouse inventory return batch picking "
         "पैकेज क्षतिग्रस्त नुकसान निरीक्षण क्वारंटीन पैलेट बारकोड खरीद आदेश माल "
         "शिपमेंट ट्रेलर सील मैनिफेस्ट गोदाम इन्वेंटरी वापसी बैच पिकिंग"
+    )
+    WHISPER_HINDI_PROMPT: str = (
+        "यह एक वेयरहाउस सहायता अनुरोध है। पैकेज, सामान, क्षतिग्रस्त, नुकसान, "
+        "निरीक्षण, क्वारंटीन, पैलेट, बारकोड, खरीद आदेश, शिपमेंट, प्राप्ति, "
+        "गोदाम, इन्वेंटरी, वापसी, मुझे क्या करना चाहिए।"
     )
     PIPER_VOICE_DIR: str = "/app/data/voice/piper"
     PIPER_USE_CUDA: bool = False
