@@ -183,6 +183,7 @@ def _persist_control_reply(
     sop_details: Optional[str] = None,
     active_session: Any = None,
     position: Any = None,
+    message_intent: Optional[str] = None,
 ) -> CopilotResponse:
     """Persist a deterministic reply backed by catalog or workflow state."""
     ConversationRepository.update_message_intent(user_message_id, intent)
@@ -190,6 +191,7 @@ def _persist_control_reply(
         conversation_id=conversation_id,
         sender="ai",
         content=answer,
+        intent=message_intent,
         confidence_score=1.0,
     )
     return CopilotResponse(
@@ -415,14 +417,35 @@ async def copilot_message(
     active_session = WorkflowStateService.get_current_session(conversation_id)
     resolved_position: Any = None
     prechecked_position: Any = None
+    confirmation_response = WorkflowIntentService.confirmation_response(payload.message)
+    prior_history = (
+        [
+            item
+            for item in ConversationRepository.get_history(conversation_id, limit=8)
+            if str(item.get("id")) != user_message_id
+        ]
+        if confirmation_response is not None
+        else []
+    )
+    pending_confirmation = next(
+        (
+            item
+            for item in reversed(prior_history)
+            if str(item.get("sender") or "").lower() == "ai"
+            and str(item.get("intent") or "").startswith("SOP_CONFIRM:")
+        ),
+        None,
+    )
 
     # Catalog selection is deterministic and remains available when embeddings
     # or the local model are slow. Only one unambiguous published match can run.
     requested_sop_index = _requested_sop_index(payload.message)
     catalog: list[Dict[str, Any]] = []
     should_check_catalog = bool(
-        requested_sop_index is not None
+        (confirmation_response is not None and pending_confirmation)
+        or requested_sop_index is not None
         or WorkflowIntentService.is_workflow_request(payload.message)
+        or active_session is None
         or (
             active_session is None
             and WorkflowIntentService.is_catalog_candidate(payload.message)
@@ -434,6 +457,52 @@ async def copilot_message(
         except Exception:
             copilot_logger.exception(
                 "Published workflow catalog lookup failed; continuing with grounded retrieval"
+            )
+
+    if confirmation_response is not None and pending_confirmation:
+        pending_parts = str(pending_confirmation["intent"]).split(":", 2)
+        pending_version_id = pending_parts[1]
+        pending_state_id = pending_parts[2] if len(pending_parts) > 2 else None
+        pending_match = next(
+            (
+                item
+                for item in catalog
+                if str(item.get("workflow_version_id")) == pending_version_id
+            ),
+            None,
+        )
+        if confirmation_response is False:
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_CONFIRMATION_REJECTED",
+                answer=(
+                    "Okay—I won’t start that SOP. Tell me the process, equipment, "
+                    "or problem you mean, and I’ll find the closest verified workflow."
+                ),
+                active_session=active_session,
+                position=WorkflowStateService.get_position(active_session) if active_session else None,
+            )
+        if pending_match and not active_session:
+            start_kwargs = {
+                "conversation_id": conversation_id,
+                "workflow_version_id": pending_version_id,
+                "user_id": user_id,
+            }
+            if pending_state_id:
+                start_kwargs["start_state_id"] = pending_state_id
+            active_session = WorkflowStateService.start_session(**start_kwargs)
+            position = WorkflowStateService.get_position(active_session)
+            answer = f"Confirmed. Using {pending_match['title']}. {_step_guidance(position)}"
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_START_CONFIRMED",
+                answer=answer,
+                spoken_answer=answer,
+                sop_details=f"SOP: {pending_match['title']} | {pending_match['workflow_code']}",
+                active_session=active_session,
+                position=position,
             )
 
     if requested_sop_index is not None:
@@ -472,9 +541,16 @@ async def copilot_message(
             position=position,
         )
 
+    explicit_workflow_request = WorkflowIntentService.is_workflow_request(payload.message)
     workflow_match = WorkflowIntentService.match_published_workflow(
         payload.message, catalog
     )
+    if not workflow_match and active_session is None and not explicit_workflow_request:
+        workflow_match = WorkflowIntentService.match_published_workflow(
+            payload.message, catalog, proposal_mode=True
+        )
+        if not workflow_match:
+            workflow_match = await AIGateway.select_catalog_workflow(payload.message, catalog)
     if workflow_match:
         sop_details = (
             f"SOP: {workflow_match['title']} | {workflow_match['workflow_code']}"
@@ -489,23 +565,17 @@ async def copilot_message(
             intent = "WORKFLOW_SELECTION_CONFLICT"
         else:
             if not active_session:
-                active_session = WorkflowStateService.start_session(
-                    conversation_id=conversation_id,
-                    workflow_version_id=matched_version_id,
-                    user_id=user_id,
+                answer = (
+                    f"I found {workflow_match['title']} "
+                    f"({workflow_match['workflow_code']}). Is this the SOP you mean? "
+                    "Reply yes to start it or no to keep searching."
                 )
-                started_workflow_this_turn = True
-                intent = "WORKFLOW_START"
+                intent = "WORKFLOW_CONFIRMATION_REQUIRED"
+                position = None
             else:
                 intent = "WORKFLOW_RESUME"
-            position = WorkflowStateService.get_position(active_session)
-            answer = _step_guidance(position)
-            if intent == "WORKFLOW_START":
-                answer += (
-                    " If you are already partway through, tell me your current step "
-                    "or describe what you are stuck on and I will use that verified "
-                    "guidance directly."
-                )
+                position = WorkflowStateService.get_position(active_session)
+                answer = _step_guidance(position)
         copilot_logger.info(
             "Resolved workflow catalog intent '%s' with score %.3f",
             intent,
@@ -520,6 +590,11 @@ async def copilot_message(
             sop_details=sop_details,
             active_session=active_session,
             position=position,
+            message_intent=(
+                f"SOP_CONFIRM:{matched_version_id}"
+                if intent == "WORKFLOW_CONFIRMATION_REQUIRED"
+                else None
+            ),
         )
 
     if active_session and active_session.status == "active":
@@ -997,6 +1072,31 @@ async def copilot_message(
             query=retrieval_query,
             department_id=department_id,
         )
+
+    if (
+        not active_session
+        and ResponseValidationService.has_relevant_evidence(retrieved_chunks, department_id)
+    ):
+        source = retrieved_chunks[0]
+        workflow_version_id = str(source.get("workflow_version_id") or "")
+        state_id = str(source.get("state_id") or "")
+        if workflow_version_id and state_id:
+            title = str(source.get("document_title") or "this workflow")
+            code = str(source.get("workflow_code") or "").strip()
+            code_text = f" ({code})" if code else ""
+            answer = (
+                f"I found {title}{code_text} as the closest verified SOP for your question. "
+                "Is this the SOP you mean? Reply yes to use it or no to keep searching."
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_CONFIRMATION_REQUIRED",
+                answer=answer,
+                spoken_answer=answer,
+                sop_details=f"SOP: {title}{f' | {code}' if code else ''}",
+                message_intent=f"SOP_CONFIRM:{workflow_version_id}:{state_id}",
+            )
 
     if (
         not active_session

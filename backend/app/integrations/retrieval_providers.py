@@ -47,6 +47,7 @@ class CandidateRepository:
         sql = f"""
             SELECT sm.id AS chunk_id,
                    w.id AS document_id,
+                   w.workflow_code,
                    w.title AS document_title,
                    wv.id AS workflow_version_id,
                    wv.version_number,
@@ -54,7 +55,8 @@ class CandidateRepository:
                    s.ordinal_index AS step_number,
                    s.title AS step_title,
                    sm.search_content AS content,
-                   sm.department_id,
+                   sm.department_id AS source_department_id,
+                   %s AS department_id,
                    LOWER(wv.status) AS status
             FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata sm
             JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions wv
@@ -65,8 +67,10 @@ class CandidateRepository:
               ON sm.state_id = s.id
             WHERE LOWER(wv.status) IN ({placeholders})
               AND LOWER(sm.status) = 'published'
-              AND sm.department_id = %s
-              AND w.department_id = %s
+              AND (
+                    (sm.department_id = %s AND w.department_id = %s)
+                    OR LEFT(w.workflow_code, 3) = 'WH_'
+              )
               AND wv.version_number = (
                   SELECT MAX(candidate_version.version_number)
                   FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
@@ -77,6 +81,7 @@ class CandidateRepository:
             LIMIT %s OFFSET %s
         """
         params: List[Any] = [
+            department_id,
             *statuses,
             department_id,
             department_id,
@@ -268,6 +273,7 @@ class SqlLexicalRetrievalProvider:
         sql = f"""
             SELECT sm.id AS chunk_id,
                    w.id AS document_id,
+                   w.workflow_code,
                    w.title AS document_title,
                    wv.id AS workflow_version_id,
                    wv.version_number,
@@ -275,7 +281,8 @@ class SqlLexicalRetrievalProvider:
                    s.ordinal_index AS step_number,
                    s.title AS step_title,
                    sm.search_content AS content,
-                   sm.department_id,
+                   sm.department_id AS source_department_id,
+                   %s AS department_id,
                    LOWER(wv.status) AS status,
                    {score_expression} AS score
             FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata sm
@@ -287,8 +294,10 @@ class SqlLexicalRetrievalProvider:
               ON sm.state_id = s.id
             WHERE LOWER(wv.status) IN ({status_placeholders})
               AND LOWER(sm.status) = 'published'
-              AND sm.department_id = %s
-              AND w.department_id = %s
+              AND (
+                    (sm.department_id = %s AND w.department_id = %s)
+                    OR LEFT(w.workflow_code, 3) = 'WH_'
+              )
               AND wv.version_number = (
                   SELECT MAX(candidate_version.version_number)
                   FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
@@ -302,6 +311,7 @@ class SqlLexicalRetrievalProvider:
         patterns = [f"%{term}%" for term in terms]
         params: List[Any] = [
             *patterns,
+            department_id,
             *statuses,
             department_id,
             department_id,

@@ -57,14 +57,25 @@ class WorkflowStateService:
         conversation_id: str,
         workflow_version_id: str,
         user_id: str,
+        start_state_id: Optional[str] = None,
     ) -> WorkflowSession:
-        initial_state = OWDRepository.get_initial_state(workflow_version_id)
+        initial_state = (
+            OWDRepository.get_state_by_id(start_state_id)
+            if start_state_id
+            else OWDRepository.get_initial_state(workflow_version_id)
+        )
+        if (
+            start_state_id
+            and initial_state
+            and str(initial_state.get("workflow_version_id")) != workflow_version_id
+        ):
+            initial_state = None
         if not initial_state:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "error_code": "WORKFLOW_NOT_EXECUTABLE",
-                    "message": "The published workflow has no initial state.",
+                    "message": "The published workflow has no authorized starting state.",
                     "details": {"workflow_version_id": workflow_version_id},
                 },
             )

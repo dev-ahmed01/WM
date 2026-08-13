@@ -118,7 +118,7 @@ def test_completion_intent_is_case_typo_and_negation_safe():
 @patch.object(AIGateway, "generate_response", new_callable=AsyncMock)
 @patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock)
 @patch.object(AIGateway, "detect_intent", new_callable=AsyncMock)
-def test_retrieval_starts_workflow_and_returns_real_position(
+def test_retrieval_requires_sop_confirmation_before_starting(
     mock_intent,
     mock_retrieve,
     mock_generate,
@@ -166,15 +166,13 @@ def test_retrieval_starts_workflow_and_returns_real_position(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["active_session_id"] == "sess_1"
-    assert body["active_step_title"] == "Inspect the shipment seal"
-    assert body["answer"].startswith("Current step: Inspect the shipment seal")
-    assert 'type "done"' in body["answer"]
-    assert body["citations"][0]["chunk_id"] == "chunk_1"
+    assert body["active_session_id"] is None
+    assert body["active_step_title"] is None
+    assert body["answer"].startswith("I found Receiving SOP")
+    assert "Is this the SOP you mean?" in body["answer"]
+    assert body["citations"] == []
     mock_generate.assert_not_awaited()
-    mock_start.assert_called_once_with(
-        conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
-    )
+    mock_start.assert_not_called()
 
 
 def test_done_completes_active_step_without_ai_or_retrieval():
@@ -433,7 +431,7 @@ def test_numbered_sop_request_uses_published_department_catalog():
     retrieve.assert_not_awaited()
 
 
-def test_named_sop_request_starts_catalog_workflow_without_embeddings():
+def test_named_sop_request_requires_confirmation_without_starting():
     session = workflow_session()
     position = WorkflowPosition(
         state_id="state_1",
@@ -491,12 +489,51 @@ def test_named_sop_request_starts_catalog_workflow_without_embeddings():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"].startswith("Current step: Inspect the shipment seal")
+    assert body["answer"].startswith("I found receive_shipment_v1_1")
+    assert "Is this the SOP you mean?" in body["answer"]
     assert body["spoken_answer"] == body["answer"]
-    assert "receive_shipment_v1_1" not in body["spoken_answer"]
     assert body["sop_details"] == "SOP: receive_shipment_v1_1 | SOP_INB_101"
-    assert body["active_step_number"] == 1
+    assert body["active_step_number"] is None
     assert body["confidence_score"] == 1.0
+    start_session.assert_not_called()
+    detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_confirmed_sop_starts_catalog_workflow_without_embeddings():
+    session = workflow_session()
+    position = WorkflowPosition(
+        state_id="state_1", state_title="Arrival inspection", state_type="ATOMIC_STEP",
+        step_id="step_1", step_number=1, step_title="Inspect the shipment seal",
+    )
+    catalog = [{
+        "workflow_id": "workflow_1", "workflow_code": "SOP_INB_101",
+        "title": "receive_shipment_v1_1", "description": "Inbound receiving",
+        "workflow_version_id": "ver_1", "version_number": 4,
+    }]
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1"),
+        patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"]),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[{
+            "id": "prior_ai", "sender": "ai", "content": "Is this the SOP?",
+            "intent": "SOP_CONFIRM:ver_1",
+        }]),
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None),
+        patch("app.api.v1.copilot.KnowledgeRepository.list_published_catalog", return_value=catalog),
+        patch("app.api.v1.copilot.WorkflowStateService.start_session", return_value=session) as start_session,
+        patch("app.api.v1.copilot.WorkflowStateService.get_position", return_value=position),
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect_intent,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message", headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "yes"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["answer"].startswith("Confirmed. Using receive_shipment_v1_1")
+    assert response.json()["active_step_number"] == 1
     start_session.assert_called_once_with(
         conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
     )

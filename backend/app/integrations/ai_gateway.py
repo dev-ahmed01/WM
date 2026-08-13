@@ -105,6 +105,30 @@ class AIGateway:
             return fallback
 
     @classmethod
+    async def select_catalog_workflow(
+        cls, message: str, catalog: Sequence[Dict[str, Any]]
+    ) -> Dict[str, Any] | None:
+        """Let the local model propose one real catalog item, never invent one."""
+        if not settings.LOCAL_AI_ENABLED or not catalog:
+            return None
+        labels = [
+            f"{item.get('title') or ''} — {item.get('description') or ''}"[:600]
+            for item in catalog
+        ]
+        try:
+            suggestion = await cls.local_provider.classify_suggestion(message, labels)
+        except Exception as exc:
+            logger.warning("Local catalog reasoning unavailable: %s", type(exc).__name__)
+            return None
+        if float(suggestion.get("confidence") or 0.0) < 0.50:
+            return None
+        label = str(suggestion.get("label") or "")
+        return next(
+            (item for item, allowed_label in zip(catalog, labels) if allowed_label == label),
+            None,
+        )
+
+    @classmethod
     async def search(cls, query: str, department_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         if not query.strip() or not department_id.strip():
             return []

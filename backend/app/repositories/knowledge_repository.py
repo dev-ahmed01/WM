@@ -210,7 +210,7 @@ class KnowledgeRepository:
 
     @staticmethod
     def list_published_catalog(department_id: str) -> List[Dict[str, Any]]:
-        """Return one stable, executable published version per department workflow."""
+        """Return executable SOPs authorized for the caller's operational scope."""
         query = """
             SELECT workflow_id, workflow_code, title, description, department_id,
                    category, workflow_version_id, version_number
@@ -227,6 +227,7 @@ class KnowledgeRepository:
                   ON wv.workflow_id = w.id
                  AND LOWER(wv.status) = 'published'
                 WHERE w.department_id = %s
+                   OR LEFT(w.workflow_code, 3) = 'WH_'
             )
             WHERE published_rank = 1
             ORDER BY LOWER(title), LOWER(workflow_code)

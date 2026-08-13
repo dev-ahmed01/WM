@@ -428,7 +428,7 @@ def test_candidate_query_scopes_department_and_status_before_rows_are_returned(m
     assert "sm.department_id = %s" in sql
     assert "w.department_id = %s" in sql
     assert "MAX(candidate_version.version_number)" in sql
-    assert params == ["published", "dept_ops", "dept_ops", "published", 100, 0]
+    assert params == ["dept_ops", "published", "dept_ops", "dept_ops", "published", 100, 0]
 
 
 @pytest.mark.asyncio
@@ -451,7 +451,28 @@ async def test_sql_fallback_returns_workflow_version_identity(monkeypatch):
     assert "wv.id AS workflow_version_id" in sql
     assert "w.department_id = %s" in sql
     assert "MAX(candidate_version.version_number)" in sql
-    assert params[2:6] == ["published", "dept_ops", "dept_ops", "published"]
+    assert params[2:7] == ["dept_ops", "published", "dept_ops", "dept_ops", "published"]
+
+
+@pytest.mark.asyncio
+async def test_catalog_reasoning_can_only_return_a_real_workflow(monkeypatch):
+    catalog = [
+        {"title": "Damage Inspection", "workflow_version_id": "damage"},
+        {"title": "Cluster Picking", "workflow_version_id": "cluster"},
+    ]
+    monkeypatch.setattr(
+        AIGateway.local_provider,
+        "classify_suggestion",
+        AsyncMock(return_value={
+            "label": "Damage Inspection — ", "confidence": 0.91
+        }),
+    )
+
+    selected = await AIGateway.select_catalog_workflow(
+        "The packages are damaged what should I do", catalog
+    )
+
+    assert selected == catalog[0]
 
 
 @pytest.mark.asyncio

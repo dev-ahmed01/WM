@@ -67,7 +67,7 @@ class ConversationRepository:
     @staticmethod
     def load_history(conversation_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         query = """
-            SELECT id, sender, message_text AS content, confidence_score,
+            SELECT id, sender, message_text AS content, intent, confidence_score,
                    retrieved_state_ids, citations, created_at
             FROM WORKMATE_COPILOT.conversation_messages
             WHERE conversation_id = %s

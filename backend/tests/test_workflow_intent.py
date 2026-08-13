@@ -44,6 +44,30 @@ def test_operational_damage_question_is_not_mistaken_for_workflow_selection():
     )
 
 
+def test_problem_descriptions_can_propose_a_confirmable_sop():
+    catalog = CATALOG + [
+        {
+            "workflow_code": "WH_REC_003", "title": "Damage Inspection",
+            "description": "Inspect damaged packages and record their condition.",
+            "workflow_version_id": "ver_damage",
+        },
+        {
+            "workflow_code": "WH_REC_004", "title": "Barcode Registration On Receipt",
+            "description": "Register and scan received product barcodes.",
+            "workflow_version_id": "ver_barcode",
+        },
+    ]
+    damage = WorkflowIntentService.match_published_workflow(
+        "The packages are damaged what should I do", catalog, proposal_mode=True
+    )
+    barcode = WorkflowIntentService.match_published_workflow(
+        "the barcode isn't scanning what should I do", catalog, proposal_mode=True
+    )
+
+    assert damage and damage["workflow_code"] == "WH_REC_003"
+    assert barcode and barcode["workflow_code"] == "WH_REC_004"
+
+
 def test_noisy_damage_query_keeps_enough_verified_relevance():
     focused = CopilotReasoningService.focus_operational_query(
         "turn all this the package is damaged what should I do"
