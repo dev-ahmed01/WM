@@ -82,3 +82,30 @@ def test_existing_directive_format_remains_supported():
 
     assert OWDValidator.validate(document).is_valid
     assert len(document.workflow.states) == 6
+
+
+def test_cross_sop_decisions_compile_as_explicit_terminal_handoffs():
+    markdown = FIXTURE.read_text(encoding="utf-8").replace(
+        '"next_state": {"match": "S4", "damage": "S3"}',
+        '"next_state": {"match": "WH-REC-005:S1", "damage": "WH-REC-009:S3"}',
+    )
+    document = OWDParser.parse(
+        markdown_text=markdown,
+        title="Receive Shipment",
+        department_id="dept_inbound",
+    )
+    report = OWDValidator.validate(document)
+
+    assert report.is_valid, report.errors
+    handoffs = {
+        state.state_key: state
+        for state in document.workflow.states
+        if state.state_key.startswith("STATE_HANDOFF_")
+    }
+    assert set(handoffs) == {
+        "STATE_HANDOFF_WH_REC_005_S1",
+        "STATE_HANDOFF_WH_REC_009_S3",
+    }
+    assert all(state.is_terminal and state.state_type == "END" for state in handoffs.values())
+    decision = document.workflow.states[1].decisions[0]
+    assert {option.target_state_key for option in decision.options} == set(handoffs)

@@ -57,6 +57,44 @@ class JsonTableOWDAdapter:
         text = str(value or "").strip()
         return text.split(" ", 1)[0] if text else ""
 
+    @staticmethod
+    def _decision_target(
+        value: Any,
+        workflow_code: str,
+        local_state_ids: List[str],
+    ) -> tuple[str, Dict[str, str] | None]:
+        """Resolve local targets and turn cross-SOP routes into terminal handoffs."""
+        reference = str(value or "").strip()
+        if not reference:
+            return "STATE_END", None
+
+        target_workflow = ""
+        target_state = reference
+        if ":" in reference:
+            target_workflow, target_state = (
+                part.strip() for part in reference.split(":", 1)
+            )
+
+        normalized_workflow = sanitize_code(workflow_code, prefix="WORKFLOW")
+        referenced_workflow = sanitize_code(target_workflow, prefix="WORKFLOW")
+        local_states = {
+            sanitize_code(state_id, prefix="STATE") for state_id in local_state_ids
+        }
+        normalized_state = sanitize_code(target_state, prefix="STATE")
+        if (
+            not target_workflow
+            or referenced_workflow == normalized_workflow
+        ) and normalized_state in local_states:
+            return normalized_state, None
+
+        handoff_key = sanitize_code(f"HANDOFF_{reference}", prefix="STATE")
+        return handoff_key, {
+            "state_key": handoff_key,
+            "workflow": target_workflow or reference,
+            "state": target_state if target_workflow else "",
+            "reference": reference,
+        }
+
     @classmethod
     def adapt(cls, markdown_text: str, department_id: str = "") -> str:
         if not cls.is_supported_format(markdown_text):
@@ -81,6 +119,10 @@ class JsonTableOWDAdapter:
 
         state_ids = [row.get("State ID", "").strip() for row in state_rows]
         state_ids = [state_id for state_id in state_ids if state_id]
+        workflow_code = str(
+            metadata.get("sop_id") or definition.get("workflow_id") or "WORKFLOW"
+        )
+        handoff_states: Dict[str, Dict[str, str]] = {}
         step_to_state = {
             str(step.get("step_id")): state_id
             for state_id, steps in steps_by_state.items()
@@ -195,12 +237,17 @@ class JsonTableOWDAdapter:
                     options = []
                     for option in decision.get("possible_answers", []):
                         answer_value = str(option.get("answer_value", "option"))
+                        target_key, handoff = cls._decision_target(
+                            next_states.get(answer_value, ""),
+                            workflow_code,
+                            state_ids,
+                        )
+                        if handoff:
+                            handoff_states[target_key] = handoff
                         options.append({
                             "option_code": answer_value,
                             "option_label": option.get("label", answer_value),
-                            "next_state": sanitize_code(
-                                str(next_states.get(answer_value, "")), prefix="STATE"
-                            ),
+                            "next_state": target_key,
                             "next_step": next_steps.get(answer_value),
                         })
                     decision_payload = {
@@ -220,6 +267,30 @@ class JsonTableOWDAdapter:
             if not has_decision and not is_terminal:
                 target = transition_targets[0] if transition_targets else state_ids[index + 1]
                 output.extend(["", f'::transition{{to="{target}" condition="ALWAYS"}}'])
+
+        for handoff in handoff_states.values():
+            destination = handoff["workflow"]
+            if handoff["state"]:
+                destination = f"{destination} at {handoff['state']}"
+            props = {
+                "type": "END",
+                "is_initial": "false",
+                "is_terminal": "true",
+                "purpose": f"Continue the governed process in {destination}.",
+                "entry_condition": "Selected as the verified workflow outcome.",
+                "exit_condition": "This workflow hands control to the referenced SOP.",
+                "responsible_role": "Employee",
+                "expected_duration": "0 mins",
+                "business_objective": "Preserve an explicit cross-SOP workflow handoff.",
+            }
+            encoded_props = " ".join(
+                f'{key}={json.dumps(str(value))}' for key, value in props.items()
+            )
+            output.extend([
+                "",
+                f"::state[{handoff['state_key']}]{{{encoded_props}}}",
+                f"## Handoff: {handoff['reference']}",
+            ])
 
         user_blocks = cls._json_blocks(cls._section(markdown_text, 8, "User Context"))
         if user_blocks:

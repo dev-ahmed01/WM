@@ -107,12 +107,15 @@ async def upload_knowledge(
         )
 
     try:
-        if not KnowledgeRepository.department_exists(department_id):
+        department_is_active, version_number = KnowledgeRepository.get_upload_context(
+            department_id,
+            workflow_id,
+        )
+        if not department_is_active:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"error_code": "INVALID_DEPARTMENT", "message": f"Unknown or inactive department '{department_id}'.", "details": None},
             )
-        version_number = KnowledgeRepository.get_next_version_number(workflow_id)
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

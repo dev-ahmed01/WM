@@ -89,9 +89,18 @@ class IngestionService:
                 with get_snowflake_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(put_query)
-                        cur.execute(f"LIST {snowflake_path}")
-                        if cur.fetchone() is None:
-                            raise WorkMateException(message="Snowflake PUT completed but the staged file was not found.")
+                        put_result = cur.fetchone()
+                        if put_result is None:
+                            raise WorkMateException(message="Snowflake PUT returned no upload result.")
+                        # Snowflake PUT returns status in column 7. Avoid a second
+                        # network round-trip through LIST for every uploaded SOP.
+                        if len(put_result) > 6 and str(put_result[6]).upper() not in {
+                            "UPLOADED",
+                            "SKIPPED",
+                        }:
+                            raise WorkMateException(
+                                message=f"Snowflake PUT failed with status '{put_result[6]}'."
+                            )
 
             return snowflake_path
         except Exception as exc:

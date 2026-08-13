@@ -67,8 +67,11 @@ def test_invalid_utf8_returns_422_without_staging():
     stage.assert_not_called()
 
 
-@patch("app.api.v1.knowledge_studio.KnowledgeRepository.department_exists", return_value=False)
-def test_unknown_department_is_rejected_before_staging(_department_exists):
+@patch(
+    "app.api.v1.knowledge_studio.KnowledgeRepository.get_upload_context",
+    return_value=(False, 1),
+)
+def test_unknown_department_is_rejected_before_staging(_upload_context):
     with patch.object(IngestionService, "stage_file") as stage:
         response = client.post(
             "/api/v1/knowledge/upload", headers=headers(ADMIN_TOKEN),
@@ -80,13 +83,15 @@ def test_unknown_department_is_rejected_before_staging(_department_exists):
     stage.assert_not_called()
 
 
-@patch("app.api.v1.knowledge_studio.KnowledgeRepository.department_exists", return_value=True)
-@patch("app.api.v1.knowledge_studio.KnowledgeRepository.get_next_version_number", return_value=3)
+@patch(
+    "app.api.v1.knowledge_studio.KnowledgeRepository.get_upload_context",
+    return_value=(True, 3),
+)
 @patch.object(IngestionService, "stage_file", return_value="@RAW_OWD_STAGE/SOP_INB_001/v3/hash/receive.md")
 @patch("app.api.v1.knowledge_studio.OWDCompilerPipeline.process_owd")
 @patch("app.api.v1.knowledge_studio.AIGateway.invalidate_all")
 def test_upload_uses_server_version_and_publishes(
-    invalidate, process, stage, next_version, department_exists
+    invalidate, process, stage, upload_context
 ):
     process.return_value = {
         "compilation_status": "SUCCESS", "deployment_status": "PUBLISHED",
@@ -104,6 +109,7 @@ def test_upload_uses_server_version_and_publishes(
     assert process.call_args.kwargs["prepared_document"].workflow.version_number == 3
     assert process.call_args.kwargs["source_filename"] == "receive.md"
     stage.assert_called_once()
+    upload_context.assert_called_once()
     invalidate.assert_called_once_with()
 
 

@@ -20,8 +20,8 @@ def test_ingestion_is_markdown_only_and_transactional():
 
     assert 'ALLOWED_EXTENSIONS = {".md"}' in ingestion
     assert 'raw_bytes.decode("utf-8-sig")' in route
-    assert "department_exists(department_id)" in route
-    assert "get_next_version_number(workflow_id)" in route
+    assert "get_upload_context(" in route
+    assert 'cur.execute(f"LIST {snowflake_path}")' not in ingestion
     assert 'cur.execute("BEGIN")' in loader
     assert 'cur.execute("COMMIT")' in loader
     assert 'rollback_cur.execute("ROLLBACK")' in loader

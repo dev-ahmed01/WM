@@ -14,6 +14,36 @@ class KnowledgeRepository:
     """Handles read and update queries for KNOWLEDGE_STUDIO workflows, workflow_versions, workflow_states, and workflow_steps tables in Snowflake."""
 
     @staticmethod
+    def get_upload_context(department_id: str, knowledge_item_id: str) -> tuple[bool, int]:
+        """Validate department and allocate a version with one Snowflake round-trip."""
+        query = """
+            SELECT
+                EXISTS(
+                    SELECT 1 FROM SECURITY.departments
+                    WHERE id = %s AND COALESCE(is_active, TRUE) = TRUE
+                ),
+                COALESCE((
+                    SELECT MAX(version_number)
+                    FROM KNOWLEDGE_STUDIO.workflow_versions
+                    WHERE workflow_id = %s
+                ), 0) + 1
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (department_id, knowledge_item_id))
+                    row = cur.fetchone()
+                    if not row:
+                        raise WorkMateException(message="Snowflake returned no upload context.")
+                    return bool(row[0]), int(row[1])
+        except WorkMateException:
+            raise
+        except Exception as exc:
+            raise WorkMateException(
+                message=f"Failed to prepare SOP upload: {str(exc)}"
+            ) from exc
+
+    @staticmethod
     def get_next_version_number(knowledge_item_id: str) -> int:
         query = "SELECT COALESCE(MAX(version_number), 0) FROM KNOWLEDGE_STUDIO.workflow_versions WHERE workflow_id = %s"
         try:
