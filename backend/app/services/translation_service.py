@@ -52,6 +52,11 @@ class TranslationService:
                 f"Translation from {source} to {target} failed"
             ) from exc
 
+    async def warm(self) -> None:
+        warm = getattr(self.provider, "warm", None)
+        if warm is not None:
+            await warm()
+
 
 @lru_cache
 def get_translation_service() -> TranslationService:

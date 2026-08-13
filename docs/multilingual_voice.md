@@ -18,7 +18,7 @@ Piper output is configured independently through `PIPER_VOICE_MAP`. The Docker i
 
 ## Runtime configuration
 
-The constrained CPU defaults use Faster-Whisper `small`, fall back to `base`, run INT8 with beam size 1, and expose CPU thread/worker settings. Workers below `VOICE_MODEL_REUSE_MIN_MEMORY_GB` transcribe in a short-lived subprocess so native allocations are reclaimed before reasoning. The isolated worker is bounded by `WHISPER_TRANSCRIPTION_TIMEOUT_SECONDS`. GPU deployments can set `WHISPER_DEVICE=cuda`, select a supported compute type, and enable Piper CUDA when matching runtimes are installed.
+The constrained CPU defaults use Faster-Whisper `small`, fall back to `base`, run INT8 with beam size 1, and use four CPU threads so transcription does not starve Copilot reasoning. The 3.67 GB deployment retains one serialized Whisper instance (`VOICE_MODEL_REUSE_MIN_MEMORY_GB=3.5`) instead of reloading it for every recording. Smaller workers use one-at-a-time isolated subprocesses. Docker enables `VOICE_PREWARM_MODELS`, paying Whisper and translation load cost during startup instead of the user's first request. GPU deployments can set `WHISPER_DEVICE=cuda`, select a supported compute type, and enable Piper CUDA when matching runtimes are installed.
 
 Whisper models and generated audio use separate Docker volumes; Piper voices are baked into the backend image. Generated WAV files expire after `VOICE_AUDIO_TTL_SECONDS`; URLs require the same JWT user that created the interaction.
 

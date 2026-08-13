@@ -81,3 +81,7 @@ class CTranslate2HindiProvider:
         return await run_in_threadpool(
             self._translate_sync, text, source_language, target_language
         )
+
+    async def warm(self) -> None:
+        """Load the quantized translator before the first voice request."""
+        await run_in_threadpool(self._load)

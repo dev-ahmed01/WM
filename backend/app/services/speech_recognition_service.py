@@ -206,13 +206,25 @@ class FasterWhisperSpeechRecognitionService:
             logger.error("Isolated Faster-Whisper worker failed: %s", type(exc).__name__)
             raise SpeechRecognitionError("Audio transcription failed") from exc
 
+    def _transcribe_isolated_serialized_sync(
+        self, audio_path: Path, requested_language: str | None
+    ) -> TranscriptionResult:
+        """Prevent retries from loading multiple memory-heavy workers concurrently."""
+        with self._inference_lock:
+            return self._transcribe_isolated_sync(audio_path, requested_language)
+
+    async def warm(self) -> None:
+        """Load the reusable model before the service accepts voice traffic."""
+        if not self._requires_isolated_worker():
+            await run_in_threadpool(self._load_model)
+
     async def transcribe(
         self, audio_path: Path, requested_language: str | None = None
     ) -> TranscriptionResult:
         if self._requires_isolated_worker():
             logger.info("Using isolated Faster-Whisper worker to reclaim native memory")
             return await run_in_threadpool(
-                self._transcribe_isolated_sync, audio_path, requested_language
+                self._transcribe_isolated_serialized_sync, audio_path, requested_language
             )
         return await run_in_threadpool(
             self._transcribe_sync, audio_path, requested_language

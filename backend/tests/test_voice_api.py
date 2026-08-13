@@ -313,10 +313,23 @@ def test_isolated_whisper_worker_parses_structured_result(monkeypatch, tmp_path)
     assert mocked_run.call_args.args[0][-1] == "auto"
 
 
+def test_whisper_reuses_model_on_current_memory_profile(monkeypatch):
+    service = FasterWhisperSpeechRecognitionService()
+    monkeypatch.setattr(service, "_memory_limit_bytes", lambda: int(3.67 * 1024**3))
+    monkeypatch.setattr(
+        "app.services.speech_recognition_service.settings.VOICE_MODEL_REUSE_MIN_MEMORY_GB",
+        3.5,
+    )
+
+    assert service._requires_isolated_worker() is False
+
+
 def test_compact_voice_defaults_fit_the_constrained_runtime():
     from app.core.config import settings
 
     assert settings.VOICE_SUPPORTED_LANGUAGES == "en,hi"
     assert settings.WHISPER_MODEL == "small"
     assert settings.WHISPER_BEAM_SIZE == 1
+    assert settings.WHISPER_CPU_THREADS == 4
+    assert settings.VOICE_MODEL_REUSE_MIN_MEMORY_GB == 3.5
     assert "क्षतिग्रस्त" in settings.WHISPER_HOTWORDS

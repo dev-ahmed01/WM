@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     WHISPER_LARGE_MIN_MEMORY_GB: float = 6.0
     WHISPER_TRANSCRIPTION_TIMEOUT_SECONDS: float = 300.0
     WHISPER_BEAM_SIZE: int = 1
-    WHISPER_CPU_THREADS: int = 8
+    WHISPER_CPU_THREADS: int = 4
     WHISPER_NUM_WORKERS: int = 1
     WHISPER_HOTWORDS: str = (
         "package damaged damage inspection quarantine pallet barcode purchase order "
@@ -87,7 +87,8 @@ class Settings(BaseSettings):
     HINDI_TRANSLATION_MODEL_DIR: str = "/app/models/translation/m2m100_418m"
     HINDI_TRANSLATION_CPU_THREADS: int = 4
     HINDI_TRANSLATION_BEAM_SIZE: int = 2
-    VOICE_MODEL_REUSE_MIN_MEMORY_GB: float = 8.0
+    VOICE_MODEL_REUSE_MIN_MEMORY_GB: float = 3.5
+    VOICE_PREWARM_MODELS: bool = False
 
     # Auth & Security Credentials
     JWT_SECRET: str = "replace_with_at_least_32_random_characters"
