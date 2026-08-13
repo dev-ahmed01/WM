@@ -52,6 +52,21 @@ export interface WorkflowDecisionOption {
   option_label: string;
 }
 
+export type VoiceLanguage = 'auto' | 'en' | 'hi' | 'kn' | 'ta' | 'te' | 'ml';
+
+export interface VoiceCopilotResponse {
+  language: Exclude<VoiceLanguage, 'auto'>;
+  transcript: string;
+  translated_transcript: string;
+  response_text: string;
+  audio_url?: string | null;
+  confidence: number;
+  transcription_ms: number;
+  translation_ms: number;
+  synthesis_ms: number;
+  copilot: CopilotResponse;
+}
+
 export interface WorkflowAdvanceResponse {
   status: CopilotResponse['active_session_status'];
   current_state_id?: string | null;
@@ -234,4 +249,26 @@ export async function apiClient<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function apiBlob(endpoint: string): Promise<Blob> {
+  let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  let response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (response.status === 401) {
+    token = await refreshAccessToken();
+    if (token) {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      { error_code: 'VOICE_AUDIO_ERROR', message: 'Voice audio is unavailable or expired.' },
+      response.status,
+    );
+  }
+  return response.blob();
 }

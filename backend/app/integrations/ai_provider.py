@@ -39,3 +39,9 @@ class GenerationProvider(Protocol):
     async def generate(
         self, question: str, sources: Sequence[Dict[str, Any]]
     ) -> GeneratedAnswer: ...
+
+
+class TranslationProvider(Protocol):
+    async def translate_text(
+        self, text: str, source_language: str, target_language: str
+    ) -> str: ...

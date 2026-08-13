@@ -127,3 +127,6 @@ See [`docs/local_ai_runtime.md`](docs/local_ai_runtime.md) for provider, index, 
 health, hardware, and fallback behavior. Use the
 [`Snowflake runtime runbook`](docs/snowflake_runtime_runbook.md) for database/stage and live
 same-/cross-department validation.
+
+See [`docs/multilingual_voice.md`](docs/multilingual_voice.md) for Faster-Whisper, Ollama
+translation, Piper voices, language configuration, protected audio delivery, and voice analytics.

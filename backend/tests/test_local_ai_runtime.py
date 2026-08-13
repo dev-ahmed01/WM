@@ -223,6 +223,59 @@ async def test_workflow_planner_returns_bounded_non_authoritative_action(monkeyp
     assert "packages damaged what should I do" in body["messages"][1]["content"]
 
 
+def test_translation_completeness_rejects_truncation_and_missing_identifiers():
+    source = (
+        "Apply quarantine tape to the damaged pallet, transport it to Bay Q-1, "
+        "and notify QA within 15 minutes."
+    )
+
+    assert not OllamaLocalAIProvider._translation_is_complete(source, "हां")
+    assert not OllamaLocalAIProvider._translation_is_complete(
+        source,
+        "क्षतिग्रस्त पैलेट पर क्वारंटीन टेप लगाएँ, उसे बे क्यू-1 ले जाएँ और 15 मिनट में QA को सूचित करें।",
+    )
+    assert not OllamaLocalAIProvider._translation_is_complete(
+        source,
+        "क्षतिग्रस्त पैलेट पर क्वारंटीन टेप लगाएँ और उसे स्थानांतरित करें।",
+    )
+    assert OllamaLocalAIProvider._translation_is_complete(
+        source,
+        "क्षतिग्रस्त पैलेट पर क्वारंटीन टेप लगाएँ, उसे Bay Q-1 ले जाएँ और 15 मिनट में QA को सूचित करें।",
+    )
+
+
+@pytest.mark.asyncio
+async def test_translation_retries_an_incomplete_model_response(monkeypatch):
+    provider = OllamaLocalAIProvider()
+    request = AsyncMock(
+        side_effect=[
+            {"message": {"content": '{"translation":"हां"}'}},
+            {
+                "message": {
+                    "content": (
+                        '{"translation":"क्षतिग्रस्त पैलेट पर क्वारंटीन टेप लगाएँ, '
+                        'उसे WM_KEEP_0 ले जाएँ और WM_KEEP_2 मिनट में WM_KEEP_1 को सूचित करें।"}'
+                    )
+                }
+            },
+        ]
+    )
+    monkeypatch.setattr(provider, "_request_json", request)
+
+    result = await provider.translate_text(
+        "Apply quarantine tape to the damaged pallet, transport it to Bay Q-1, "
+        "and notify QA within 15 minutes.",
+        "en",
+        "hi",
+    )
+
+    assert "Bay Q-1" in result
+    assert request.await_count == 2
+    retry_payload = request.await_args.kwargs["json"]["messages"][-1]["content"]
+    assert "prior output was incomplete" in retry_payload
+    assert request.await_args.kwargs["json"]["model"] == "translategemma:4b"
+
+
 @pytest.mark.asyncio
 async def test_verified_followup_classifier_returns_bounded_semantics(monkeypatch):
     provider = OllamaLocalAIProvider()

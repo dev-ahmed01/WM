@@ -37,13 +37,16 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-qwen2.5:3b}
+      LOCAL_TRANSLATION_MODEL: ${LOCAL_TRANSLATION_MODEL:-translategemma:4b}
       LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
         ollama pull "$${LOCAL_CHAT_MODEL}" &&
+        ollama pull "$${LOCAL_TRANSLATION_MODEL}" &&
         ollama pull "$${LOCAL_EMBEDDING_MODEL}" &&
         ollama show "$${LOCAL_CHAT_MODEL}" >/dev/null &&
+        ollama show "$${LOCAL_TRANSLATION_MODEL}" >/dev/null &&
         ollama show "$${LOCAL_EMBEDDING_MODEL}" >/dev/null
     restart: "no"
 
@@ -66,6 +69,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./backend/app:/app/app
+      - voice_whisper_data:/app/data/voice/whisper
+      - voice_audio_data:/app/data/voice/audio
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
       interval: 10s
@@ -76,3 +81,5 @@ services:
 
 volumes:
   ollama_data:
+  voice_whisper_data:
+  voice_audio_data:

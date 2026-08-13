@@ -9,6 +9,8 @@ export interface ChatMessage {
   sender: 'user' | 'assistant';
   content: string;
   copilotData?: CopilotResponse;
+  voiceAudioUrl?: string | null;
+  language?: string;
 }
 
 interface ChatThreadProps {
@@ -16,7 +18,7 @@ interface ChatThreadProps {
   busy: boolean;
   speechSupported: boolean;
   speakingMessageKey: string | null;
-  onSpeak: (text: string, messageKey: string) => void;
+  onSpeak: (text: string, messageKey: string, audioUrl?: string | null, language?: string) => void;
 }
 
 export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speechSupported }: ChatThreadProps) {
@@ -90,7 +92,7 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
                       </>
                     ) : null}
                     {speechSupported ? (
-                      <button type="button" onClick={() => onSpeak(presentation.spokenText, message.id)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                      <button type="button" onClick={() => onSpeak(presentation.spokenText, message.id, message.voiceAudioUrl, message.language)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
                         {isSpeaking ? <Square className="h-3 w-3" /> : <Volume2 className="h-3.5 w-3.5" />}
                         {isSpeaking ? 'Stop' : 'Listen'}
                       </button>

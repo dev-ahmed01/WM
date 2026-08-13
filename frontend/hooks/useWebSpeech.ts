@@ -200,7 +200,7 @@ export function useSpeechSynthesis() {
     setSpeakingKey(null);
   }, []);
 
-  const speak = useCallback((text: string, messageKey: string) => {
+  const speak = useCallback((text: string, messageKey: string, language?: string) => {
     if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return;
     if (speakingKey === messageKey) {
       stop();
@@ -213,7 +213,10 @@ export function useSpeechSynthesis() {
       utteranceRef.current.onerror = null;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = document.documentElement.lang || navigator.language || 'en-US';
+    const speechLocales: Record<string, string> = {
+      en: 'en-IN', hi: 'hi-IN', kn: 'kn-IN', ta: 'ta-IN', te: 'te-IN', ml: 'ml-IN',
+    };
+    utterance.lang = speechLocales[language || ''] || document.documentElement.lang || navigator.language || 'en-US';
     utterance.rate = 1;
     utterance.onend = () => {
       utteranceRef.current = null;

@@ -313,6 +313,25 @@ CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.conversation_messages (
     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
 );
 
+CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.voice_interactions (
+    id VARCHAR(64) PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL REFERENCES WORKMATE_COPILOT.conversations(id),
+    response_message_id VARCHAR(64) NULL REFERENCES WORKMATE_COPILOT.conversation_messages(id),
+    user_id VARCHAR(64) NOT NULL REFERENCES SECURITY.users(id),
+    original_language VARCHAR(8) NOT NULL,
+    translated_language VARCHAR(8) NOT NULL,
+    original_transcript TEXT NOT NULL,
+    translated_transcript TEXT NOT NULL,
+    response_text TEXT NOT NULL,
+    transcription_confidence FLOAT NOT NULL,
+    transcription_ms INT NOT NULL,
+    translation_ms INT NOT NULL,
+    synthesis_ms INT NOT NULL,
+    audio_id VARCHAR(96) NULL,
+    success BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
+);
+
 CREATE TABLE IF NOT EXISTS WORKMATE_COPILOT.workflow_sessions (
     id VARCHAR(64) PRIMARY KEY,
     conversation_id VARCHAR(64) NOT NULL REFERENCES WORKMATE_COPILOT.conversations(id),

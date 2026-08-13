@@ -2,9 +2,14 @@
 
 import logging
 import re
+import tempfile
+import time
+from pathlib import Path
 from difflib import SequenceMatcher
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Query
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.text_matching import fuzzy_relevance_score
@@ -18,12 +23,30 @@ from app.models.copilot import (
     CopilotConversationDetail,
     CopilotHistoryMessage,
 )
+from app.models.voice import VoiceCopilotResponse
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.owd_repository import OWDRepository
+from app.repositories.voice_repository import VoiceRepository
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowCompletionResult, WorkflowStateService
+from app.services.speech_recognition_service import (
+    FasterWhisperSpeechRecognitionService,
+    SpeechRecognitionError,
+    get_speech_recognition_service,
+)
+from app.services.text_to_speech_service import (
+    PiperTextToSpeechService,
+    TextToSpeechError,
+    get_text_to_speech_service,
+)
+from app.services.translation_service import (
+    SUPPORTED_LANGUAGES,
+    TranslationError,
+    TranslationService,
+    get_translation_service,
+)
 from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
@@ -34,6 +57,58 @@ from app.integrations.ai_provider import GeneratedAnswer
 copilot_logger = logging.getLogger("copilot_services")
 
 router = APIRouter(prefix="/copilot", tags=["WorkMate Copilot"])
+
+_VOICE_CONTENT_TYPES = {
+    "audio/flac", "audio/m4a", "audio/mp3", "audio/mp4", "audio/mpeg",
+    "audio/ogg", "audio/wav", "audio/webm", "audio/x-m4a", "audio/x-wav",
+    "application/octet-stream",
+}
+
+
+async def _save_voice_upload(audio: UploadFile) -> Path:
+    content_type = (audio.content_type or "application/octet-stream").casefold()
+    if content_type not in _VOICE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "error_code": "VOICE_AUDIO_TYPE_UNSUPPORTED",
+                "message": "Upload a WAV, MP3, M4A, FLAC, OGG, MP4, or WebM audio file.",
+            },
+        )
+    suffix = Path(audio.filename or "voice.webm").suffix.lower() or ".webm"
+    temporary = tempfile.NamedTemporaryFile(
+        prefix="workmate_voice_", suffix=suffix, delete=False
+    )
+    total = 0
+    try:
+        while chunk := await audio.read(1024 * 1024):
+            total += len(chunk)
+            if total > settings.VOICE_MAX_AUDIO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail={
+                        "error_code": "VOICE_AUDIO_TOO_LARGE",
+                        "message": (
+                            f"Audio exceeds the {settings.VOICE_MAX_AUDIO_BYTES // (1024 * 1024)} MB limit."
+                        ),
+                    },
+                )
+            temporary.write(chunk)
+        if total == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "VOICE_AUDIO_EMPTY",
+                    "message": "The uploaded audio file is empty.",
+                },
+            )
+        return Path(temporary.name)
+    except Exception:
+        Path(temporary.name).unlink(missing_ok=True)
+        raise
+    finally:
+        temporary.close()
+        await audio.close()
 
 _STEP_COMPLETION_COMMANDS = {
     "complete",
@@ -360,6 +435,274 @@ def _recorded_completion_text(completed: list[int]) -> str:
     return (
         f"Recorded your completion attestation for steps {completed[0]} "
         f"through {completed[-1]}."
+    )
+
+
+@router.post(
+    "/voice",
+    response_model=VoiceCopilotResponse,
+    summary="Send multilingual speech to WorkMate Copilot",
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def copilot_voice(
+    audio: UploadFile = File(...),
+    language: str = Form("auto"),
+    conversation_id: Optional[str] = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    speech_service: FasterWhisperSpeechRecognitionService = Depends(
+        get_speech_recognition_service
+    ),
+    translation_service: TranslationService = Depends(get_translation_service),
+    speech_output: PiperTextToSpeechService = Depends(get_text_to_speech_service),
+) -> VoiceCopilotResponse:
+    """Transcribe, translate, reason with the grounded Copilot, and speak the reply."""
+    if not settings.VOICE_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error_code": "VOICE_DISABLED",
+                "message": "The multilingual voice service is disabled.",
+            },
+        )
+    selected_language = language.strip().casefold()
+    allowed = {item.strip() for item in settings.VOICE_SUPPORTED_LANGUAGES.split(",")}
+    if selected_language != "auto" and selected_language not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+                "message": f"Supported languages: auto, {', '.join(sorted(allowed))}.",
+            },
+        )
+
+    user_id = str(current_user.get("sub") or "")
+    department_id = str(current_user["department_id"])
+    temporary_path = await _save_voice_upload(audio)
+    try:
+        resolved_conversation_id = await run_in_threadpool(
+            ConversationRepository.get_or_create_session,
+            user_id,
+            department_id,
+            conversation_id,
+        )
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    transcript = ""
+    translated_transcript = ""
+    detected_language = selected_language if selected_language != "auto" else "und"
+    transcription_confidence = 0.0
+    transcription_ms = translation_ms = synthesis_ms = 0
+    audio_id: str | None = None
+    response_message_id: str | None = None
+    response_text = ""
+
+    async def persist_failed_interaction(error_code: str) -> None:
+        try:
+            await run_in_threadpool(
+                VoiceRepository.persist_interaction,
+                conversation_id=resolved_conversation_id,
+                response_message_id=response_message_id,
+                user_id=user_id,
+                original_language=detected_language,
+                translated_language="en",
+                original_transcript=transcript,
+                translated_transcript=translated_transcript,
+                response_text=response_text,
+                transcription_confidence=transcription_confidence,
+                transcription_ms=transcription_ms,
+                translation_ms=translation_ms,
+                synthesis_ms=synthesis_ms,
+                audio_id=None,
+                success=False,
+            )
+            await run_in_threadpool(
+                AnalyticsService.record_event,
+                "copilot.voice.failed",
+                response_message_id,
+                None,
+                {
+                    "user_id": user_id,
+                    "department_id": department_id,
+                    "language": detected_language,
+                    "transcription_success": bool(transcript),
+                    "error_code": error_code,
+                    "transcription_ms": transcription_ms,
+                    "translation_ms": translation_ms,
+                    "synthesis_ms": synthesis_ms,
+                },
+            )
+        except Exception:
+            copilot_logger.exception("Failed voice interaction telemetry write failed")
+
+    try:
+        started = time.perf_counter()
+        transcription = await speech_service.transcribe(
+            temporary_path,
+            None if selected_language == "auto" else selected_language,
+        )
+        transcription_ms = round((time.perf_counter() - started) * 1000)
+        transcript = transcription.transcript
+        detected_language = transcription.language.casefold()
+        transcription_confidence = transcription.confidence
+        if detected_language not in SUPPORTED_LANGUAGES or detected_language not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+                    "message": (
+                        f"Detected language '{detected_language}' is not enabled. "
+                        f"Supported languages: {', '.join(sorted(allowed))}."
+                    ),
+                },
+            )
+
+        started = time.perf_counter()
+        translated_transcript = await translation_service.translate_to_english(
+            transcript, detected_language
+        )
+        translation_ms = round((time.perf_counter() - started) * 1000)
+
+        copilot_response = await copilot_message(
+            CopilotMessageRequest(
+                conversation_id=resolved_conversation_id,
+                message=translated_transcript,
+            ),
+            current_user,
+        )
+        response_message_id = copilot_response.message_id
+
+        if detected_language == "en":
+            response_text = copilot_response.answer
+        else:
+            started = time.perf_counter()
+            response_text = await translation_service.translate_from_english(
+                copilot_response.answer, detected_language
+            )
+            translation_ms += round((time.perf_counter() - started) * 1000)
+
+        translated_copilot = copilot_response.model_copy(
+            update={"answer": response_text, "spoken_answer": response_text}
+        )
+
+        if speech_output.supports(detected_language):
+            started = time.perf_counter()
+            audio_id = await speech_output.synthesize(response_text, detected_language)
+            synthesis_ms = round((time.perf_counter() - started) * 1000)
+        else:
+            copilot_logger.warning(
+                "No Piper voice configured for detected language '%s'; returning text only",
+                detected_language,
+            )
+
+        await run_in_threadpool(
+            VoiceRepository.persist_interaction,
+            conversation_id=resolved_conversation_id,
+            response_message_id=response_message_id,
+            user_id=user_id,
+            original_language=detected_language,
+            translated_language="en",
+            original_transcript=transcript,
+            translated_transcript=translated_transcript,
+            response_text=response_text,
+            transcription_confidence=transcription_confidence,
+            transcription_ms=transcription_ms,
+            translation_ms=translation_ms,
+            synthesis_ms=synthesis_ms,
+            audio_id=audio_id,
+            success=True,
+        )
+        try:
+            await run_in_threadpool(
+                AnalyticsService.record_event,
+                "copilot.voice",
+                response_message_id,
+                None,
+                {
+                    "user_id": user_id,
+                    "department_id": department_id,
+                    "language": detected_language,
+                    "transcription_success": True,
+                    "transcription_confidence": transcription_confidence,
+                    "transcription_ms": transcription_ms,
+                    "translation_ms": translation_ms,
+                    "synthesis_ms": synthesis_ms,
+                    "audio_generated": bool(audio_id),
+                },
+            )
+        except Exception:
+            copilot_logger.exception("Voice telemetry write failed")
+
+        return VoiceCopilotResponse(
+            language=detected_language,
+            transcript=transcript,
+            translated_transcript=translated_transcript,
+            response_text=response_text,
+            audio_url=(f"/copilot/voice/audio/{audio_id}" if audio_id else None),
+            confidence=transcription_confidence,
+            transcription_ms=transcription_ms,
+            translation_ms=translation_ms,
+            synthesis_ms=synthesis_ms,
+            copilot=translated_copilot,
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        error_code = str(detail.get("error_code") or "VOICE_REQUEST_FAILED")
+        if transcript:
+            await persist_failed_interaction(error_code)
+        raise
+    except SpeechRecognitionError as exc:
+        copilot_logger.warning("Voice transcription failed: %s", exc)
+        await persist_failed_interaction("VOICE_TRANSCRIPTION_FAILED")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error_code": "VOICE_TRANSCRIPTION_FAILED", "message": str(exc)},
+        ) from exc
+    except TranslationError as exc:
+        copilot_logger.exception("Voice translation failed")
+        await persist_failed_interaction("VOICE_TRANSLATION_FAILED")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error_code": "VOICE_TRANSLATION_FAILED", "message": str(exc)},
+        ) from exc
+    except TextToSpeechError as exc:
+        copilot_logger.exception("Voice synthesis failed")
+        await persist_failed_interaction("VOICE_SYNTHESIS_FAILED")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error_code": "VOICE_SYNTHESIS_FAILED", "message": str(exc)},
+        ) from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+@router.get(
+    "/voice/audio/{audio_id}",
+    summary="Stream generated voice audio",
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def get_voice_audio(
+    audio_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> FileResponse:
+    user_id = str(current_user.get("sub") or "")
+    authorized = await run_in_threadpool(
+        VoiceRepository.audio_belongs_to_user, audio_id, user_id
+    )
+    path = PiperTextToSpeechService.resolve_audio(audio_id) if authorized else None
+    if not path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "VOICE_AUDIO_NOT_FOUND",
+                "message": "Voice audio was not found or has expired.",
+            },
+        )
+    return FileResponse(
+        path,
+        media_type="audio/wav",
+        filename=f"workmate-{audio_id}.wav",
+        headers={"Cache-Control": "private, max-age=300"},
     )
 
 
