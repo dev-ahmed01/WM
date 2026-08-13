@@ -314,6 +314,9 @@ function CopilotContent() {
             busy={isSending}
             listening={voiceRecorder.isListening}
             voiceProcessing={isVoiceProcessing}
+            voiceInputLevel={voiceRecorder.inputLevel}
+            voiceRecordingSeconds={voiceRecorder.recordingSeconds}
+            microphonePermission={voiceRecorder.permissionState}
             speechSupported={voiceRecorder.isSupported}
             speechError={voiceRecorder.error}
             voiceLanguage={voiceLanguage}

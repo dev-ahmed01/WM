@@ -429,7 +429,7 @@ class OllamaLocalAIProvider:
                     "model": translation_model,
                     "stream": False,
                     "messages": [{"role": "user", "content": prompt}],
-                    "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 1200},
+                    "options": {"temperature": 0, "num_ctx": 1024, "num_predict": 1200},
                     "keep_alive": settings.TRANSLATION_KEEP_ALIVE,
                 }
             else:
@@ -453,7 +453,7 @@ class OllamaLocalAIProvider:
                         },
                         {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
                     ],
-                    "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 1200},
+                    "options": {"temperature": 0, "num_ctx": 1024, "num_predict": 1200},
                     "keep_alive": settings.TRANSLATION_KEEP_ALIVE,
                 }
 

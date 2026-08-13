@@ -18,6 +18,9 @@ interface ChatComposerProps {
   busy: boolean;
   listening: boolean;
   voiceProcessing: boolean;
+  voiceInputLevel: number;
+  voiceRecordingSeconds: number;
+  microphonePermission: PermissionState | 'unknown';
   speechSupported: boolean;
   speechError: string | null;
   voiceLanguage: VoiceLanguage;
@@ -30,7 +33,8 @@ interface ChatComposerProps {
 }
 
 export function ChatComposer({
-  value, placeholder, busy, listening, voiceProcessing, speechSupported, speechError,
+  value, placeholder, busy, listening, voiceProcessing, voiceInputLevel,
+  voiceRecordingSeconds, microphonePermission, speechSupported, speechError,
   voiceLanguage, detectedLanguage, transcriptPreview, onChange, onSend,
   onToggleListening, onVoiceLanguageChange,
 }: ChatComposerProps) {
@@ -61,10 +65,19 @@ export function ChatComposer({
                 disabled={busy || !speechSupported}
                 aria-label={!speechSupported ? 'Voice input is not supported in this browser' : listening ? 'Stop voice input' : 'Start voice input'}
                 aria-pressed={listening}
-                className={`grid h-9 w-9 flex-none place-items-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-35 ${listening ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                className={`flex h-9 flex-none items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-35 ${listening ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
               >
                 {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {listening ? 'Stop' : 'Speak'}
               </button>
+              {listening ? (
+                <div className="flex w-24 items-center gap-2" aria-label={`Microphone level ${Math.round(voiceInputLevel * 100)} percent`}>
+                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                    <span className="block h-full rounded-full bg-red-500 transition-[width] duration-100" style={{ width: `${Math.max(4, voiceInputLevel * 100)}%` }} />
+                  </span>
+                  <span className="w-7 font-mono text-[10px] text-red-700">{voiceRecordingSeconds.toFixed(1)}s</span>
+                </div>
+              ) : null}
               <label>
                 <span className="sr-only">Voice language</span>
                 <select
@@ -92,13 +105,15 @@ export function ChatComposer({
           </div>
         </div>
         <div id="voice-input-status" aria-live="polite" className={`min-h-5 px-2 pt-1.5 text-[10px] ${speechError ? 'text-red-600' : 'text-muted-foreground'}`}>
-          {speechError || (listening
+          {speechError || (microphonePermission === 'denied'
+            ? 'Microphone access is blocked. In Chrome, select the site controls beside the address, allow Microphone, then reload.'
+            : listening
             ? 'Listening… speak naturally. Your recording sends automatically after you pause.'
             : voiceProcessing
-              ? 'Transcribing, reasoning, translating, and preparing audio locally… this can take up to two minutes on the current machine.'
+              ? 'Recording received. Transcribing, reasoning, translating, and preparing audio locally… this low-memory machine may take several minutes.'
               : transcriptPreview
                 ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-                : 'Voice questions are transcribed locally and receive grounded spoken replies.')}
+                : 'Select Speak once, talk, then pause. Your question sends automatically and receives a grounded spoken reply.')}
         </div>
       </div>
     </footer>

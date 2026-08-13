@@ -5,6 +5,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -117,6 +118,37 @@ def test_voice_endpoint_rejects_unsupported_media_before_transcription():
     )
     assert response.status_code == 415
     assert response.json()["detail"]["error_code"] == "VOICE_AUDIO_TYPE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    ["audio/webm;codecs=opus", "video/webm;codecs=opus"],
+)
+def test_voice_endpoint_accepts_chrome_webm_codec_content_type(content_type):
+    class EmptySpeechRecognition:
+        async def transcribe(self, _path: Path, requested_language: str | None = None):
+            raise RuntimeError("media type accepted")
+
+    app.dependency_overrides[get_speech_recognition_service] = EmptySpeechRecognition
+    try:
+        with patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_voice",
+        ):
+            with pytest.raises(RuntimeError, match="media type accepted"):
+                client.post(
+                    "/api/v1/copilot/voice",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                    files={
+                        "audio": (
+                            "voice.webm",
+                            b"webm audio",
+                            content_type,
+                        )
+                    },
+                )
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_voice_endpoint_requires_supported_language():

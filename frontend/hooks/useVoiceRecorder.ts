@@ -18,6 +18,9 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
   const animationFrameRef = useRef<number | null>(null);
   const [isSupported, setIsSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [inputLevel, setInputLevel] = useState(0);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [permissionState, setPermissionState] = useState<PermissionState | 'unknown'>('unknown');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { handlerRef.current = onRecording; }, [onRecording]);
@@ -41,7 +44,18 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       && 'getUserMedia' in navigator.mediaDevices
       && 'MediaRecorder' in window
     );
+    let permissionStatus: PermissionStatus | undefined;
+    if ('permissions' in navigator) {
+      void navigator.permissions.query({ name: 'microphone' as PermissionName })
+        .then((status) => {
+          permissionStatus = status;
+          setPermissionState(status.state);
+          status.onchange = () => setPermissionState(status.state);
+        })
+        .catch(() => setPermissionState('unknown'));
+    }
     return () => {
+      if (permissionStatus) permissionStatus.onchange = null;
       discardRef.current = true;
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
       recorderRef.current = null;
@@ -64,12 +78,15 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
     }
     try {
       setError(null);
+      setInputLevel(0);
+      setRecordingSeconds(0);
       discardRef.current = false;
       chunksRef.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       streamRef.current = stream;
+      setPermissionState('granted');
       const mimeType = preferredMimeType();
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       recorderRef.current = recorder;
@@ -101,6 +118,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       const recordingStartedAt = performance.now();
       let speechStarted = false;
       let lastSpeechAt = recordingStartedAt;
+      let lastUiUpdateAt = 0;
 
       const monitorSilence = () => {
         if (recorder.state !== 'recording') return;
@@ -112,21 +130,26 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
         }
         const volume = Math.sqrt(squaredTotal / samples.length);
         const now = performance.now();
-        if (volume >= 0.025) {
+        if (now - lastUiUpdateAt >= 100) {
+          setInputLevel(Math.min(1, volume * 10));
+          setRecordingSeconds((now - recordingStartedAt) / 1000);
+          lastUiUpdateAt = now;
+        }
+        if (volume >= 0.012) {
           speechStarted = true;
           lastSpeechAt = now;
         }
-        if (speechStarted && now - lastSpeechAt >= 1600) {
+        if (speechStarted && now - lastSpeechAt >= 1400) {
           recorder.stop();
           return;
         }
-        if (!speechStarted && now - recordingStartedAt >= 10000) {
+        if (!speechStarted && now - recordingStartedAt >= 8000) {
           discardRef.current = true;
           setError('No speech was detected. Check your microphone and try again.');
           recorder.stop();
           return;
         }
-        if (now - recordingStartedAt >= 30000) {
+        if (now - recordingStartedAt >= 15000) {
           recorder.stop();
           return;
         }
@@ -137,6 +160,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       releaseStream();
       setIsListening(false);
       const denied = cause instanceof DOMException && cause.name === 'NotAllowedError';
+      if (denied) setPermissionState('denied');
       setError(denied
         ? 'Microphone access was denied. Allow microphone access and try again.'
         : 'No working microphone could be opened.');
@@ -148,5 +172,14 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
     else void startListening();
   }, [isListening, startListening, stopListening]);
 
-  return { error, isListening, isSupported, stopListening, toggleListening };
+  return {
+    error,
+    inputLevel,
+    isListening,
+    isSupported,
+    permissionState,
+    recordingSeconds,
+    stopListening,
+    toggleListening,
+  };
 }

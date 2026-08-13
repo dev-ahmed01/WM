@@ -61,13 +61,24 @@ router = APIRouter(prefix="/copilot", tags=["WorkMate Copilot"])
 _VOICE_CONTENT_TYPES = {
     "audio/flac", "audio/m4a", "audio/mp3", "audio/mp4", "audio/mpeg",
     "audio/ogg", "audio/wav", "audio/webm", "audio/x-m4a", "audio/x-wav",
-    "application/octet-stream",
+    "video/mp4", "video/webm", "application/octet-stream",
 }
 
 
 async def _save_voice_upload(audio: UploadFile) -> Path:
-    content_type = (audio.content_type or "application/octet-stream").casefold()
+    content_type = (
+        (audio.content_type or "application/octet-stream")
+        .split(";", 1)[0]
+        .strip()
+        .casefold()
+    )
     if content_type not in _VOICE_CONTENT_TYPES:
+        copilot_logger.warning(
+            "Rejected voice upload content type raw=%r normalized=%r filename=%r",
+            audio.content_type,
+            content_type,
+            audio.filename,
+        )
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={
