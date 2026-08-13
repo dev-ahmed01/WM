@@ -136,12 +136,28 @@ def _workflow_confirmation_explanation(
             ).replace("_", " ").split()
         ),
     )
+    coverage = _naturalize_sop_coverage(coverage)
     return (
         f'It sounds like you need help with "{request}". '
         f"I matched that to a verified procedure covering {coverage}. "
         "Is that the guidance you are looking for? "
         "Reply yes to use it or no and tell me what is different."
     )
+
+
+def _naturalize_sop_coverage(coverage: str) -> str:
+    """Make persisted SOP summary text conversational without adding facts."""
+    normalized = " ".join(coverage.strip().split()).rstrip(".")
+    if not normalized:
+        return "the verified operational steps for this process"
+    first_word = normalized.split(maxsplit=1)[0].casefold()
+    if first_word in {
+        "apply", "check", "create", "handle", "inspect", "log", "manage",
+        "move", "pack", "pick", "receive", "record", "register", "replenish",
+        "scrap", "ship", "transfer", "verify",
+    }:
+        return f"how to {normalized[0].lower()}{normalized[1:]}"
+    return f"{normalized[0].lower()}{normalized[1:]}"
 
 
 def _step_guidance(position: Any, *, advanced: bool = False) -> str:
@@ -448,13 +464,16 @@ async def copilot_message(
     resolved_position: Any = None
     prechecked_position: Any = None
     confirmation_response = WorkflowIntentService.confirmation_response(payload.message)
+    confirmation_information_request = (
+        WorkflowIntentService.is_confirmation_information_request(payload.message)
+    )
     prior_history = (
         [
             item
             for item in ConversationRepository.get_history(conversation_id, limit=8)
             if str(item.get("id")) != user_message_id
         ]
-        if confirmation_response is not None
+        if confirmation_response is not None or confirmation_information_request
         else []
     )
     pending_confirmation = next(
@@ -489,7 +508,9 @@ async def copilot_message(
                 "Published workflow catalog lookup failed; continuing with grounded retrieval"
             )
 
-    if confirmation_response is not None and pending_confirmation:
+    if pending_confirmation and (
+        confirmation_response is not None or confirmation_information_request
+    ):
         pending_parts = str(pending_confirmation["intent"]).split(":", 2)
         pending_version_id = pending_parts[1]
         pending_state_id = pending_parts[2] if len(pending_parts) > 2 else None
@@ -501,6 +522,34 @@ async def copilot_message(
             ),
             None,
         )
+        if confirmation_information_request and pending_match:
+            description = str(pending_match.get("description") or "").strip().rstrip(".")
+            coverage = _naturalize_sop_coverage(
+                description or "the verified operational steps for this process"
+            )
+            answer = (
+                f"This procedure covers {coverage}. "
+                "Does that match what you need? Reply yes to use it, or no and "
+                "describe what is different."
+            )
+            return _persist_control_reply(
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                intent="WORKFLOW_CONFIRMATION_EXPLAINED",
+                answer=answer,
+                spoken_answer=answer,
+                sop_details=(
+                    f"SOP: {pending_match['title']} | "
+                    f"{pending_match['workflow_code']}"
+                ),
+                active_session=active_session,
+                position=(
+                    WorkflowStateService.get_position(active_session)
+                    if active_session
+                    else None
+                ),
+                message_intent=str(pending_confirmation["intent"]),
+            )
         if confirmation_response is False:
             return _persist_control_reply(
                 conversation_id=conversation_id,

@@ -68,6 +68,25 @@ def test_problem_descriptions_can_propose_a_confirmable_sop():
     assert barcode and barcode["workflow_code"] == "WH_REC_004"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "i dont know if it is damage inspection i dont know what is in it",
+        "what does this procedure cover?",
+        "tell me about it",
+        "I'm not sure, explain it",
+    ],
+)
+def test_pending_confirmation_information_questions_are_recognized(message):
+    assert WorkflowIntentService.is_confirmation_information_request(message)
+
+
+def test_unrelated_new_problem_is_not_a_confirmation_information_request():
+    assert not WorkflowIntentService.is_confirmation_information_request(
+        "the barcode is not scanning"
+    )
+
+
 def test_noisy_damage_query_keeps_enough_verified_relevance():
     focused = CopilotReasoningService.focus_operational_query(
         "turn all this the package is damaged what should I do"

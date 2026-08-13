@@ -51,6 +51,21 @@ class WorkflowIntentService:
         return None
 
     @classmethod
+    def is_confirmation_information_request(cls, message: str) -> bool:
+        """Recognize questions asking what a proposed SOP contains or is for."""
+        normalized = cls._normalized(message)
+        if not normalized:
+            return False
+        return bool(
+            re.search(
+                r"\b(?:i (?:do not|dont) know|not sure|explain|tell me (?:about|what)|"
+                r"what (?:is|does|happens)|whats|which steps?|what it covers?|"
+                r"what is in it|is (?:this|it) for|how does (?:this|it))\b",
+                normalized,
+            )
+        )
+
+    @classmethod
     def is_catalog_candidate(cls, message: str) -> bool:
         """Limit catalog I/O to workflow requests or short name-like phrases."""
         if cls.is_workflow_request(message):

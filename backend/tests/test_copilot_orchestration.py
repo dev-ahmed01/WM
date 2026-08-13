@@ -497,7 +497,7 @@ def test_named_sop_request_requires_confirmation_without_starting():
         'It sounds like you need help with "get me receive shipment sop".'
     )
     assert (
-        "covering Inbound receiving, seal verification, and inventory intake"
+        "covering inbound receiving, seal verification, and inventory intake"
         in body["answer"]
     )
     assert "Is that the guidance you are looking for?" in body["answer"]
@@ -550,6 +550,79 @@ def test_confirmed_sop_starts_catalog_workflow_without_embeddings():
         conversation_id="conv_1", workflow_version_id="ver_1", user_id="usr_emp"
     )
     detect_intent.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
+def test_uncertain_confirmation_followup_explains_pending_sop_from_catalog():
+    catalog = [{
+        "workflow_id": "workflow_damage",
+        "workflow_code": "WH_REC_003",
+        "title": "Damage Inspection",
+        "description": (
+            "Inspect and formally disposition goods found damaged during receiving"
+        ),
+        "workflow_version_id": "ver_damage",
+        "version_number": 1,
+    }]
+    history = [{
+        "id": "prior_ai",
+        "sender": "ai",
+        "content": "Does that match what you need?",
+        "intent": "SOP_CONFIRM:ver_damage",
+    }]
+    with (
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_or_create_session",
+            return_value="conv_1",
+        ),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.persist_message",
+            side_effect=["user_msg", "ai_msg"],
+        ) as persist,
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch(
+            "app.api.v1.copilot.ConversationRepository.get_history",
+            return_value=history,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.get_current_session",
+            return_value=None,
+        ),
+        patch(
+            "app.api.v1.copilot.KnowledgeRepository.list_published_catalog",
+            return_value=catalog,
+        ),
+        patch(
+            "app.api.v1.copilot.WorkflowStateService.start_session"
+        ) as start_session,
+        patch.object(AIGateway, "detect_intent", new_callable=AsyncMock) as detect,
+        patch.object(
+            RetrievalService, "retrieve_chunks", new_callable=AsyncMock
+        ) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "conversation_id": "conv_1",
+                "message": (
+                    "i dont know if it is damage inspection i dont know what is in it"
+                ),
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"].startswith(
+        "This procedure covers how to inspect and formally disposition goods"
+    )
+    assert "Does that match what you need?" in body["answer"]
+    assert "Damage Inspection" not in body["spoken_answer"]
+    assert body["sop_details"] == "SOP: Damage Inspection | WH_REC_003"
+    assert body["active_session_id"] is None
+    assert persist.call_args_list[-1].kwargs["intent"] == "SOP_CONFIRM:ver_damage"
+    start_session.assert_not_called()
+    detect.assert_not_awaited()
     retrieve.assert_not_awaited()
 
 
