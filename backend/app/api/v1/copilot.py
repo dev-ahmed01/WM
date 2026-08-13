@@ -114,6 +114,36 @@ def _requested_sop_index(message: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _workflow_confirmation_explanation(
+    message: str, workflow: Dict[str, Any]
+) -> str:
+    """Explain a grounded workflow match without reading catalog metadata aloud."""
+    request = " ".join(message.strip().split()).rstrip(".?!")
+    if len(request) > 140:
+        request = f"{request[:137].rstrip()}..."
+
+    coverage = next(
+        (
+            str(workflow.get(field) or "").strip().rstrip(".")
+            for field in ("description", "state_title", "step_title")
+            if str(workflow.get(field) or "").strip()
+        ),
+        " ".join(
+            str(
+                workflow.get("title")
+                or workflow.get("document_title")
+                or "this operational process"
+            ).replace("_", " ").split()
+        ),
+    )
+    return (
+        f'It sounds like you need help with "{request}". '
+        f"I matched that to a verified procedure covering {coverage}. "
+        "Is that the guidance you are looking for? "
+        "Reply yes to use it or no and tell me what is different."
+    )
+
+
 def _step_guidance(position: Any, *, advanced: bool = False) -> str:
     if position is None:
         return "Workflow completed." if advanced else "The workflow is ready."
@@ -565,10 +595,8 @@ async def copilot_message(
             intent = "WORKFLOW_SELECTION_CONFLICT"
         else:
             if not active_session:
-                answer = (
-                    f"I found {workflow_match['title']} "
-                    f"({workflow_match['workflow_code']}). Is this the SOP you mean? "
-                    "Reply yes to start it or no to keep searching."
+                answer = _workflow_confirmation_explanation(
+                    payload.message, workflow_match
                 )
                 intent = "WORKFLOW_CONFIRMATION_REQUIRED"
                 position = None
@@ -1083,10 +1111,13 @@ async def copilot_message(
         if workflow_version_id and state_id:
             title = str(source.get("document_title") or "this workflow")
             code = str(source.get("workflow_code") or "").strip()
-            code_text = f" ({code})" if code else ""
-            answer = (
-                f"I found {title}{code_text} as the closest verified SOP for your question. "
-                "Is this the SOP you mean? Reply yes to use it or no to keep searching."
+            answer = _workflow_confirmation_explanation(
+                payload.message,
+                {
+                    "title": title,
+                    "state_title": source.get("state_title"),
+                    "step_title": source.get("step_title"),
+                },
             )
             return _persist_control_reply(
                 conversation_id=conversation_id,

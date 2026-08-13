@@ -168,8 +168,12 @@ def test_retrieval_requires_sop_confirmation_before_starting(
     body = response.json()
     assert body["active_session_id"] is None
     assert body["active_step_title"] is None
-    assert body["answer"].startswith("I found Receiving SOP")
-    assert "Is this the SOP you mean?" in body["answer"]
+    assert body["answer"].startswith(
+        'It sounds like you need help with "Inbound trailer at dock, seal needs checking".'
+    )
+    assert "matched that to a verified procedure covering" in body["answer"]
+    assert "Is that the guidance you are looking for?" in body["answer"]
+    assert "Receiving SOP" not in body["spoken_answer"]
     assert body["citations"] == []
     mock_generate.assert_not_awaited()
     mock_start.assert_not_called()
@@ -489,8 +493,16 @@ def test_named_sop_request_requires_confirmation_without_starting():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"].startswith("I found receive_shipment_v1_1")
-    assert "Is this the SOP you mean?" in body["answer"]
+    assert body["answer"].startswith(
+        'It sounds like you need help with "get me receive shipment sop".'
+    )
+    assert (
+        "covering Inbound receiving, seal verification, and inventory intake"
+        in body["answer"]
+    )
+    assert "Is that the guidance you are looking for?" in body["answer"]
+    assert "receive_shipment_v1_1" not in body["spoken_answer"]
+    assert "SOP_INB_101" not in body["spoken_answer"]
     assert body["spoken_answer"] == body["answer"]
     assert body["sop_details"] == "SOP: receive_shipment_v1_1 | SOP_INB_101"
     assert body["active_step_number"] is None
