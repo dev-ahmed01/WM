@@ -17,6 +17,7 @@ interface ChatComposerProps {
   placeholder: string;
   busy: boolean;
   listening: boolean;
+  voiceProcessing: boolean;
   speechSupported: boolean;
   speechError: string | null;
   voiceLanguage: VoiceLanguage;
@@ -29,7 +30,7 @@ interface ChatComposerProps {
 }
 
 export function ChatComposer({
-  value, placeholder, busy, listening, speechSupported, speechError,
+  value, placeholder, busy, listening, voiceProcessing, speechSupported, speechError,
   voiceLanguage, detectedLanguage, transcriptPreview, onChange, onSend,
   onToggleListening, onVoiceLanguageChange,
 }: ChatComposerProps) {
@@ -92,10 +93,12 @@ export function ChatComposer({
         </div>
         <div id="voice-input-status" aria-live="polite" className={`min-h-5 px-2 pt-1.5 text-[10px] ${speechError ? 'text-red-600' : 'text-muted-foreground'}`}>
           {speechError || (listening
-            ? 'Recording securely… select the microphone again when you finish.'
-            : transcriptPreview
-              ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-              : 'Voice questions are transcribed locally and receive grounded spoken replies.')}
+            ? 'Listening… speak naturally. Your recording sends automatically after you pause.'
+            : voiceProcessing
+              ? 'Transcribing, reasoning, translating, and preparing audio locally… this can take up to two minutes on the current machine.'
+              : transcriptPreview
+                ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
+                : 'Voice questions are transcribed locally and receive grounded spoken replies.')}
         </div>
       </div>
     </footer>

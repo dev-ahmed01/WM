@@ -41,6 +41,7 @@ function CopilotContent() {
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>('auto');
   const [detectedLanguage, setDetectedLanguage] = useState<string>();
   const [transcriptPreview, setTranscriptPreview] = useState<string>();
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
   const [voiceSpeakingKey, setVoiceSpeakingKey] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceObjectUrlRef = useRef<string | null>(null);
@@ -162,6 +163,7 @@ function CopilotContent() {
   const submitVoice = useCallback(async (audio: Blob) => {
     if (isSending) return;
     setIsSending(true);
+    setIsVoiceProcessing(true);
     setTranscriptPreview(undefined);
     setDetectedLanguage(undefined);
     try {
@@ -207,6 +209,7 @@ function CopilotContent() {
         id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
       }]);
     } finally {
+      setIsVoiceProcessing(false);
       setIsSending(false);
     }
   }, [conversationId, handleSpeak, isSending, voiceLanguage]);
@@ -310,6 +313,7 @@ function CopilotContent() {
             placeholder={composerPlaceholder}
             busy={isSending}
             listening={voiceRecorder.isListening}
+            voiceProcessing={isVoiceProcessing}
             speechSupported={voiceRecorder.isSupported}
             speechError={voiceRecorder.error}
             voiceLanguage={voiceLanguage}
