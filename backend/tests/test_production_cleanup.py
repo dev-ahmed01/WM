@@ -71,6 +71,16 @@ def test_active_version_migration_deprecates_stale_retrieval_rows():
     assert "SET department_id = workflow.department_id" in sql
 
 
+def test_flexible_authoring_migration_preserves_descriptive_metadata():
+    sql = (
+        deploy_owd_schema.MIGRATIONS_DIR
+        / "16_flexible_owd_authoring_metadata.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "estimated_duration SET DATA TYPE VARCHAR(512)" in sql
+    assert "review_cycle SET DATA TYPE VARCHAR(512)" in sql
+
+
 def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_ACCOUNT", "your_snowflake_account")
     monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_USER", "your_snowflake_user")

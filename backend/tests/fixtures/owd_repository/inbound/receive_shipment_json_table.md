@@ -112,9 +112,18 @@
 ```json
 {
   "next_sops": ["WH-REC-002"],
+  "predecessor_sop": "PUR-RFQ-002",
+  "escalation_sops": ["WH-REC-003"],
   "referenced_equipment": ["Barcode scanner"]
 }
 ```
+
+## 9. Analytics Events
+| Event | Trigger | Consumed By |
+|---|---|---|
+| `workflow_started` | S1-01 begins | Intelligence Hub |
+| `workflow_completed` | S4-01 completes | Intelligence Hub |
+| **KPIs** | Receipt cycle time; discrepancy rate | Intelligence Hub |
 
 ## 11. References
 | Field | Value |

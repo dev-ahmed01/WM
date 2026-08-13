@@ -41,6 +41,15 @@ def test_json_table_format_builds_valid_executable_graph():
         "STATE_S4",
         "STATE_S3",
     ]
+    assert [event.event_name for event in document.analytics.events] == [
+        "workflow_started",
+        "workflow_completed",
+    ]
+    assert document.analytics.kpis == ["Receipt cycle time", "discrepancy rate"]
+    relationship_types = {
+        relationship.relationship_type for relationship in document.relationships
+    }
+    assert {"PREVIOUS_SOP", "NEXT_SOP", "ESCALATION_SOP"} <= relationship_types
 
 
 def test_json_table_format_compiles_without_losing_steps_or_decisions():

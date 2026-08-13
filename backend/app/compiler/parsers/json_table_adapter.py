@@ -231,9 +231,55 @@ class JsonTableOWDAdapter:
             output.append("supported_languages: en-US")
             output.append(f"department: {department_id or user.get('department', metadata.get('department', 'dept_operations'))}")
 
+        analytics_rows = cls._table(cls._section(markdown_text, 9, "Analytics Events"))
+        if analytics_rows:
+            analytics_events = []
+            analytics_kpis: List[str] = []
+            for row in analytics_rows:
+                event_name = row.get("Event", "").strip().strip("*_` ")
+                trigger = row.get("Trigger", "").strip()
+                if event_name.lower() == "kpis":
+                    analytics_kpis.extend(
+                        value.strip()
+                        for value in trigger.split(";")
+                        if value.strip()
+                    )
+                    continue
+                if event_name:
+                    analytics_events.append({
+                        "name": event_name,
+                        "trigger": trigger,
+                        "kpis": [row.get("Consumed By", "").strip()],
+                    })
+            output.extend([
+                "",
+                ":::analytics",
+                yaml.safe_dump(
+                    {"events": analytics_events, "kpis": analytics_kpis},
+                    sort_keys=False,
+                ).strip(),
+                ":::",
+            ])
+
         relationship_blocks = cls._json_blocks(cls._section(markdown_text, 10, "Knowledge Relationships"))
         if relationship_blocks:
-            output.extend(["", ":::relationships", yaml.safe_dump(relationship_blocks[0], sort_keys=False).strip(), ":::"])
+            source_relationships = relationship_blocks[0]
+            canonical_relationships = {
+                "parent_sop": source_relationships.get("parent_sop") or source_relationships.get("parent_workflow"),
+                "child_sops": source_relationships.get("child_sops") or source_relationships.get("child_workflows", []),
+                "related_sops": source_relationships.get("related_sops", []),
+                "previous_sop": source_relationships.get("previous_sop") or source_relationships.get("predecessor_sop"),
+                "next_sop": source_relationships.get("next_sop") or source_relationships.get("successor_sop") or source_relationships.get("next_sops", []),
+                "escalation_sop": source_relationships.get("escalation_sop") or source_relationships.get("escalation_sops", []),
+                "exception_sop": source_relationships.get("exception_sop") or source_relationships.get("exception_sops", []),
+                "referenced_equipment": source_relationships.get("referenced_equipment", []),
+                "referenced_documents": source_relationships.get("referenced_documents", []),
+                "referenced_policies": source_relationships.get("referenced_policies", []),
+            }
+            canonical_relationships = {
+                key: value for key, value in canonical_relationships.items() if value
+            }
+            output.extend(["", ":::relationships", yaml.safe_dump(canonical_relationships, sort_keys=False).strip(), ":::"])
 
         reference_rows = cls._table(cls._section(markdown_text, 11, "References"))
         if reference_rows:
