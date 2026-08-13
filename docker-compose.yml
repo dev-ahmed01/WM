@@ -17,9 +17,9 @@ services:
     image: ollama/ollama:latest
     container_name: workmate_ollama
     environment:
-      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_MAX_LOADED_MODELS: "2"
       OLLAMA_NUM_PARALLEL: "1"
-      OLLAMA_KEEP_ALIVE: "0"
+      OLLAMA_KEEP_ALIVE: "15m"
     ports:
       - "11434:11434"
     volumes:
@@ -41,17 +41,15 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-qwen2.5:3b}
-      LOCAL_TRANSLATION_MODEL: ${LOCAL_TRANSLATION_MODEL:-translategemma:4b}
       LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
         ollama pull "$${LOCAL_CHAT_MODEL}" &&
-        ollama pull "$${LOCAL_TRANSLATION_MODEL}" &&
         ollama pull "$${LOCAL_EMBEDDING_MODEL}" &&
         ollama show "$${LOCAL_CHAT_MODEL}" >/dev/null &&
-        ollama show "$${LOCAL_TRANSLATION_MODEL}" >/dev/null &&
-        ollama show "$${LOCAL_EMBEDDING_MODEL}" >/dev/null
+        ollama show "$${LOCAL_EMBEDDING_MODEL}" >/dev/null &&
+        ollama run "$${LOCAL_CHAT_MODEL}" "Reply with READY only." >/dev/null
     restart: "no"
 
   backend:

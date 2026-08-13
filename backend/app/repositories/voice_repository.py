@@ -10,6 +10,49 @@ from app.exceptions.custom_exceptions import DatabaseException
 
 class VoiceRepository:
     @staticmethod
+    def get_synthesis_source(response_message_id: str, user_id: str) -> dict[str, Any] | None:
+        query = """
+            SELECT response_text, original_language, audio_id
+            FROM WORKMATE_COPILOT.voice_interactions
+            WHERE response_message_id = %s AND user_id = %s AND success = TRUE
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (response_message_id, user_id))
+                    row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "response_text": str(row[0]),
+                "language": str(row[1]),
+                "audio_id": str(row[2]) if row[2] else None,
+            }
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to load voice response: {exc}") from exc
+
+    @staticmethod
+    def attach_audio(
+        response_message_id: str, user_id: str, audio_id: str, synthesis_ms: int
+    ) -> None:
+        query = """
+            UPDATE WORKMATE_COPILOT.voice_interactions
+            SET audio_id = %s, synthesis_ms = %s
+            WHERE response_message_id = %s AND user_id = %s AND success = TRUE
+        """
+        try:
+            with get_snowflake_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        query,
+                        (audio_id, synthesis_ms, response_message_id, user_id),
+                    )
+        except Exception as exc:
+            raise DatabaseException(message=f"Failed to attach voice audio: {exc}") from exc
+
+    @staticmethod
     def audio_belongs_to_user(audio_id: str, user_id: str) -> bool:
         query = """
             SELECT 1 FROM WORKMATE_COPILOT.voice_interactions

@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react
 import { useSearchParams } from 'next/navigation';
 import { Radio, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type VoiceCopilotResponse, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type VoiceCopilotResponse, type VoiceLanguage, type VoiceSynthesisResponse, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { WorkflowRail } from '@/components/chat/WorkflowRail';
@@ -171,6 +171,7 @@ function CopilotContent() {
       const form = new FormData();
       form.append('audio', audio, `workmate-voice.${extension}`);
       form.append('language', voiceLanguage);
+      form.append('synthesize', 'false');
       if (conversationId) form.append('conversation_id', conversationId);
       const voice = await apiClient<VoiceCopilotResponse>('/copilot/voice', {
         method: 'POST',
@@ -202,7 +203,22 @@ function CopilotContent() {
         spokenAnswer: response.spoken_answer,
         sopDetails: response.sop_details,
       }).spokenText;
-      await handleSpeak(spokenText, assistantMessageId, voice.audio_url, voice.language);
+      // Text is rendered immediately. Piper runs in a second request so audio
+      // generation never blocks the visible Copilot response.
+      void apiClient<VoiceSynthesisResponse>('/copilot/voice/speech', {
+        method: 'POST',
+        body: JSON.stringify({ response_message_id: assistantMessageId }),
+      }).then((speech) => {
+        setMessages((current) => current.map((message) => (
+          message.id === assistantMessageId
+            ? { ...message, voiceAudioUrl: speech.audio_url }
+            : message
+        )));
+        return handleSpeak(spokenText, assistantMessageId, speech.audio_url, voice.language);
+      }).catch(() => {
+        // The grounded text remains usable; browser speech is the safe fallback.
+        speechSynthesis.speak(spokenText, assistantMessageId, voice.language);
+      });
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'WorkMate could not process that recording. Please try again.');
       setMessages((current) => [...current, {
@@ -212,7 +228,7 @@ function CopilotContent() {
       setIsVoiceProcessing(false);
       setIsSending(false);
     }
-  }, [conversationId, handleSpeak, isSending, voiceLanguage]);
+  }, [conversationId, handleSpeak, isSending, speechSynthesis, voiceLanguage]);
 
   const voiceRecorder = useVoiceRecorder(submitVoice);
 

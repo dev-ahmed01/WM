@@ -1,12 +1,12 @@
-"""Provider-neutral multilingual translation for the Copilot voice pipeline."""
+"""Provider-neutral English/Hindi translation for the Copilot voice pipeline."""
 
 import re
 from functools import lru_cache
 
 from app.integrations.ai_provider import TranslationProvider
-from app.integrations.local_ai_provider import OllamaLocalAIProvider
+from app.integrations.hindi_translation_provider import CTranslate2HindiProvider
 
-SUPPORTED_LANGUAGES = frozenset({"en", "hi", "kn", "ta", "te", "ml"})
+SUPPORTED_LANGUAGES = frozenset({"en", "hi"})
 
 
 class TranslationError(RuntimeError):
@@ -19,13 +19,7 @@ class TranslationService:
 
     def detect_language(self, text: str) -> str:
         """Best-effort script detection; ASR language metadata remains authoritative."""
-        counts = {
-            "hi": len(re.findall(r"[\u0900-\u097f]", text)),
-            "kn": len(re.findall(r"[\u0c80-\u0cff]", text)),
-            "ta": len(re.findall(r"[\u0b80-\u0bff]", text)),
-            "te": len(re.findall(r"[\u0c00-\u0c7f]", text)),
-            "ml": len(re.findall(r"[\u0d00-\u0d7f]", text)),
-        }
+        counts = {"hi": len(re.findall(r"[\u0900-\u097f]", text))}
         language, count = max(counts.items(), key=lambda item: item[1])
         return language if count else "en"
 
@@ -61,4 +55,4 @@ class TranslationService:
 
 @lru_cache
 def get_translation_service() -> TranslationService:
-    return TranslationService(OllamaLocalAIProvider())
+    return TranslationService(CTranslate2HindiProvider())

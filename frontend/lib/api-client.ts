@@ -52,7 +52,7 @@ export interface WorkflowDecisionOption {
   option_label: string;
 }
 
-export type VoiceLanguage = 'auto' | 'en' | 'hi' | 'kn' | 'ta' | 'te' | 'ml';
+export type VoiceLanguage = 'auto' | 'en' | 'hi';
 
 export interface VoiceCopilotResponse {
   language: Exclude<VoiceLanguage, 'auto'>;
@@ -65,6 +65,11 @@ export interface VoiceCopilotResponse {
   translation_ms: number;
   synthesis_ms: number;
   copilot: CopilotResponse;
+}
+
+export interface VoiceSynthesisResponse {
+  audio_url: string;
+  synthesis_ms: number;
 }
 
 export interface WorkflowAdvanceResponse {

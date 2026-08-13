@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.models.copilot import CopilotResponse
 
 
-VoiceLanguage = Literal["auto", "en", "hi", "kn", "ta", "te", "ml"]
+VoiceLanguage = Literal["auto", "en", "hi"]
 
 
 class TranscriptionResult(BaseModel):
@@ -27,3 +27,12 @@ class VoiceCopilotResponse(BaseModel):
     translation_ms: int
     synthesis_ms: int
     copilot: CopilotResponse
+
+
+class VoiceSynthesisRequest(BaseModel):
+    response_message_id: str = Field(min_length=1, max_length=64)
+
+
+class VoiceSynthesisResponse(BaseModel):
+    audio_url: str
+    synthesis_ms: int

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.config import settings
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
 from app.integrations.local_ai_provider import OllamaLocalAIProvider
@@ -273,7 +274,7 @@ async def test_translation_retries_an_incomplete_model_response(monkeypatch):
     assert request.await_count == 2
     retry_payload = request.await_args.kwargs["json"]["messages"][-1]["content"]
     assert "prior output was incomplete" in retry_payload
-    assert request.await_args.kwargs["json"]["model"] == "translategemma:4b"
+    assert request.await_args.kwargs["json"]["model"] == settings.LOCAL_TRANSLATION_MODEL
 
 
 @pytest.mark.asyncio

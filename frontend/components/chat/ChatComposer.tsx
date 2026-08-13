@@ -6,10 +6,6 @@ const VOICE_LANGUAGES: Array<{ value: VoiceLanguage; label: string }> = [
   { value: 'auto', label: 'Auto Detect' },
   { value: 'en', label: 'English' },
   { value: 'hi', label: 'हिन्दी · Hindi' },
-  { value: 'kn', label: 'ಕನ್ನಡ · Kannada' },
-  { value: 'ta', label: 'தமிழ் · Tamil' },
-  { value: 'te', label: 'తెలుగు · Telugu' },
-  { value: 'ml', label: 'മലയാളം · Malayalam' },
 ];
 
 interface ChatComposerProps {
@@ -110,7 +106,7 @@ export function ChatComposer({
             : listening
             ? 'Listening… speak naturally. Your recording sends automatically after you pause.'
             : voiceProcessing
-              ? 'Recording received. Transcribing, reasoning, translating, and preparing audio locally… this low-memory machine may take several minutes.'
+              ? 'Recording received. Preparing the transcript and verified answer locally…'
               : transcriptPreview
                 ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
                 : 'Select Speak once, talk, then pause. Your question sends automatically and receives a grounded spoken reply.')}

@@ -97,6 +97,8 @@ class FasterWhisperSpeechRecognitionService:
                         device=settings.WHISPER_DEVICE,
                         compute_type=settings.WHISPER_COMPUTE_TYPE,
                         download_root=settings.WHISPER_DOWNLOAD_ROOT,
+                        cpu_threads=settings.WHISPER_CPU_THREADS,
+                        num_workers=settings.WHISPER_NUM_WORKERS,
                     )
                     self._model_name = model_name
                     return self._model
@@ -116,9 +118,10 @@ class FasterWhisperSpeechRecognitionService:
                 segments, info = model.transcribe(
                     str(audio_path),
                     language=requested_language,
-                    beam_size=5,
+                    beam_size=settings.WHISPER_BEAM_SIZE,
                     vad_filter=True,
                     condition_on_previous_text=False,
+                    hotwords=settings.WHISPER_HOTWORDS or None,
                 )
                 realized_segments = list(segments)
             except Exception as exc:

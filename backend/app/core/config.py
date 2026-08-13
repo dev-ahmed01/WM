@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     LOCAL_AI_ENABLED: bool = True
     LOCAL_AI_BASE_URL: str = "http://ollama:11434"
     LOCAL_CHAT_MODEL: str = "qwen2.5:3b"
-    LOCAL_TRANSLATION_MODEL: str = "translategemma:4b"
+    # Retained for provider compatibility. Production voice translation uses
+    # CTranslate2; matching the chat model avoids an extra Ollama download.
+    LOCAL_TRANSLATION_MODEL: str = "qwen2.5:3b"
     LOCAL_EMBEDDING_MODEL: str = "nomic-embed-text"
     LOCAL_AI_TIMEOUT_SECONDS: float = 8.0
     LOCAL_AI_CANDIDATE_LIMIT: int = 100
@@ -54,17 +56,26 @@ class Settings(BaseSettings):
 
     # Self-hosted multilingual voice pipeline.
     VOICE_ENABLED: bool = True
-    VOICE_SUPPORTED_LANGUAGES: str = "en,hi,kn,ta,te,ml"
+    VOICE_SUPPORTED_LANGUAGES: str = "en,hi"
     VOICE_MAX_AUDIO_BYTES: int = 25 * 1024 * 1024
     VOICE_AUDIO_DIR: str = "/app/data/voice/audio"
     VOICE_AUDIO_TTL_SECONDS: int = 3600
-    WHISPER_MODEL: str = "large-v3"
-    WHISPER_FALLBACK_MODEL: str = "medium"
+    WHISPER_MODEL: str = "small"
+    WHISPER_FALLBACK_MODEL: str = "base"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_DOWNLOAD_ROOT: str = "/app/data/voice/whisper"
     WHISPER_LARGE_MIN_MEMORY_GB: float = 6.0
     WHISPER_TRANSCRIPTION_TIMEOUT_SECONDS: float = 300.0
+    WHISPER_BEAM_SIZE: int = 1
+    WHISPER_CPU_THREADS: int = 8
+    WHISPER_NUM_WORKERS: int = 1
+    WHISPER_HOTWORDS: str = (
+        "package damaged damage inspection quarantine pallet barcode purchase order "
+        "goods shipment trailer seal manifest warehouse inventory return batch picking "
+        "पैकेज क्षतिग्रस्त नुकसान निरीक्षण क्वारंटीन पैलेट बारकोड खरीद आदेश माल "
+        "शिपमेंट ट्रेलर सील मैनिफेस्ट गोदाम इन्वेंटरी वापसी बैच पिकिंग"
+    )
     PIPER_VOICE_DIR: str = "/app/data/voice/piper"
     PIPER_USE_CUDA: bool = False
     PIPER_VOICE_MAP: str = (
@@ -72,7 +83,10 @@ class Settings(BaseSettings):
         '"hi":"hi_IN-pratham-medium.onnx"}'
     )
     TRANSLATION_TIMEOUT_SECONDS: float = 180.0
-    TRANSLATION_KEEP_ALIVE: str = "0"
+    TRANSLATION_KEEP_ALIVE: str = "15m"
+    HINDI_TRANSLATION_MODEL_DIR: str = "/app/models/translation/m2m100_418m"
+    HINDI_TRANSLATION_CPU_THREADS: int = 4
+    HINDI_TRANSLATION_BEAM_SIZE: int = 2
     VOICE_MODEL_REUSE_MIN_MEMORY_GB: float = 8.0
 
     # Auth & Security Credentials

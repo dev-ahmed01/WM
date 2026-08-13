@@ -23,7 +23,11 @@ from app.models.copilot import (
     CopilotConversationDetail,
     CopilotHistoryMessage,
 )
-from app.models.voice import VoiceCopilotResponse
+from app.models.voice import (
+    VoiceCopilotResponse,
+    VoiceSynthesisRequest,
+    VoiceSynthesisResponse,
+)
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.owd_repository import OWDRepository
@@ -459,6 +463,7 @@ async def copilot_voice(
     audio: UploadFile = File(...),
     language: str = Form("auto"),
     conversation_id: Optional[str] = Form(None),
+    synthesize: bool = Form(True),
     current_user: Dict[str, Any] = Depends(get_current_user),
     speech_service: FasterWhisperSpeechRecognitionService = Depends(
         get_speech_recognition_service
@@ -596,7 +601,7 @@ async def copilot_voice(
             update={"answer": response_text, "spoken_answer": response_text}
         )
 
-        if speech_output.supports(detected_language):
+        if synthesize and speech_output.supports(detected_language):
             started = time.perf_counter()
             audio_id = await speech_output.synthesize(response_text, detected_language)
             synthesis_ms = round((time.perf_counter() - started) * 1000)
@@ -685,6 +690,69 @@ async def copilot_voice(
         ) from exc
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+@router.post(
+    "/voice/speech",
+    response_model=VoiceSynthesisResponse,
+    summary="Generate speech for a completed voice response",
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def synthesize_voice_response(
+    request: VoiceSynthesisRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    speech_output: PiperTextToSpeechService = Depends(get_text_to_speech_service),
+) -> VoiceSynthesisResponse:
+    """Generate Piper audio after response text has already reached the user."""
+    user_id = str(current_user.get("sub") or "")
+    source = await run_in_threadpool(
+        VoiceRepository.get_synthesis_source,
+        request.response_message_id,
+        user_id,
+    )
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "VOICE_RESPONSE_NOT_FOUND",
+                "message": "The voice response was not found for this user.",
+            },
+        )
+    existing_audio_id = source.get("audio_id")
+    if existing_audio_id and PiperTextToSpeechService.resolve_audio(existing_audio_id):
+        return VoiceSynthesisResponse(
+            audio_url=f"/copilot/voice/audio/{existing_audio_id}",
+            synthesis_ms=0,
+        )
+    language = str(source["language"])
+    if not speech_output.supports(language):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "VOICE_OUTPUT_UNSUPPORTED",
+                "message": f"Spoken output is not configured for '{language}'.",
+            },
+        )
+    started = time.perf_counter()
+    try:
+        audio_id = await speech_output.synthesize(str(source["response_text"]), language)
+    except TextToSpeechError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error_code": "VOICE_SYNTHESIS_FAILED", "message": str(exc)},
+        ) from exc
+    synthesis_ms = round((time.perf_counter() - started) * 1000)
+    await run_in_threadpool(
+        VoiceRepository.attach_audio,
+        request.response_message_id,
+        user_id,
+        audio_id,
+        synthesis_ms,
+    )
+    return VoiceSynthesisResponse(
+        audio_url=f"/copilot/voice/audio/{audio_id}",
+        synthesis_ms=synthesis_ms,
+    )
 
 
 @router.get(

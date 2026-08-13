@@ -382,6 +382,7 @@ class OllamaLocalAIProvider:
     ) -> str:
         """Translate only supplied text while preserving operational identifiers."""
         source_text = text[:8000].strip()
+        translation_token_budget = max(96, min(512, len(source_text) * 3))
         protected_text, replacements = self._protect_translation_tokens(source_text)
         previous_translation = ""
         translation_model = settings.LOCAL_TRANSLATION_MODEL
@@ -404,7 +405,7 @@ class OllamaLocalAIProvider:
             }
             if attempt:
                 request["retry_reason"] = (
-                    "The previous output was incomplete. Translate the entire text, including "
+                    "The prior output was incomplete. Translate the entire text, including "
                     "every instruction and condition. Do not answer or summarize it."
                 )
                 request["previous_incomplete_output"] = previous_translation[:1000]
@@ -429,7 +430,11 @@ class OllamaLocalAIProvider:
                     "model": translation_model,
                     "stream": False,
                     "messages": [{"role": "user", "content": prompt}],
-                    "options": {"temperature": 0, "num_ctx": 1024, "num_predict": 1200},
+                    "options": {
+                        "temperature": 0,
+                        "num_ctx": 1024,
+                        "num_predict": translation_token_budget,
+                    },
                     "keep_alive": settings.TRANSLATION_KEEP_ALIVE,
                 }
             else:
@@ -453,7 +458,11 @@ class OllamaLocalAIProvider:
                         },
                         {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
                     ],
-                    "options": {"temperature": 0, "num_ctx": 1024, "num_predict": 1200},
+                    "options": {
+                        "temperature": 0,
+                        "num_ctx": 1024,
+                        "num_predict": translation_token_budget,
+                    },
                     "keep_alive": settings.TRANSLATION_KEEP_ALIVE,
                 }
 

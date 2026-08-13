@@ -19,6 +19,16 @@ def test_compose_initializes_both_configurable_models():
     assert "ollama-model-init:" in compose
     assert "${LOCAL_CHAT_MODEL:-qwen2.5:3b}" in compose
     assert "${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}" in compose
+    assert "translategemma" not in compose.casefold()
+    assert "LOCAL_TRANSLATION_MODEL" not in compose
+
+
+def test_backend_builds_one_quantized_bidirectional_translation_model():
+    dockerfile = Path("infra/docker/backend.Dockerfile").read_text(encoding="utf-8")
+
+    assert "facebook/m2m100_418M" in dockerfile
+    assert dockerfile.count("--quantization int8") == 1
+    assert "COPY --from=translation-model-builder" in dockerfile
 
 
 def test_no_managed_ai_runtime_or_migration_remnants():
