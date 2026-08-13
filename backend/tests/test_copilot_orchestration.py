@@ -168,10 +168,10 @@ def test_retrieval_requires_sop_confirmation_before_starting(
     body = response.json()
     assert body["active_session_id"] is None
     assert body["active_step_title"] is None
-    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
-    assert "Use it? Reply yes or no." in body["answer"]
+    assert body["answer"] == "Record the shipment temperature. Start it? Yes or no."
+    assert len(body["answer"].split()) < 15
     assert "Inbound trailer at dock" not in body["answer"]
-    assert "Receiving SOP" not in body["spoken_answer"]
+    assert body["spoken_answer"] == body["answer"]
     assert body["citations"] == []
     mock_generate.assert_not_awaited()
     mock_start.assert_not_called()
@@ -491,8 +491,8 @@ def test_named_sop_request_requires_confirmation_without_starting():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
-    assert "Use it? Reply yes or no." in body["answer"]
+    assert body["answer"] == "Inbound receiving seal verification and inventory intake. Start it? Yes or no."
+    assert len(body["answer"].split()) < 15
     assert "get me receive shipment sop" not in body["answer"]
     assert "receive_shipment_v1_1" not in body["spoken_answer"]
     assert "SOP_INB_101" not in body["spoken_answer"]
@@ -700,7 +700,8 @@ def test_natural_damage_question_prefers_unique_verified_sop_over_menu():
     assert response.status_code == 200
     body = response.json()
     assert body["sop_suggestions"] == []
-    assert body["answer"] == "I found a verified procedure. Use it? Reply yes or no."
+    assert body["answer"] == "Inspect damaged goods before they enter sellable stock. Start it? Yes or no."
+    assert len(body["answer"].split()) < 15
     assert body["sop_details"] == "SOP: Damage Inspection | WH_REC_003"
     retrieve.assert_not_awaited()
 

@@ -208,8 +208,18 @@ def _requested_sop_index(message: str) -> int | None:
 def _workflow_confirmation_explanation(
     message: str, workflow: Dict[str, Any]
 ) -> str:
-    """Request a safe confirmation without echoing the user's wording."""
-    return "I found a verified procedure. Use it? Reply yes or no."
+    """Summarize verified scope without exposing the SOP title; stay under 15 words."""
+    raw_context = next(
+        (
+            str(workflow.get(field) or "").strip()
+            for field in ("description", "state_title", "step_title")
+            if str(workflow.get(field) or "").strip()
+        ),
+        "Verified operational guidance",
+    )
+    context_words = re.findall(r"[A-Za-z0-9'-]+", raw_context)[:9]
+    context = " ".join(context_words).rstrip(".,;:")
+    return f"{context}. Start it? Yes or no."
 
 
 def _naturalize_sop_coverage(coverage: str) -> str:
