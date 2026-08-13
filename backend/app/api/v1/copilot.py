@@ -22,6 +22,7 @@ from app.models.copilot import (
     CopilotHistoryResponse,
     CopilotConversationDetail,
     CopilotHistoryMessage,
+    SopSuggestion,
 )
 from app.models.voice import (
     VoiceCopilotResponse,
@@ -320,6 +321,8 @@ def _persist_control_reply(
     active_session: Any = None,
     position: Any = None,
     message_intent: Optional[str] = None,
+    sop_suggestions: Optional[list[SopSuggestion]] = None,
+    confidence_score: float = 1.0,
 ) -> CopilotResponse:
     """Persist a deterministic reply backed by catalog or workflow state."""
     ConversationRepository.update_message_intent(user_message_id, intent)
@@ -328,7 +331,7 @@ def _persist_control_reply(
         sender="ai",
         content=answer,
         intent=message_intent,
-        confidence_score=1.0,
+        confidence_score=confidence_score,
     )
     return CopilotResponse(
         conversation_id=conversation_id,
@@ -337,7 +340,7 @@ def _persist_control_reply(
         spoken_answer=spoken_answer,
         sop_details=sop_details,
         citations=[],
-        confidence_score=1.0,
+        confidence_score=confidence_score,
         is_grounded=True,
         requires_escalation=False,
         active_session_id=active_session.id if active_session else None,
@@ -346,6 +349,7 @@ def _persist_control_reply(
         active_step_number=position.step_number if position else None,
         active_step_title=position.step_title if position else None,
         active_decision_options=position.decision_options if position else [],
+        sop_suggestions=sop_suggestions or [],
     )
 
 
@@ -1046,12 +1050,51 @@ async def copilot_message(
     workflow_match = WorkflowIntentService.match_published_workflow(
         payload.message, catalog
     )
-    if not workflow_match and active_session is None and not explicit_workflow_request:
-        workflow_match = WorkflowIntentService.match_published_workflow(
-            payload.message, catalog, proposal_mode=True
-        )
+    if not workflow_match and active_session is None:
+        if not explicit_workflow_request:
+            workflow_match = WorkflowIntentService.match_published_workflow(
+                payload.message, catalog, proposal_mode=True
+            )
         if not workflow_match:
-            workflow_match = await AIGateway.select_catalog_workflow(payload.message, catalog)
+            ranked_options = WorkflowIntentService.rank_published_workflows(
+                payload.message, catalog, limit=3
+            )
+            # When speech/translation is too noisy for word overlap, still let
+            # the employee choose from real published SOPs instead of waiting
+            # through model and embedding timeouts or inventing guidance.
+            menu_options = ranked_options or catalog[:3]
+            if menu_options:
+                suggestions = [
+                    SopSuggestion(
+                        workflow_code=str(item.get("workflow_code") or ""),
+                        title=str(item.get("title") or "Published SOP"),
+                        description=str(item.get("description") or "").strip(),
+                        match_score=float(item.get("match_score") or 0.0),
+                    )
+                    for item in menu_options
+                ]
+                if ranked_options:
+                    answer = (
+                        "I understood part of your request, but more than one verified "
+                        "SOP may fit. Choose the closest option below."
+                    )
+                else:
+                    answer = (
+                        "I could not confidently match every word. Choose the closest "
+                        "published SOP below, or describe the item and problem in another way."
+                    )
+                top_score = max((item.match_score for item in suggestions), default=0.0)
+                return _persist_control_reply(
+                    conversation_id=conversation_id,
+                    user_message_id=user_message_id,
+                    intent="WORKFLOW_SUGGESTIONS",
+                    answer=answer,
+                    spoken_answer=answer,
+                    active_session=active_session,
+                    position=None,
+                    sop_suggestions=suggestions,
+                    confidence_score=max(0.45, min(0.79, top_score)),
+                )
     if workflow_match:
         sop_details = (
             f"SOP: {workflow_match['title']} | {workflow_match['workflow_code']}"

@@ -33,6 +33,13 @@ _DOMAIN_EQUIVALENTS = {
     "checking": "verify",
     "mismatched": "mismatch",
     "mismatches": "mismatch",
+    "getting": "receive",
+    "obtain": "receive",
+    "obtaining": "receive",
+    "receipt": "receive",
+    "receive": "receive",
+    "received": "receive",
+    "receiving": "receive",
 }
 
 _NEGATIVE_MATCH_PATTERN = re.compile(

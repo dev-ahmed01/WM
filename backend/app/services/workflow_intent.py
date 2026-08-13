@@ -101,30 +101,11 @@ class WorkflowIntentService:
         if not query_terms or not catalog:
             return None
 
-        ranked = sorted(
-            (
-                (
-                    min(
-                        1.0,
-                        fuzzy_relevance_score(
-                            message,
-                            " ".join(
-                                str(item.get(field) or "")
-                                for field in ("title", "workflow_code", "description")
-                            ),
-                        )
-                        + 0.25 * fuzzy_relevance_score(
-                            message, str(item.get("title") or "")
-                        ),
-                    ),
-                    item,
-                )
-                for item in catalog
-            ),
-            key=lambda result: result[0],
-            reverse=True,
-        )
-        top_score, top_item = ranked[0]
+        ranked = cls.rank_published_workflows(message, catalog, limit=len(catalog))
+        if not ranked:
+            return None
+        top_item = ranked[0]
+        top_score = float(top_item["match_score"])
         request_signal = cls.is_workflow_request(message)
         # A proposal is never executed until the employee confirms it, so a
         # lower threshold is safe for natural problem descriptions.
@@ -138,11 +119,48 @@ class WorkflowIntentService:
         if not proposal_mode and not request_signal and len(query_terms) < 2:
             return None
 
-        runner_up_score = ranked[1][0] if len(ranked) > 1 else 0.0
+        runner_up_score = float(ranked[1]["match_score"]) if len(ranked) > 1 else 0.0
         required_margin = 0.08 if proposal_mode else 0.12
         if runner_up_score >= minimum_score and top_score - runner_up_score < required_margin:
             return None
-        return {**top_item, "match_score": top_score}
+        return top_item
+
+    @classmethod
+    def rank_published_workflows(
+        cls,
+        message: str,
+        catalog: Sequence[Dict[str, Any]],
+        *,
+        limit: int = 3,
+    ) -> list[Dict[str, Any]]:
+        """Rank only real published workflows using typo-tolerant word overlap."""
+        if not search_terms(message) or not catalog:
+            return []
+        ranked = sorted(
+            (
+                (
+                    0.75
+                    * fuzzy_relevance_score(
+                            message,
+                            " ".join(
+                                str(item.get(field) or "")
+                                for field in ("title", "workflow_code", "description")
+                            ),
+                        )
+                    + 0.25
+                    * fuzzy_relevance_score(message, str(item.get("title") or "")),
+                    item,
+                )
+                for item in catalog
+            ),
+            key=lambda result: result[0],
+            reverse=True,
+        )
+        return [
+            {**item, "match_score": score}
+            for score, item in ranked[: max(1, min(limit, 5))]
+            if score > 0
+        ]
 
     @classmethod
     def is_all_steps_completion(cls, message: str) -> bool:

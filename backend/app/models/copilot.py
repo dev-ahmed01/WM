@@ -21,6 +21,12 @@ class CopilotMessageRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Existing conversation ID or null to create new")
     message: str = Field(..., description="User operational query or step execution response")
 
+class SopSuggestion(BaseModel):
+    workflow_code: str
+    title: str
+    description: str
+    match_score: float = Field(ge=0.0, le=1.0)
+
 class CopilotResponse(BaseModel):
     conversation_id: str
     message_id: str
@@ -37,6 +43,7 @@ class CopilotResponse(BaseModel):
     active_step_number: Optional[int] = None
     active_step_title: Optional[str] = None
     active_decision_options: List[WorkflowDecisionOption] = Field(default_factory=list)
+    sop_suggestions: List[SopSuggestion] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @model_validator(mode="after")

@@ -68,6 +68,31 @@ def test_problem_descriptions_can_propose_a_confirmable_sop():
     assert barcode and barcode["workflow_code"] == "WH_REC_004"
 
 
+def test_ambiguous_query_returns_ranked_real_catalog_options():
+    catalog = CATALOG + [
+        {
+            "workflow_code": "WH_REC_002",
+            "title": "Verify Goods Against Purchase Order",
+            "description": "Confirm received goods match the purchase order.",
+            "workflow_version_id": "ver_verify",
+        },
+        {
+            "workflow_code": "WH_PICK_001",
+            "title": "Pick Order",
+            "description": "Retrieve products to fulfill an order.",
+            "workflow_version_id": "ver_pick",
+        },
+    ]
+
+    ranked = WorkflowIntentService.rank_published_workflows(
+        "tell me the process of getting goods", catalog
+    )
+
+    assert len(ranked) <= 3
+    assert "ver_1" in {item["workflow_version_id"] for item in ranked}
+    assert all(item["match_score"] > 0 for item in ranked)
+
+
 @pytest.mark.parametrize(
     "message",
     [

@@ -45,6 +45,14 @@ export interface CopilotResponse {
   active_step_number?: number | null;
   active_step_title?: string | null;
   active_decision_options?: WorkflowDecisionOption[];
+  sop_suggestions?: SopSuggestion[];
+}
+
+export interface SopSuggestion {
+  workflow_code: string;
+  title: string;
+  description: string;
+  match_score: number;
 }
 
 export interface WorkflowDecisionOption {

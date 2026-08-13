@@ -15,6 +15,17 @@ def test_detect_language_supports_indic_scripts():
     assert service.detect_language("I need help") == "en"
 
 
+def test_hindi_asr_near_words_are_normalized_before_translation():
+    noisy = "मुजे माल प्रप्ट कनने की प्रक्रिया बताएए"
+    assert TranslationService.normalize_operational_transcript(noisy, "hi") == (
+        "मुझे सामान प्राप्त करने की प्रक्रिया बताइए"
+    )
+    phonetic = "मुचे माल प्राप्त करने की प्रक्रीए वता हीए"
+    assert TranslationService.normalize_operational_transcript(phonetic, "hi") == (
+        "मुझे सामान प्राप्त करने की प्रक्रिया बताइए"
+    )
+
+
 @pytest.mark.asyncio
 async def test_english_translation_is_a_noop():
     provider = AsyncMock()

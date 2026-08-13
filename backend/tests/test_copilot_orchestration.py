@@ -512,6 +512,55 @@ def test_named_sop_request_requires_confirmation_without_starting():
     retrieve.assert_not_awaited()
 
 
+def test_ambiguous_catalog_query_returns_clickable_grounded_menu_without_ai_timeouts():
+    catalog = [
+        {
+            "workflow_code": "WH_REC_001",
+            "title": "Receive Shipment",
+            "description": "Bring purchased goods into the warehouse and record arrival.",
+            "workflow_version_id": "ver_receive",
+        },
+        {
+            "workflow_code": "WH_REC_002",
+            "title": "Verify Goods Against Purchase Order",
+            "description": "Confirm received goods match the purchase order.",
+            "workflow_version_id": "ver_verify",
+        },
+        {
+            "workflow_code": "WH_REC_003",
+            "title": "Damage Inspection",
+            "description": "Inspect damaged goods during receiving.",
+            "workflow_version_id": "ver_damage",
+        },
+    ]
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1"),
+        patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"]),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None),
+        patch("app.api.v1.copilot.KnowledgeRepository.list_published_catalog", return_value=catalog),
+        patch.object(AIGateway, "select_catalog_workflow", new_callable=AsyncMock) as select_catalog,
+        patch.object(RetrievalService, "retrieve_chunks", new_callable=AsyncMock) as retrieve,
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"message": "receive goods process"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_grounded"] is True
+    assert body["requires_escalation"] is False
+    assert 1 <= len(body["sop_suggestions"]) <= 3
+    assert {item["workflow_code"] for item in body["sop_suggestions"]} <= {
+        "WH_REC_001", "WH_REC_002", "WH_REC_003"
+    }
+    assert "Choose the closest option" in body["answer"]
+    select_catalog.assert_not_awaited()
+    retrieve.assert_not_awaited()
+
+
 def test_confirmed_sop_starts_catalog_workflow_without_embeddings():
     session = workflow_session()
     position = WorkflowPosition(

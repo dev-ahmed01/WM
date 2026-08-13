@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Bot, ChevronDown, CircleAlert, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
-import type { CopilotResponse } from '@/lib/api-client';
+import type { CopilotResponse, SopSuggestion } from '@/lib/api-client';
 import { presentCopilotMessage } from '@/lib/copilot-presentation';
 import { Badge } from '@/components/ui/badge';
 
@@ -19,9 +19,10 @@ interface ChatThreadProps {
   speechSupported: boolean;
   speakingMessageKey: string | null;
   onSpeak: (text: string, messageKey: string, audioUrl?: string | null, language?: string) => void;
+  onSelectSop: (suggestion: SopSuggestion) => void;
 }
 
-export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speechSupported }: ChatThreadProps) {
+export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessageKey, speechSupported }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +50,23 @@ export function ChatThread({ messages, busy, onSpeak, speakingMessageKey, speech
               <div className={`min-w-0 ${assistant ? 'max-w-[min(46rem,calc(100%-2.75rem))]' : 'max-w-[min(38rem,82%)]'}`}>
                 <div className={`rounded-2xl px-4 py-3.5 text-[14px] leading-6 sm:px-5 ${assistant ? 'rounded-tl-md border border-border/80 bg-white text-foreground shadow-panel' : 'rounded-tr-md bg-[#123c30] text-white shadow-sm'}`}>
                   <p className="whitespace-pre-wrap break-words">{presentation.displayText}</p>
+
+                  {assistant && data?.sop_suggestions?.length ? (
+                    <div className="mt-4 grid gap-2" aria-label="Suggested verified SOPs">
+                      {data.sop_suggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.workflow_code}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onSelectSop(suggestion)}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span className="block text-xs font-semibold text-emerald-950">{suggestion.title}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-emerald-900/70">{suggestion.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
 
                   {assistant && data?.citations?.length ? (
                     <details className="group mt-4 border-t border-border/70 pt-3">

@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react
 import { useSearchParams } from 'next/navigation';
 import { Radio, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type VoiceCopilotResponse, type VoiceLanguage, type VoiceSynthesisResponse, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceCopilotResponse, type VoiceLanguage, type VoiceSynthesisResponse, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { WorkflowRail } from '@/components/chat/WorkflowRail';
@@ -160,6 +160,10 @@ function CopilotContent() {
     }
   }, [conversationId, isSending, speechSynthesis.speak]);
 
+  const handleSelectSop = useCallback((suggestion: SopSuggestion) => {
+    void submitMessage(`Start ${suggestion.title}`);
+  }, [submitMessage]);
+
   const submitVoice = useCallback(async (audio: Blob) => {
     if (isSending) return;
     setIsSending(true);
@@ -185,6 +189,7 @@ function CopilotContent() {
       setActiveStepNumber(response.active_step_number ?? undefined);
       setActiveStepTitle(response.active_step_title ?? undefined);
       setDetectedLanguage(voice.language);
+      if (voiceLanguage === 'auto') setVoiceLanguage(voice.language);
       setTranscriptPreview(voice.transcript);
       const assistantMessageId = response.message_id || createMessageId('assistant');
       setMessages((current) => [
@@ -322,6 +327,7 @@ function CopilotContent() {
               onSpeak={handleSpeak}
               speakingMessageKey={voiceSpeakingKey || speechSynthesis.speakingKey}
               speechSupported={speechSynthesis.isSupported || voiceRecorder.isSupported}
+              onSelectSop={handleSelectSop}
             />
           </main>
           <ChatComposer
