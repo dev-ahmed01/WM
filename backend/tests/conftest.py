@@ -5,6 +5,15 @@ import os
 import pytest
 
 
+# Unit tests never depend on developer or production credentials. These values
+# satisfy import-time configuration while all live Snowflake access stays blocked.
+os.environ.setdefault("SNOWFLAKE_ACCOUNT", "unit-test-account")
+os.environ.setdefault("SNOWFLAKE_USER", "unit-test-user")
+os.environ.setdefault("SNOWFLAKE_PASSWORD", "unit-test-password")
+os.environ.setdefault("JWT_SECRET", "unit-test-jwt-secret-with-32-characters")
+os.environ.setdefault("INTERNAL_WEBHOOK_SECRET", "unit-test-webhook-secret")
+
+
 def pytest_collection_modifyitems(config, items):
     del config
     if os.getenv("WORKMATE_RUN_LIVE_TESTS") == "1":

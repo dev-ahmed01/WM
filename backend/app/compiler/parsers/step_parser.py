@@ -6,10 +6,9 @@ Parses atomic Step Definitions:
   Common Failure, Recovery Action.
 """
 
-import re
 import yaml
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from app.compiler.models import Step, AIGuidance
 from app.compiler.parsers.ai_conversation_parser import AIConversationParser
 from app.compiler.parsers.document_parser import RawASTNode

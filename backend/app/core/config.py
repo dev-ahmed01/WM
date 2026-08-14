@@ -1,13 +1,13 @@
 """Pydantic Settings module reading environment configuration variables."""
 
-# Non-secret placeholders allow import-time validation and unit tests when .env is absent.
-# env_file is resolved to an ABSOLUTE path anchored at this file's directory so that scripts
+# Required credentials have no checked-in defaults. Tests inject isolated non-production values.
+# env_file is resolved to an absolute path anchored at this file's directory so that scripts
 # running from any working directory (e.g. repo root) always load backend/.env correctly.
 
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Absolute path to backend/.env, resolved relative to this file — CWD-independent
@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
     # Snowflake persistence and source-stage connection settings
-    SNOWFLAKE_ACCOUNT: str = "your_snowflake_account_placeholder"
-    SNOWFLAKE_USER: str = "your_snowflake_user_placeholder"
-    SNOWFLAKE_PASSWORD: str = "your_snowflake_password_placeholder"
+    SNOWFLAKE_ACCOUNT: str = Field(min_length=1)
+    SNOWFLAKE_USER: str = Field(min_length=1)
+    SNOWFLAKE_PASSWORD: str = Field(min_length=1)
     SNOWFLAKE_WAREHOUSE: str = "COMPUTE_WH"
     SNOWFLAKE_DATABASE: str = "WORKMATE_AI"
     SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
@@ -99,13 +99,13 @@ class Settings(BaseSettings):
     VOICE_PREWARM_MODELS: bool = False
 
     # Auth & Security Credentials
-    JWT_SECRET: str = "replace_with_at_least_32_random_characters"
+    JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
     # Internal Webhook & Service Security
-    INTERNAL_WEBHOOK_SECRET: str = "replace_with_a_random_webhook_secret"
+    INTERNAL_WEBHOOK_SECRET: str = Field(min_length=16)
 
     # Orchestration Settings
     N8N_BASE_URL: str = "http://localhost:5678"
@@ -148,7 +148,9 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """Returns a singleton, cached instance of application settings."""
-    return Settings()
+    # BaseSettings supplies required values from backend/.env or the process
+    # environment; static type checkers cannot model that runtime behavior.
+    return Settings()  # pyright: ignore[reportCallIssue]
 
 
 # Cached settings instance export

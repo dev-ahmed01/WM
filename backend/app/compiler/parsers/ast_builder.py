@@ -6,9 +6,8 @@ validated UnifiedAST object representing the complete SOP.
 
 import logging
 import re
-from typing import Dict, Any
 
-from app.compiler.models import UnifiedAST, Workflow, OWDDocument
+from app.compiler.models import UnifiedAST, Workflow
 from app.compiler.parsers.document_loader import DocumentLoader
 from app.compiler.parsers.metadata_parser import MetadataParser
 from app.compiler.parsers.retrieval_metadata_parser import RetrievalMetadataParser

@@ -126,7 +126,7 @@ def seed_database():
         for u in SEED_USERS:
             print(f"{u['role_name']:<12} | {u['email']:<24} | {DEFAULT_PASSWORD:<12} | {u['department_id']:<10}")
         print("-" * 65)
-        print("\nNote: Ensure the DDL tables (analytics/owd_schema.sql) exist in Snowflake before running.")
+        print("\nNote: Run scripts/deploy_owd_schema.py before seeding users.")
 
     except Exception as exc:
         print(f"\n❌ Error seeding test users in Snowflake: {str(exc)}", file=sys.stderr)

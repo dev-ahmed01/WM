@@ -13,9 +13,7 @@ from app.compiler.compiler import OWDCompiler
 from app.compiler.loader import OWDLoader
 from app.compiler.models import OWDDocument, ValidationReport, CompiledWorkflow, LoadResult
 from app.compiler.exceptions import (
-    CompilerBaseException,
     OWDParsingException,
-    OWDValidationException,
     OWDCompilationException,
     OWDLoaderException,
 )
@@ -55,7 +53,13 @@ class OWDCompilerPipeline:
             )
             parsed_states_cnt = len(owd_doc.workflow.states)
             parsed_steps_cnt = sum(len(s.steps) for s in owd_doc.workflow.states)
-            logger.info(f"[STAGE 1 PARSE COMPLETE] UnifiedAST assembled for '{owd_doc.workflow.workflow_code}': {parsed_states_cnt} states parsed.")
+            logger.info(
+                "[STAGE 1 PARSE COMPLETE] UnifiedAST assembled for '%s': "
+                "%d states and %d steps parsed.",
+                owd_doc.workflow.workflow_code,
+                parsed_states_cnt,
+                parsed_steps_cnt,
+            )
         except OWDParsingException as parse_err:
             logger.error(f"[PIPELINE STAGE 1 PARSE FAILED] {parse_err.message}")
             return {

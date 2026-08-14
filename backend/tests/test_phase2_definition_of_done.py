@@ -1,14 +1,12 @@
 """Phase 2 Definition of Done (DoD) verification tests."""
 
-import pytest
 from datetime import timedelta
 from unittest.mock import patch
-from fastapi import FastAPI, Depends, status
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
 from app.api.v1.auth import router as auth_router
 from app.core.security import hash_password, create_access_token
-from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 
 # Construct FastAPI app for DoD verification

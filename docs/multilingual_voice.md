@@ -2,7 +2,7 @@
 
 WorkMate's authenticated voice flow is:
 
-`MediaRecorder -> POST /api/v1/copilot/voice -> Faster-Whisper small -> M2M100 translation -> grounded Copilot -> M2M100 reverse translation -> text response -> deferred Piper -> protected WAV URL`.
+`MediaRecorder -> POST /api/v1/copilot/voice -> Faster-Whisper base (tiny fallback) -> M2M100 translation -> grounded Copilot -> M2M100 reverse translation -> text response -> deferred Piper -> protected WAV URL`.
 
 The existing `POST /api/v1/copilot/message` text path is unchanged. Voice requests invoke the same Copilot orchestration, so RBAC, workflow state, citations, validation, and escalation rules remain authoritative.
 

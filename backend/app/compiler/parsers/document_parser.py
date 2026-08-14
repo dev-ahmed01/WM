@@ -5,7 +5,7 @@ This avoids fragile regex across the entire document in the extractors.
 """
 
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 
 class RawASTNode(BaseModel):

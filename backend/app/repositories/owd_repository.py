@@ -7,7 +7,6 @@ transitions, rules, evidence specs, and semantic search metadata in Snowflake.
 import json
 import re
 import uuid
-from datetime import datetime
 from typing import Optional, Dict, Any, List
 from app.core.database import get_snowflake_connection
 from app.exceptions.custom_exceptions import DatabaseException
@@ -305,6 +304,6 @@ class OWDRepository:
                         (event_id, session_id, workflow_version_id, state_id, step_id, event_type, duration_ms, payload_json),
                     )
                     return True
-        except Exception as e:
+        except Exception:
             # Telemetry logging should be resilient and non-blocking
             return False

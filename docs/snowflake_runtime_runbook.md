@@ -7,7 +7,7 @@ candidate reads. All AI runs through local Ollama.
 
 ```bash
 cp backend/.env.example backend/.env
-# Replace sanitized placeholders only in ignored backend/.env.
+# Fill the blank credential values only in ignored backend/.env.
 ```
 
 Use a least-privilege runtime role, `COPILOT_ALLOWED_KNOWLEDGE_STATUSES=published`, and the Compose

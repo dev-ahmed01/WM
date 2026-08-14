@@ -7,7 +7,7 @@ and graph traversal analysis (reachability & cycle detection).
 import re
 import hashlib
 import uuid
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict
 
 
 def calculate_source_hash(markdown_text: str) -> str:

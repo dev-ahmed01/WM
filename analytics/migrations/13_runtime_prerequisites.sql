@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS INTELLIGENCE_HUB.analytics_events (
     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
 );
 
--- Required runtime grants are account-specific and deliberately use a placeholder.
--- Apply equivalent grants after replacing WORKMATE_BACKEND_ROLE with the actual role:
+-- Runtime grants are account-specific. The statements below document the
+-- least-privilege role expected by production; adapt the role name when the
+-- deployment uses an administrator role such as SYSADMIN.
 -- GRANT USAGE ON DATABASE WORKMATE_AI TO ROLE WORKMATE_BACKEND_ROLE;
 -- GRANT USAGE ON ALL SCHEMAS IN DATABASE WORKMATE_AI TO ROLE WORKMATE_BACKEND_ROLE;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE WORKMATE_AI TO ROLE WORKMATE_BACKEND_ROLE;

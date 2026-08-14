@@ -1173,7 +1173,6 @@ async def copilot_message(
             position=position,
         )
 
-    explicit_workflow_request = WorkflowIntentService.is_workflow_request(payload.message)
     workflow_match = WorkflowIntentService.match_published_workflow(
         payload.message, catalog
     )

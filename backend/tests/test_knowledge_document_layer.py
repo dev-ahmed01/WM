@@ -4,11 +4,9 @@ Validates raw markdown preservation, dynamic frontmatter extraction, structural 
 AI metadata computation, chunk object creation, lineage audit trails, and DocumentRepository lookups.
 """
 
-import pytest
 from app.compiler.parsers.metadata_parser import MetadataParser
 from app.compiler.parsers.ast_builder import ASTBuilder
 from app.compiler.compiler import OWDCompiler
-from app.compiler.loader import OWDLoader
 from app.repositories.document_repository import DocumentRepository
 
 SAMPLE_OWD_MARKDOWN = """---

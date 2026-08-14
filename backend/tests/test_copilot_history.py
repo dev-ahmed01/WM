@@ -1,6 +1,5 @@
 """Unit tests for GET /api/v1/copilot/history endpoint."""
 
-import pytest
 from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

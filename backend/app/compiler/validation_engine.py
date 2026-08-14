@@ -5,8 +5,8 @@ Separates AST state/step index enrichment from validation logic.
 """
 
 import logging
-from typing import Set, Dict, List
-from app.compiler.models import UnifiedAST, Step
+from typing import Set
+from app.compiler.models import UnifiedAST
 
 logger = logging.getLogger("compiler.validation_engine")
 

@@ -12,7 +12,6 @@ import os
 import sys
 import json
 import time
-import hashlib
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -33,11 +32,10 @@ if str(knowledge_engine_dir) not in sys.path:
 from app.compiler.pipeline import OWDCompilerPipeline
 from app.compiler.parser import OWDParser
 from app.compiler.validator import OWDValidator
-from app.compiler.compiler import OWDCompiler
 from app.compiler.loader import OWDLoader
-from app.compiler.models import OWDDocument, ValidationReport, CompiledWorkflow, LoadResult
-from app.compiler.utils import calculate_source_hash, sanitize_code
-from app.compiler.exceptions import OWDParsingException, OWDValidationException, OWDCompilationException, OWDLoaderException
+from app.compiler.models import OWDDocument, ValidationReport
+from app.compiler.utils import calculate_source_hash
+from app.compiler.exceptions import OWDParsingException, OWDLoaderException
 from app.compiler.utils import generate_deterministic_uuid
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.services.ingestion import IngestionService

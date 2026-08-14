@@ -9,7 +9,6 @@ from app.compiler.validator import OWDValidator
 from app.compiler.compiler import OWDCompiler
 from app.compiler.loader import OWDLoader
 from app.compiler.pipeline import OWDCompilerPipeline
-from app.compiler.exceptions import OWDValidationException
 
 
 SAMPLE_OWD_MARKDOWN = """# SOP-FIN-001: Expense Authorization Procedure

@@ -53,7 +53,7 @@ class UserRepository:
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(query, (email_or_username, email_or_username))
+                    cur.execute(query, (key, key))
                     row = cur.fetchone()
                     if not row:
                         return None

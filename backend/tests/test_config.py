@@ -33,10 +33,13 @@ def test_local_ai_is_default_provider():
     assert defaults.LOCAL_AI_ENABLED is True
 
 
-def test_checked_in_security_defaults_are_placeholders(monkeypatch):
-    monkeypatch.delenv("JWT_SECRET", raising=False)
-    monkeypatch.delenv("INTERNAL_WEBHOOK_SECRET", raising=False)
-    defaults = Settings(_env_file=None)
+def test_credentials_have_no_checked_in_defaults():
+    required = {
+        "SNOWFLAKE_ACCOUNT",
+        "SNOWFLAKE_USER",
+        "SNOWFLAKE_PASSWORD",
+        "JWT_SECRET",
+        "INTERNAL_WEBHOOK_SECRET",
+    }
 
-    assert defaults.JWT_SECRET.startswith("replace_with_")
-    assert defaults.INTERNAL_WEBHOOK_SECRET.startswith("replace_with_")
+    assert all(Settings.model_fields[name].is_required() for name in required)

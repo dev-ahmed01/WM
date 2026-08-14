@@ -1,1 +1,0 @@
-# System prompt template for step-aware operational guidance through the local Ollama provider.

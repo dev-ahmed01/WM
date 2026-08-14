@@ -7,9 +7,9 @@ Does NOT execute SQL or access Snowflake.
 """
 
 import logging
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict
 
-from app.compiler.models import OWDDocument, ValidationReport, UnifiedAST
+from app.compiler.models import ValidationReport, UnifiedAST
 from app.compiler.utils import find_unreachable_states
 from app.compiler.exceptions import OWDValidationException
 

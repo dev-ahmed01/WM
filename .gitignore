@@ -8,6 +8,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.uv-cache/
+.npm-cache/
+.ruff-cache/
+.ruff-python/
 .coverage
 htmlcov/
 *.log
@@ -18,6 +22,7 @@ deployment_report.md
 # Node dependencies & Next.js build outputs
 node_modules/
 .next/
+.vercel/
 out/
 build/
 dist/
@@ -32,6 +37,7 @@ dist/
 # Local upgrade and diagnostic artifacts
 .tsupgrader/
 .env.txt
+**/.env.local
 
 # IDE & OS files
 .vscode/

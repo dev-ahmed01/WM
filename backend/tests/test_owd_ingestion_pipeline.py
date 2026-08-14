@@ -5,7 +5,6 @@ version number incrementing, validation error isolation, Snowflake transaction r
 and deployment report generation.
 """
 
-import os
 import json
 import tempfile
 import unittest
@@ -15,11 +14,9 @@ from unittest.mock import MagicMock, patch
 from scripts.load_owd import (
     discover_markdown_files,
     process_single_owd,
-    run_ingestion_pipeline,
     derive_department_from_path,
     write_report_files,
 )
-from app.compiler.utils import calculate_source_hash
 from app.compiler.exceptions import OWDLoaderException
 
 

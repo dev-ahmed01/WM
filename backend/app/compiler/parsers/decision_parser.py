@@ -6,7 +6,6 @@ Parses Decision Engine nodes & options:
 Generates deterministic workflow transitions for decision branches.
 """
 
-import re
 import yaml
 import logging
 from typing import Dict, Any, List, Tuple, TYPE_CHECKING

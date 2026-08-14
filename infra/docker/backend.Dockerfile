@@ -1,5 +1,8 @@
 FROM python:3.11-slim AS translation-model-builder
 
+ENV PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=5
+
 RUN pip install --no-cache-dir \
     "ctranslate2>=4.5.0,<5.0.0" \
     "transformers[torch]>=4.45.0,<5.0.0" \

@@ -1,9 +1,7 @@
 """Repository managing Snowflake SQL operations for OWD workflows, versions, states, and steps."""
 
 import logging
-from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
-from app.core.config import settings
 from app.core.database import get_snowflake_connection
 from app.exceptions import WorkMateException
 
@@ -403,7 +401,6 @@ class KnowledgeRepository:
 
     @staticmethod
     def update_version_status(version_id: str, status: str) -> bool:
-        now = datetime.now(timezone.utc)
         published_at_clause = ", published_at = CURRENT_TIMESTAMP()" if status.lower() == "published" else ""
         query = f"UPDATE KNOWLEDGE_STUDIO.workflow_versions SET status = %s{published_at_clause} WHERE id = %s"
 

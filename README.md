@@ -23,8 +23,8 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 | `frontend/app` | Next.js pages and route groups |
 | `frontend/components` | Reusable UI, chat, dashboard, and upload components |
 | `analytics/migrations` | Ordered Snowflake schema and service migrations |
-| `automation` | n8n orchestration workflow definitions |
-| `ai-services` | Prompt assets and executable grounding evaluations |
+| `automation` | Optional n8n notification workflow definitions |
+| `ai-services` | Executable grounding evaluations |
 | `scripts` | Schema deployment, OWD loading, and verification CLIs |
 | `docs` | Architecture, focused remediation notes, and operational guides |
 
@@ -33,7 +33,7 @@ Generated deployment reports belong in the ignored `logs/` directory. TypeScript
 ## Prerequisites
 
 - Docker with Docker Compose
-- Node.js 18+ and npm
+- Node.js 20.9+ and npm
 - Python 3.11+
 - A Snowflake account with database, stage, and least-privilege runtime access
 - Enough local disk/RAM for the configured Ollama models
@@ -46,7 +46,7 @@ Create the ignored backend runtime file from the sanitized template:
 cp backend/.env.example backend/.env
 ```
 
-Replace every placeholder in `backend/.env`. Use a least-privilege Snowflake runtime role; do not place real credentials in `.env.example` or any tracked document.
+Fill every blank credential in `backend/.env`. Use a least-privilege Snowflake runtime role; do not place real credentials in `.env.example` or any tracked document.
 
 For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env.local` and set its public API base URL.
 
@@ -118,8 +118,10 @@ These commands access Snowflake using `backend/.env`. Review the SQL migrations 
 
 ```bash
 PYTHONPATH=.:backend python -m pytest -q backend/tests
+PYTHONPATH=backend python ai-services/evals/grounding_test.py
+npx --yes pyright@latest
 cd frontend
-npm run lint
+npm run typecheck
 npm run build
 ```
 

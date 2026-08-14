@@ -1,6 +1,5 @@
 """Unit tests for Intelligence Hub analytics endpoints and service layer."""
 
-import pytest
 from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

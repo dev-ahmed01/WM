@@ -7,7 +7,8 @@ if str(backend_dir) not in sys.path:
 
 from app.core.database import get_snowflake_connection
 
-def verify_counts():
+
+def verify_counts() -> None:
     tables = [
         "WORKMATE_AI.KNOWLEDGE_STUDIO.KNOWLEDGE_DOCUMENTS",
         "WORKMATE_AI.KNOWLEDGE_STUDIO.KNOWLEDGE_DOCUMENT_CONTENTS",
@@ -19,8 +20,12 @@ def verify_counts():
         with conn.cursor() as cur:
             for t in tables:
                 cur.execute(f"SELECT COUNT(*) FROM {t}")
-                cnt = cur.fetchone()[0]
+                row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError(f"Snowflake returned no count row for {t}")
+                cnt = row[0]
                 print(f"{t}: {cnt} row(s)")
+
 
 if __name__ == "__main__":
     verify_counts()

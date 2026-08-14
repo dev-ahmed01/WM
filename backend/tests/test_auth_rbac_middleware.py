@@ -1,7 +1,6 @@
 """Unit tests for auth_middleware and rbac_middleware dependencies."""
 
-import pytest
-from fastapi import FastAPI, Depends, status
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
 from app.core.security import create_access_token, create_refresh_token

@@ -5,7 +5,6 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
-from app.core.config import settings
 from app.core.database import get_snowflake_connection
 from app.exceptions.custom_exceptions import DatabaseException
 

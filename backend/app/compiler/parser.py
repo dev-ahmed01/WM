@@ -5,7 +5,7 @@ compatibility for existing callers.
 """
 
 import logging
-from app.compiler.models import OWDDocument, UnifiedAST
+from app.compiler.models import UnifiedAST
 from app.compiler.parsers.ast_builder import ASTBuilder
 from app.compiler.exceptions import OWDParsingException
 

@@ -1,0 +1,13 @@
+{
+  "include": [
+    "backend/app",
+    "backend/scripts",
+    "scripts",
+    "ai-services/evals"
+  ],
+  "extraPaths": [
+    ".",
+    "backend"
+  ],
+  "reportMissingImports": "warning"
+}

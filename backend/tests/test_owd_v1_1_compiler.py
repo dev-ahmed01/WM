@@ -13,7 +13,7 @@ from pathlib import Path
 from app.compiler.parser import OWDParser
 from app.compiler.validator import OWDValidator
 from app.compiler.compiler import OWDCompiler
-from app.compiler.models import UnifiedAST, ValidationReport, CompiledWorkflow
+from app.compiler.models import UnifiedAST, CompiledWorkflow
 from scripts.load_owd import process_single_owd  # type: ignore
 TESTS_DIR = Path(__file__).resolve().parent
 V1_1_FILE = TESTS_DIR / "fixtures" / "owd_repository" / "inbound" / "receive_shipment_v1_1.md"

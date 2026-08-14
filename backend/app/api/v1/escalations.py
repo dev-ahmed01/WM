@@ -1,7 +1,7 @@
 # FastAPI Router for Escalation Management (Admin / Manager Read Access)
 
 from typing import List
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query
 from app.models.escalation import EscalationResponse, EscalationResolve
 from app.services.escalation import EscalationService
 from app.middleware.rbac_middleware import require_role
