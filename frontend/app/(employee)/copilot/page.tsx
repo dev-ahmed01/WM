@@ -123,17 +123,37 @@ function CopilotContent() {
     resumeSession();
   }, [sessionId, loading]);
 
-  const submitMessage = useCallback(async (message: string, speakReply = false) => {
+  const submitMessage = useCallback(async (
+    message: string,
+    speakReply = false,
+    selection?: {
+      workflowCode: string;
+      originalQuery: string;
+      responseLanguage: string;
+      displayMessage: string;
+    },
+  ) => {
     const userMessage = message.trim();
     if (!userMessage || isSending) return;
     setInput('');
     setIsSending(true);
-    setMessages((current) => [...current, { id: createMessageId('user'), sender: 'user', content: userMessage }]);
+    setMessages((current) => [...current, {
+      id: createMessageId('user'),
+      sender: 'user',
+      content: selection?.displayMessage || userMessage,
+      language: selection?.responseLanguage,
+    }]);
 
     try {
       const response = await apiClient<CopilotResponse>('/copilot/message', {
         method: 'POST',
-        body: JSON.stringify({ message: userMessage, conversation_id: conversationId }),
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_id: conversationId,
+          selected_workflow_code: selection?.workflowCode,
+          original_query: selection?.originalQuery,
+          response_language: selection?.responseLanguage,
+        }),
       });
       setConversationId(response.conversation_id || conversationId);
       setWorkflowSessionId(response.active_session_id ?? undefined);
@@ -142,7 +162,13 @@ function CopilotContent() {
       setActiveStepNumber(response.active_step_number ?? undefined);
       setActiveStepTitle(response.active_step_title ?? undefined);
       const assistantMessageId = response.message_id || createMessageId('assistant');
-      setMessages((current) => [...current, { id: assistantMessageId, sender: 'assistant', content: response.answer, copilotData: response }]);
+      setMessages((current) => [...current, {
+        id: assistantMessageId,
+        sender: 'assistant',
+        content: response.answer,
+        copilotData: response,
+        language: selection?.responseLanguage,
+      }]);
       if (speakReply) {
         const spokenText = presentCopilotMessage(response.answer, {
           spokenAnswer: response.spoken_answer,
@@ -160,9 +186,18 @@ function CopilotContent() {
     }
   }, [conversationId, isSending, speechSynthesis.speak]);
 
-  const handleSelectSop = useCallback((suggestion: SopSuggestion) => {
-    // Workflow codes remain stable even when the visible suggestion is localized.
-    void submitMessage(`Start SOP ${suggestion.workflow_code}`);
+  const handleSelectSop = useCallback((
+    suggestion: SopSuggestion,
+    language: string,
+    originalQuery: string,
+  ) => {
+    // The code is validated server-side; the employee keeps seeing their localized choice.
+    void submitMessage(suggestion.source_query || originalQuery || suggestion.title, false, {
+      workflowCode: suggestion.workflow_code,
+      originalQuery: originalQuery || suggestion.source_query || suggestion.title,
+      responseLanguage: language === 'hi' ? 'hi' : 'en',
+      displayMessage: suggestion.title,
+    });
   }, [submitMessage]);
 
   const submitVoice = useCallback(async (audio: Blob) => {

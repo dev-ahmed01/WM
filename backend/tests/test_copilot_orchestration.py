@@ -554,6 +554,84 @@ def test_ambiguous_catalog_query_returns_clickable_grounded_menu_without_ai_time
     retrieve.assert_not_awaited()
 
 
+def test_hindi_menu_selection_stays_hindi_and_creates_pending_resolution():
+    catalog = [{
+        "workflow_code": "WH_REC_003",
+        "title": "Damage Inspection",
+        "description": "Inspect damaged goods before stocking.",
+        "workflow_version_id": "ver_damage",
+    }]
+    translator = AsyncMock()
+    translator.translate_from_english.return_value = "क्षतिग्रस्त सामान की जाँच शुरू करें? हाँ या नहीं।"
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1"),
+        patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"]) as persist,
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None),
+        patch("app.api.v1.copilot.KnowledgeRepository.list_published_catalog", return_value=catalog),
+        patch("app.api.v1.copilot.QueryResolutionRepository.create_pending", return_value="qres_1") as create_pending,
+        patch("app.api.v1.copilot.get_translation_service", return_value=translator),
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={
+                "message": "packages damaged what should I do",
+                "selected_workflow_code": "WH_REC_003",
+                "original_query": "पैकेज खराब है, मुझे क्या करना चाहिए",
+                "response_language": "hi",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["answer"].startswith("क्षतिग्रस्त")
+    create_pending.assert_called_once()
+    assert create_pending.call_args.kwargs["original_language"] == "hi"
+    assert create_pending.call_args.kwargs["original_query"].startswith("पैकेज")
+    assert create_pending.call_args.kwargs["translated_query"].startswith("packages")
+    assert persist.call_args_list[-1].kwargs["intent"] == "SOP_CONFIRM:ver_damage:MEMORY:qres_1:hi"
+
+
+def test_confirming_learned_hindi_selection_promotes_memory_and_starts_workflow():
+    session = workflow_session()
+    position = WorkflowPosition(
+        state_id="state_1", state_title="Inspection", state_type="ATOMIC_STEP",
+        step_id="step_1", step_number=1, step_title="Inspect damaged goods",
+    )
+    catalog = [{
+        "workflow_code": "WH_REC_003", "title": "Damage Inspection",
+        "description": "Inspect damaged goods.", "workflow_version_id": "ver_1",
+    }]
+    translator = AsyncMock()
+    translator.translate_from_english.return_value = "पुष्टि हुई। क्षतिग्रस्त सामान की जाँच करें।"
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_1"),
+        patch("app.api.v1.copilot.ConversationRepository.persist_message", side_effect=["user_msg", "ai_msg"]),
+        patch("app.api.v1.copilot.ConversationRepository.update_message_intent"),
+        patch("app.api.v1.copilot.ConversationRepository.get_history", return_value=[{
+            "id": "prior_ai", "sender": "ai", "content": "पुष्टि करें",
+            "intent": "SOP_CONFIRM:ver_1:MEMORY:qres_1:hi",
+        }]),
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session", return_value=None),
+        patch("app.api.v1.copilot.KnowledgeRepository.list_published_catalog", return_value=catalog),
+        patch("app.api.v1.copilot.WorkflowStateService.start_session", return_value=session),
+        patch("app.api.v1.copilot.WorkflowStateService.get_position", return_value=position),
+        patch("app.api.v1.copilot.QueryResolutionRepository.set_status", return_value=True) as set_status,
+        patch("app.api.v1.copilot.QueryResolutionMemoryService.invalidate") as invalidate,
+        patch("app.api.v1.copilot.get_translation_service", return_value=translator),
+    ):
+        response = client.post(
+            "/api/v1/copilot/message",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            json={"conversation_id": "conv_1", "message": "हाँ"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["answer"].startswith("पुष्टि")
+    set_status.assert_called_once_with("qres_1", "CONFIRMED")
+    invalidate.assert_called_once_with("dept_ops")
+
+
 def test_confirmed_sop_starts_catalog_workflow_without_embeddings():
     session = workflow_session()
     position = WorkflowPosition(

@@ -39,6 +39,7 @@ MIGRATION_FILES = [
     "15_active_workflow_versions.sql",
     "16_flexible_owd_authoring_metadata.sql",
     "17_multilingual_voice.sql",
+    "18_query_resolution_memory.sql",
 ]
 
 _ADD_COLUMN_IF_MISSING_RE = re.compile(

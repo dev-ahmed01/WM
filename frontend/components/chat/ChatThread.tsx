@@ -19,7 +19,7 @@ interface ChatThreadProps {
   speechSupported: boolean;
   speakingMessageKey: string | null;
   onSpeak: (text: string, messageKey: string, audioUrl?: string | null, language?: string) => void;
-  onSelectSop: (suggestion: SopSuggestion) => void;
+  onSelectSop: (suggestion: SopSuggestion, language: string, originalQuery: string) => void;
 }
 
 export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessageKey, speechSupported }: ChatThreadProps) {
@@ -34,7 +34,7 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
   return (
     <div ref={scrollContainerRef} className="h-full min-h-0 overflow-y-auto" role="log" aria-live="polite" aria-busy={busy}>
       <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-        {messages.map((message) => {
+        {messages.map((message, messageIndex) => {
           const assistant = message.sender === 'assistant';
           const isSpeaking = speakingMessageKey === message.id;
           const data = message.copilotData;
@@ -58,7 +58,12 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                           key={suggestion.workflow_code}
                           type="button"
                           disabled={busy}
-                          onClick={() => onSelectSop(suggestion)}
+                          onClick={() => {
+                            const originalQuery = [...messages.slice(0, messageIndex)]
+                              .reverse()
+                              .find((candidate) => candidate.sender === 'user')?.content || '';
+                            onSelectSop(suggestion, message.language || 'en', originalQuery);
+                          }}
                           className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span className="block text-xs font-semibold text-emerald-950">{suggestion.title}</span>

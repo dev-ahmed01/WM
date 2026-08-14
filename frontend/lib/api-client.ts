@@ -53,6 +53,7 @@ export interface SopSuggestion {
   title: string;
   description: string;
   match_score: number;
+  source_query?: string;
 }
 
 export interface WorkflowDecisionOption {

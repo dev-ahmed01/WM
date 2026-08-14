@@ -20,12 +20,24 @@ class Citation(BaseModel):
 class CopilotMessageRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Existing conversation ID or null to create new")
     message: str = Field(..., description="User operational query or step execution response")
+    selected_workflow_code: Optional[str] = Field(
+        None, description="Stable workflow code selected from a server-provided menu"
+    )
+    original_query: Optional[str] = Field(
+        None, description="Original wording that produced the selected SOP menu"
+    )
+    response_language: Optional[str] = Field(
+        None, pattern="^(en|hi)$", description="Language to preserve for a localized selection"
+    )
 
 class SopSuggestion(BaseModel):
     workflow_code: str
     title: str
     description: str
     match_score: float = Field(ge=0.0, le=1.0)
+    source_query: Optional[str] = Field(
+        None, description="Normalized source wording used to learn a confirmed menu selection"
+    )
 
 class CopilotResponse(BaseModel):
     conversation_id: str

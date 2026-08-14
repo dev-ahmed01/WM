@@ -30,6 +30,10 @@ class WorkflowIntentService:
     }
     _CONFIRMATION_WORDS = {"yes", "yeah", "yep", "correct", "confirm", "start", "proceed"}
     _REJECTION_WORDS = {"no", "nope", "wrong", "different", "cancel"}
+    _HINDI_CONFIRMATIONS = {"हाँ", "हां", "जी हाँ", "जी हां", "शुरू करें", "ठीक है"}
+    _HINDI_REJECTIONS = {
+        "नहीं", "नही", "गलत", "रद्द करें", "कुछ और", "दूसरा", "यह नहीं",
+    }
 
     @staticmethod
     def _normalized(message: str) -> str:
@@ -41,6 +45,13 @@ class WorkflowIntentService:
 
     @classmethod
     def confirmation_response(cls, message: str) -> bool | None:
+        hindi = " ".join((message or "").strip().casefold().split())
+        if hindi in cls._HINDI_CONFIRMATIONS:
+            return True
+        if hindi in cls._HINDI_REJECTIONS:
+            return False
+        if re.search(r"\b(?:something else|not this|another one)\b", hindi):
+            return False
         tokens = set(cls._normalized(message).split())
         if not tokens or len(tokens) > 4:
             return None

@@ -112,6 +112,14 @@ def test_unrelated_new_problem_is_not_a_confirmation_information_request():
     )
 
 
+def test_hindi_confirmation_words_are_understood_without_english_translation():
+    assert WorkflowIntentService.confirmation_response("हाँ") is True
+    assert WorkflowIntentService.confirmation_response("जी हां") is True
+    assert WorkflowIntentService.confirmation_response("नहीं") is False
+    assert WorkflowIntentService.confirmation_response("कुछ और") is False
+    assert WorkflowIntentService.confirmation_response("it is something else") is False
+
+
 def test_noisy_damage_query_keeps_enough_verified_relevance():
     focused = CopilotReasoningService.focus_operational_query(
         "turn all this the package is damaged what should I do"

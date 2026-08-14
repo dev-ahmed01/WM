@@ -32,6 +32,7 @@ from app.models.voice import (
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.owd_repository import OWDRepository
+from app.repositories.query_resolution_repository import QueryResolutionRepository
 from app.repositories.voice_repository import VoiceRepository
 from app.services.retrieval import RetrievalService
 from app.services.validation import ResponseValidationService
@@ -56,6 +57,10 @@ from app.services.escalation import EscalationService
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
 from app.services.workflow_intent import WorkflowIntentService
+from app.services.query_resolution_memory import (
+    QueryResolutionMemoryService,
+    normalized_query_key,
+)
 from app.integrations.ai_gateway import AIGateway
 from app.integrations.ai_provider import GeneratedAnswer
 
@@ -220,6 +225,48 @@ def _workflow_confirmation_explanation(
     context_words = re.findall(r"[A-Za-z0-9'-]+", raw_context)[:9]
     context = " ".join(context_words).rstrip(".,;:")
     return f"{context}. Start it? Yes or no."
+
+
+async def _localized_text(text: str, language: str | None) -> str:
+    """Preserve the language of a localized menu selection and its follow-ups."""
+    if not language or language == "en":
+        return text
+    try:
+        return await get_translation_service().translate_from_english(text, language)
+    except TranslationError:
+        copilot_logger.exception("Could not localize Copilot control response")
+        return text
+
+
+def _create_pending_resolution(
+    *,
+    payload: CopilotMessageRequest,
+    workflow: Dict[str, Any],
+    department_id: str,
+    conversation_id: str,
+    user_message_id: str,
+    user_id: str,
+) -> str | None:
+    """Persist a candidate mapping; it is not reusable until the user confirms."""
+    translated_query = payload.message.strip()
+    original_query = (payload.original_query or translated_query).strip()
+    try:
+        return QueryResolutionRepository.create_pending(
+            department_id=department_id,
+            original_query=original_query,
+            normalized_query=normalized_query_key(translated_query),
+            original_language=payload.response_language or "en",
+            translated_query=translated_query,
+            workflow_version_id=str(workflow["workflow_version_id"]),
+            workflow_code=str(workflow["workflow_code"]),
+            conversation_id=conversation_id,
+            source_message_id=user_message_id,
+            resolved_by=user_id,
+        )
+    except Exception:
+        # Guidance remains available if optional learning persistence is degraded.
+        copilot_logger.exception("Could not persist pending query resolution")
+        return None
 
 
 def _naturalize_sop_coverage(coverage: str) -> str:
@@ -928,6 +975,7 @@ async def copilot_message(
     catalog: list[Dict[str, Any]] = []
     should_check_catalog = bool(
         (confirmation_response is not None and pending_confirmation)
+        or payload.selected_workflow_code
         or requested_sop_index is not None
         or WorkflowIntentService.is_workflow_request(payload.message)
         or active_session is None
@@ -947,9 +995,16 @@ async def copilot_message(
     if pending_confirmation and (
         confirmation_response is not None or confirmation_information_request
     ):
-        pending_parts = str(pending_confirmation["intent"]).split(":", 2)
+        pending_parts = str(pending_confirmation["intent"]).split(":")
         pending_version_id = pending_parts[1]
-        pending_state_id = pending_parts[2] if len(pending_parts) > 2 else None
+        is_memory_confirmation = len(pending_parts) > 3 and pending_parts[2] == "MEMORY"
+        pending_resolution_id = pending_parts[3] if is_memory_confirmation else None
+        pending_language = pending_parts[4] if len(pending_parts) > 4 else None
+        pending_state_id = (
+            pending_parts[2]
+            if len(pending_parts) > 2 and not is_memory_confirmation
+            else None
+        )
         pending_match = next(
             (
                 item
@@ -968,6 +1023,7 @@ async def copilot_message(
                 "Does that match what you need? Reply yes to use it, or no and "
                 "describe what is different."
             )
+            answer = await _localized_text(answer, pending_language)
             return _persist_control_reply(
                 conversation_id=conversation_id,
                 user_message_id=user_message_id,
@@ -987,14 +1043,23 @@ async def copilot_message(
                 message_intent=str(pending_confirmation["intent"]),
             )
         if confirmation_response is False:
+            if pending_resolution_id:
+                try:
+                    QueryResolutionRepository.set_status(pending_resolution_id, "REJECTED")
+                    QueryResolutionMemoryService.invalidate(department_id)
+                except Exception:
+                    copilot_logger.exception("Could not reject pending query resolution")
+            rejection_answer = (
+                "Okay—I won’t start that SOP. Tell me the process, equipment, "
+                "or problem you mean, and I’ll find the closest verified workflow."
+            )
+            rejection_answer = await _localized_text(rejection_answer, pending_language)
             return _persist_control_reply(
                 conversation_id=conversation_id,
                 user_message_id=user_message_id,
                 intent="WORKFLOW_CONFIRMATION_REJECTED",
-                answer=(
-                    "Okay—I won’t start that SOP. Tell me the process, equipment, "
-                    "or problem you mean, and I’ll find the closest verified workflow."
-                ),
+                answer=rejection_answer,
+                spoken_answer=rejection_answer,
                 active_session=active_session,
                 position=WorkflowStateService.get_position(active_session) if active_session else None,
             )
@@ -1009,6 +1074,13 @@ async def copilot_message(
             active_session = WorkflowStateService.start_session(**start_kwargs)
             position = WorkflowStateService.get_position(active_session)
             answer = f"Confirmed. Using {pending_match['title']}. {_step_guidance(position)}"
+            if pending_resolution_id:
+                try:
+                    QueryResolutionRepository.set_status(pending_resolution_id, "CONFIRMED")
+                    QueryResolutionMemoryService.invalidate(department_id)
+                except Exception:
+                    copilot_logger.exception("Could not confirm pending query resolution")
+            answer = await _localized_text(answer, pending_language)
             return _persist_control_reply(
                 conversation_id=conversation_id,
                 user_message_id=user_message_id,
@@ -1019,6 +1091,51 @@ async def copilot_message(
                 active_session=active_session,
                 position=position,
             )
+
+    if payload.selected_workflow_code:
+        selected_match = next(
+            (
+                item
+                for item in catalog
+                if str(item.get("workflow_code") or "").casefold()
+                == payload.selected_workflow_code.casefold()
+            ),
+            None,
+        )
+        if selected_match is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "SOP_SELECTION_INVALID",
+                    "message": "That SOP is not published for your department.",
+                },
+            )
+        resolution_id = _create_pending_resolution(
+            payload=payload,
+            workflow=selected_match,
+            department_id=department_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            user_id=user_id,
+        )
+        answer = _workflow_confirmation_explanation(payload.message, selected_match)
+        answer = await _localized_text(answer, payload.response_language)
+        confirmation_intent = f"SOP_CONFIRM:{selected_match['workflow_version_id']}"
+        if resolution_id:
+            confirmation_intent += f":MEMORY:{resolution_id}:{payload.response_language or 'en'}"
+        return _persist_control_reply(
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            intent="WORKFLOW_CONFIRMATION_REQUIRED",
+            answer=answer,
+            spoken_answer=answer,
+            sop_details=(
+                f"SOP: {selected_match['title']} | {selected_match['workflow_code']}"
+            ),
+            active_session=active_session,
+            position=None,
+            message_intent=confirmation_intent,
+        )
 
     if requested_sop_index is not None:
         sop_details = None
@@ -1061,12 +1178,21 @@ async def copilot_message(
         payload.message, catalog
     )
     if not workflow_match and active_session is None:
+        try:
+            workflow_match = QueryResolutionMemoryService.match(
+                payload.message, department_id, catalog
+            )
+        except Exception:
+            copilot_logger.exception(
+                "Query resolution memory lookup failed; using catalog ranking"
+            )
         # Natural questions often contain request verbs ("need", "show") even
         # when they describe a concrete problem. Proposal mode is confirmation-
         # gated, so it is safe to use for both named requests and situations.
-        workflow_match = WorkflowIntentService.match_published_workflow(
-            payload.message, catalog, proposal_mode=True
-        )
+        if not workflow_match:
+            workflow_match = WorkflowIntentService.match_published_workflow(
+                payload.message, catalog, proposal_mode=True
+            )
         if not workflow_match:
             ranked_options = WorkflowIntentService.rank_published_workflows(
                 payload.message, catalog, limit=3
@@ -1082,6 +1208,7 @@ async def copilot_message(
                         title=str(item.get("title") or "Published SOP"),
                         description=str(item.get("description") or "").strip(),
                         match_score=float(item.get("match_score") or 0.0),
+                        source_query=payload.message,
                     )
                     for item in menu_options
                 ]
@@ -1135,6 +1262,21 @@ async def copilot_message(
             intent,
             float(workflow_match.get("match_score") or 0.0),
         )
+        resolution_id = (
+            _create_pending_resolution(
+                payload=payload,
+                workflow=workflow_match,
+                department_id=department_id,
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+                user_id=user_id,
+            )
+            if intent == "WORKFLOW_CONFIRMATION_REQUIRED"
+            else None
+        )
+        confirmation_intent = f"SOP_CONFIRM:{matched_version_id}"
+        if resolution_id:
+            confirmation_intent += f":MEMORY:{resolution_id}:{payload.response_language or 'en'}"
         return _persist_control_reply(
             conversation_id=conversation_id,
             user_message_id=user_message_id,
@@ -1145,7 +1287,7 @@ async def copilot_message(
             active_session=active_session,
             position=position,
             message_intent=(
-                f"SOP_CONFIRM:{matched_version_id}"
+                confirmation_intent
                 if intent == "WORKFLOW_CONFIRMATION_REQUIRED"
                 else None
             ),
