@@ -16,7 +16,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
-from app.core.config import settings
+# deferred app import
 
 # Ensure root directory and backend/knowledge-engine are in Python path
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -29,6 +29,7 @@ knowledge_engine_dir = ROOT_DIR / "knowledge-engine"
 if str(knowledge_engine_dir) not in sys.path:
     sys.path.insert(0, str(knowledge_engine_dir))
 
+from app.core.config import settings
 from app.compiler.pipeline import OWDCompilerPipeline
 from app.compiler.parser import OWDParser
 from app.compiler.validator import OWDValidator
