@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     AUTH_REVALIDATE_DB: bool = False
     AUTH_SESSION_STORE_ENABLED: bool = False
     AUTH_RATE_LIMIT_ENABLED: bool = False
+    # Enable only when FastAPI receives a trustworthy client IP, not the
+    # shared Next.js server address (which would throttle all employees).
+    AUTH_RATE_IP_BUCKET_ENABLED: bool = False
     AUTH_RATE_MAX_ATTEMPTS: int = Field(default=10, ge=3, le=100)
     AUTH_RATE_WINDOW_SECONDS: int = Field(default=900, ge=60, le=3600)
     POSTGRES_RLS_REFERENCES: bool = False
