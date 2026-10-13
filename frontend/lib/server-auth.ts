@@ -26,7 +26,12 @@ export function checkCsrf(request: NextRequest): boolean {
 
 export function cookieOptions(maxAge: number) {
   return {
-    httpOnly: true, secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    // Only the disposable HTTP-loopback browser CI may turn off Secure.
+    secure: process.env.NODE_ENV === 'production' && !(
+      process.env.WORKMATE_BROWSER_SMOKE === '1' &&
+      /^http:\/\/(127\.0\.0\.1|localhost):8000\/api\/v1$/.test(BACKEND_URL)
+    ),
     sameSite: 'strict' as const, path: '/', maxAge,
   };
 }
