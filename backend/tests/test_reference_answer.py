@@ -23,7 +23,7 @@ def source(**updates):
         "department_id": "receiving",
         "chunk_id": "chunk-1",
         "excerpt": "If the carton is damaged, inspect the seal and quarantine the parcel.",
-        "start_offset": 120, "end_offset": 187, "chunk_index": 2,
+        "start_offset": 120, "end_offset": 189, "chunk_index": 2,
         "status": "APPROVED", "match_score": 1.0,
     }
     result.update(updates)
