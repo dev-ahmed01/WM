@@ -1,6 +1,7 @@
 """Global safeguards keeping the default unit suite hermetic."""
 
 import os
+import tempfile
 
 import pytest
 
@@ -9,6 +10,7 @@ import pytest
 # satisfy import-time configuration while all live PostgreSQL access stays blocked.
 os.environ.setdefault("JWT_SECRET", "unit-test-jwt-secret-with-32-characters")
 os.environ.setdefault("INTERNAL_WEBHOOK_SECRET", "unit-test-webhook-secret")
+os.environ.setdefault("VOICE_AUDIO_DIR", os.path.join(tempfile.gettempdir(), "workmate_unit_voice"))
 
 
 def pytest_collection_modifyitems(config, items):
