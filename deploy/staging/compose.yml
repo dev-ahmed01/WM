@@ -38,6 +38,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    command: ["sh", "-ec", "python scripts/verify_runtime_database.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     networks: [internal]
     expose: ["8000"]
     read_only: true
