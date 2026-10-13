@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     # Auth & Security Credentials
     JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
+    # Production JWT claims are revalidated against PostgreSQL on every request.
+    # Development unit suites may disable this, but production cannot.
+    AUTH_REVALIDATE_DB: bool = False
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
@@ -129,6 +132,9 @@ class Settings(BaseSettings):
         if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
         if self.APP_ENV.strip().lower() in {"prod", "production"}:
+            if not self.AUTH_REVALIDATE_DB:
+                raise ValueError("Production requires AUTH_REVALIDATE_DB=true")
+
             protected_values = {
                 "DATABASE_URL": self.DATABASE_URL,
                 "JWT_SECRET": self.JWT_SECRET,
