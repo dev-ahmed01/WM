@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, ShieldCheck, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { ApiError, apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceCopilotResponse, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceTranscriptPreview, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { WorkflowRail } from '@/components/chat/WorkflowRail';
@@ -214,70 +214,30 @@ function CopilotContent() {
       const form = new FormData();
       form.append('audio', audio, `workmate-voice.${extension}`);
       form.append('language', voiceLanguage);
-      form.append('synthesize', 'false');
-      if (conversationId) form.append('conversation_id', conversationId);
-      const voice = await apiClient<VoiceCopilotResponse>('/copilot/voice', {
+      // This endpoint NEVER posts a Copilot message, starts a workflow, or
+      // records an attestation. A human must inspect and press Send.
+      const preview = await apiClient<VoiceTranscriptPreview>('/copilot/voice/transcribe', {
         method: 'POST',
         body: form,
       });
-      const response = voice.copilot;
-      setConversationId(response.conversation_id || conversationId);
-      setWorkflowSessionId(response.active_session_id ?? undefined);
-      setWorkflowSessionStatus(response.active_session_status ?? undefined);
-      setWorkflowDecisionOptions(response.active_decision_options || []);
-      setActiveStepNumber(response.active_step_number ?? undefined);
-      setActiveStepTitle(response.active_step_title ?? undefined);
-      setDetectedLanguage(voice.language);
-      setTranscriptPreview(voice.transcript);
-      const assistantMessageId = response.message_id || createMessageId('assistant');
-      setMessages((current) => [
-        ...current,
-        { id: createMessageId('voice-user'), sender: 'user', content: voice.transcript, language: voice.language },
-        {
-          id: assistantMessageId,
-          sender: 'assistant',
-          content: voice.response_text,
-          copilotData: response,
-          voiceAudioUrl: voice.audio_url,
-          language: voice.language,
-        },
-      ]);
-      const spokenText = presentCopilotMessage(voice.response_text, {
-        spokenAnswer: response.spoken_answer,
-        sopDetails: response.sop_details,
-      }).spokenText;
-      // Browser speech starts as soon as grounded text arrives. Generating a
-      // second server-side audio file added several seconds without improving
-      // the visible answer latency on supported browsers.
-      speechSynthesis.speak(spokenText, assistantMessageId, voice.language);
+      setDetectedLanguage(preview.detected_language);
+      setTranscriptPreview(preview.transcript);
+      setInput(preview.suggested_text);
+      setMessages((current) => [...current, {
+        id: createMessageId('voice-review'),
+        sender: 'assistant',
+        content: `I heard: “${preview.transcript}”. ${preview.detected_language === 'hi' ? `Suggested English: “${preview.suggested_text}”. ` : ''}Check the text in the message field, especially names, amounts, numbers, and safety instructions. Press Send only after correcting it. No workflow action was recorded.`,
+      }]);
     } catch (error) {
-      if (error instanceof ApiError && error.error_code === 'VOICE_CONFIRM_TRANSCRIPT') {
-        const transcript = String(error.details?.transcript || '').trim();
-        const translated = String(error.details?.translated_transcript || '').trim();
-        const language = String(error.details?.language || 'en');
-        const returnedConversation = String(error.details?.conversation_id || '');
-        if (returnedConversation) setConversationId(returnedConversation);
-        setDetectedLanguage(language);
-        setTranscriptPreview(transcript);
-        // A transcript is a draft, never an automatic workflow attestation.
-        setInput(translated || transcript);
-        setAnswerMode('workflow');
-        setMessages((current) => [...current, {
-          id: createMessageId('voice-review'),
-          sender: 'assistant',
-          content: 'I heard: “' + (transcript || translated) + '”. Check the text in the message field, correct it if needed, then press Send to confirm. No workflow action was recorded.',
-        }]);
-      } else {
-        const errorMessage = getErrorMessage(error, 'WorkMate could not process that recording. Please try again.');
-        setMessages((current) => [...current, {
-          id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
-        }]);
-      }
+      const errorMessage = getErrorMessage(error, 'WorkMate could not transcribe that recording. Please try again or type your request.');
+      setMessages((current) => [...current, {
+        id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
+      }]);
     } finally {
       setIsVoiceProcessing(false);
       setIsSending(false);
     }
-  }, [conversationId, isSending, speechSynthesis, voiceLanguage]);
+  }, [isSending, voiceLanguage]);
 
   const voiceRecorder = useVoiceRecorder(submitVoice);
 
