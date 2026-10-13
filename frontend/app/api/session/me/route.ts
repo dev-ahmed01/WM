@@ -3,18 +3,28 @@ import { ACCESS_COOKIE, backendUrl, clearAuthCookies, exchangeRefresh, jsonError
 
 export async function GET(request: NextRequest) {
   let token = request.cookies.get(ACCESS_COOKIE)?.value;
-  if (!token) return jsonError(401, 'AUTH_INVALID', 'Sign in required.');
+  let rotatedRefresh: string | undefined;
+  let refreshed = false;
   try {
+    // Expired access cookies disappear from the browser. A still-valid
+    // HttpOnly refresh cookie must restore the short-lived access cookie.
+    if (!token) {
+      const next = await exchangeRefresh(request);
+      if (!next) return jsonError(401, 'AUTH_INVALID', 'Sign in required.');
+      token = next.access;
+      rotatedRefresh = next.refresh;
+      refreshed = true;
+    }
     let upstream = await fetch(backendUrl('/auth/me'), {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
       signal: AbortSignal.timeout(8000),
     });
-    let refreshed = false;
-    let rotatedRefresh: string | undefined;
-    if (upstream.status === 401) {
+    if (upstream.status === 401 && !refreshed) {
       const next = await exchangeRefresh(request);
       if (next) {
-        token = next.access; rotatedRefresh = next.refresh; refreshed = true;
+        token = next.access;
+        rotatedRefresh = next.refresh;
+        refreshed = true;
         upstream = await fetch(backendUrl('/auth/me'), {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
           signal: AbortSignal.timeout(8000),
