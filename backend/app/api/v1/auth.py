@@ -4,7 +4,6 @@
 
 from typing import Dict, Any
 from datetime import datetime, timezone
-from jose import jwt as jose_jwt
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from starlette.concurrency import run_in_threadpool
 
@@ -103,7 +102,7 @@ async def login(payload: LoginRequest, request: Request) -> TokenResponse:
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
-async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
+async def refresh_token(payload: RefreshTokenRequest, request: Request) -> RefreshTokenResponse:
     """Exchanges a valid refresh token for a newly issued access token."""
     try:
         claims = decode_token(payload.refresh_token)
@@ -138,6 +137,24 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
             },
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if settings.AUTH_RATE_LIMIT_ENABLED:
+        try:
+            allowed = await run_in_threadpool(
+                AuthThrottleRepository.consume, "refresh",
+                str(claims.get("sub", "unknown")),
+                request.client.host if request.client else "unresolved",
+            )
+        except Exception as exc:
+            raise HTTPException(503, detail={
+                "error_code": "AUTH_RATE_UNAVAILABLE",
+                "message": "Session verification is temporarily unavailable.",
+            }) from exc
+        if not allowed:
+            raise HTTPException(429, detail={
+                "error_code": "AUTH_RATE_LIMITED",
+                "message": "Too many session refresh attempts.",
+            }, headers={"Retry-After": str(settings.AUTH_RATE_WINDOW_SECONDS)})
 
     user_id = claims.get("sub")
     if not user_id:
