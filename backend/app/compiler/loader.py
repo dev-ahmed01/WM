@@ -1,6 +1,6 @@
-"""OWD Snowflake Database Loader Module (v1.1 Knowledge Compiler).
+"""OWD PostgreSQL Database Loader Module (v1.1 Knowledge Compiler).
 
-Responsible ONLY for persisting compiled OWD relational payload structures into Snowflake
+Responsible ONLY for persisting compiled OWD relational payload structures into PostgreSQL
 tables across all 15 normalized tables using MERGE/INSERT SQL commands.
 Does NOT perform markdown parsing or validation.
 """
@@ -12,23 +12,23 @@ from app.compiler.models import CompiledWorkflow, LoadResult
 from app.compiler.exceptions import OWDLoaderException
 
 try:
-    from app.core.database import get_snowflake_connection  # type: ignore
+    from app.core.database import get_postgres_connection  # type: ignore
 except ImportError:
-    get_snowflake_connection = None
+    get_postgres_connection = None
 
 logger = logging.getLogger("compiler.loader")
 
 
 class OWDLoader:
-    """Persists compiled OWD relational entity payloads into Snowflake database tables."""
+    """Persists compiled OWD relational entity payloads into PostgreSQL database tables."""
 
     @staticmethod
     def get_workflow_version_by_hash(workflow_code: str, ast_hash: str) -> Optional[Dict[str, Any]]:
-        """Queries Snowflake to check if a workflow version matching ast_hash already exists."""
-        if get_snowflake_connection is None:
+        """Queries PostgreSQL to check if a workflow version matching ast_hash already exists."""
+        if get_postgres_connection is None:
             return None
         try:
-            with get_snowflake_connection() as conn:
+            with get_postgres_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -49,11 +49,11 @@ class OWDLoader:
 
     @staticmethod
     def get_latest_version_number(workflow_code: str) -> int:
-        """Queries Snowflake for the highest version_number recorded for a workflow_code."""
-        if get_snowflake_connection is None:
+        """Queries PostgreSQL for the highest version_number recorded for a workflow_code."""
+        if get_postgres_connection is None:
             return 0
         try:
-            with get_snowflake_connection() as conn:
+            with get_postgres_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -73,12 +73,12 @@ class OWDLoader:
 
     @staticmethod
     def load(compiled_workflow: CompiledWorkflow) -> LoadResult:
-        """Executes transactional MERGE/INSERT statements against Snowflake KNOWLEDGE_STUDIO tables."""
+        """Executes transactional MERGE/INSERT statements against PostgreSQL KNOWLEDGE_STUDIO tables."""
         if not compiled_workflow or not compiled_workflow.workflow_payload:
             raise OWDLoaderException("Cannot load null or uninitialized CompiledWorkflow payload.")
 
-        if get_snowflake_connection is None:
-            raise OWDLoaderException("Database connection module unavailable: get_snowflake_connection is not loaded.")
+        if get_postgres_connection is None:
+            raise OWDLoaderException("Database connection module unavailable: get_postgres_connection is not loaded.")
 
         wf = compiled_workflow.workflow_payload
         ver = compiled_workflow.version_payload
@@ -106,7 +106,7 @@ class OWDLoader:
 
         conn = None
         try:
-            with get_snowflake_connection() as conn:
+            with get_postgres_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("BEGIN")
                     # 1. Upsert Root Workflow
@@ -384,12 +384,12 @@ class OWDLoader:
                         labels_json = json.dumps(doc.get("labels", {}))
                         cur.execute(
                             """
-                            MERGE INTO WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_documents AS target
+                            MERGE INTO KNOWLEDGE_STUDIO.knowledge_documents AS target
                             USING (SELECT %s AS id, %s AS workflow_id, %s AS workflow_version_id, %s AS document_name, %s AS original_filename,
                                           %s AS stage_uri, %s AS relative_path, %s AS directory, %s AS extension, %s AS mime_type,
                                           %s AS file_size_bytes, %s AS md5_hash, %s AS sha256_hash, %s AS compiler_version, %s AS parser_version,
                                           %s AS source_type, %s AS language_code, %s AS author, %s AS reviewer, %s AS approval_status,
-                                          PARSE_JSON(%s) AS tags, PARSE_JSON(%s) AS labels, %s AS description) AS src
+                                          %s::jsonb AS tags, %s::jsonb AS labels, %s AS description) AS src
                             ON target.id = src.id
                             WHEN MATCHED THEN UPDATE SET document_name = src.document_name, updated_at = CURRENT_TIMESTAMP()
                             WHEN NOT MATCHED THEN INSERT (id, workflow_id, workflow_version_id, document_name, original_filename, stage_uri, relative_path, directory, extension, mime_type, file_size_bytes, md5_hash, sha256_hash, compiler_version, parser_version, source_type, language_code, author, reviewer, approval_status, tags, labels, description)
@@ -398,17 +398,17 @@ class OWDLoader:
                             (doc["id"], doc["workflow_id"], doc["workflow_version_id"], doc["document_name"], doc["original_filename"], doc["stage_uri"], doc["relative_path"], doc["directory"], doc["extension"], doc["mime_type"], doc["file_size_bytes"], doc.get("md5_hash"), doc["sha256_hash"], doc["compiler_version"], doc["parser_version"], doc["source_type"], doc["language_code"], doc.get("author"), doc.get("reviewer"), doc["approval_status"], tags_json, labels_json, doc.get("description")),
                         )
                     if documents:
-                        tables_updated.append("WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_documents")
+                        tables_updated.append("KNOWLEDGE_STUDIO.knowledge_documents")
 
                     # 17. Insert Knowledge Document Contents
                     for cont in contents:
                         cur.execute(
                             """
-                            MERGE INTO WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_contents AS target
+                            MERGE INTO KNOWLEDGE_STUDIO.knowledge_document_contents AS target
                             USING (SELECT %s AS id, %s AS document_id, %s AS workflow_version_id, %s AS raw_markdown, %s AS normalized_markdown,
-                                          %s AS frontmatter_yaml, PARSE_JSON(%s) AS frontmatter_json, %s AS body_markdown,
-                                          PARSE_JSON(%s) AS sections_json, PARSE_JSON(%s) AS tables_json, PARSE_JSON(%s) AS code_blocks_json,
-                                          PARSE_JSON(%s) AS images_json, PARSE_JSON(%s) AS links_json) AS src
+                                          %s AS frontmatter_yaml, %s::jsonb AS frontmatter_json, %s AS body_markdown,
+                                          %s::jsonb AS sections_json, %s::jsonb AS tables_json, %s::jsonb AS code_blocks_json,
+                                          %s::jsonb AS images_json, %s::jsonb AS links_json) AS src
                             ON target.id = src.id
                             WHEN MATCHED THEN UPDATE SET raw_markdown = src.raw_markdown
                             WHEN NOT MATCHED THEN INSERT (id, document_id, workflow_version_id, raw_markdown, normalized_markdown, frontmatter_yaml, frontmatter_json, body_markdown, sections_json, tables_json, code_blocks_json, images_json, links_json)
@@ -417,16 +417,16 @@ class OWDLoader:
                             (cont["id"], cont["document_id"], cont["workflow_version_id"], cont["raw_markdown"], cont["normalized_markdown"], cont.get("frontmatter_yaml"), json.dumps(cont.get("frontmatter_json", {})), cont["body_markdown"], json.dumps(cont.get("sections_json", [])), json.dumps(cont.get("tables_json", [])), json.dumps(cont.get("code_blocks_json", [])), json.dumps(cont.get("images_json", [])), json.dumps(cont.get("links_json", []))),
                         )
                     if contents:
-                        tables_updated.append("WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_contents")
+                        tables_updated.append("KNOWLEDGE_STUDIO.knowledge_document_contents")
 
                     # 18. Insert Knowledge Document AI Metadata
                     for ai in ai_metadata:
                         cur.execute(
                             """
-                            MERGE INTO WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_ai_metadata AS target
+                            MERGE INTO KNOWLEDGE_STUDIO.knowledge_document_ai_metadata AS target
                             USING (SELECT %s AS id, %s AS document_id, %s AS workflow_version_id, %s AS reading_time_minutes, %s AS word_count,
                                           %s AS sentence_count, %s AS paragraph_count, %s AS complexity_score, %s AS risk_score, %s AS summary,
-                                          PARSE_JSON(%s) AS keywords, PARSE_JSON(%s) AS entities, %s AS language_detected, %s AS embedding_model,
+                                          %s::jsonb AS keywords, %s::jsonb AS entities, %s AS language_detected, %s AS embedding_model,
                                           %s AS embedding_version, %s AS chunk_count, %s AS average_chunk_size, %s AS embedding_status,
                                           %s AS evaluation_score, %s AS confidence_score) AS src
                             ON target.id = src.id
@@ -437,13 +437,13 @@ class OWDLoader:
                             (ai["id"], ai["document_id"], ai["workflow_version_id"], ai["reading_time_minutes"], ai["word_count"], ai["sentence_count"], ai["paragraph_count"], ai["complexity_score"], ai["risk_score"], ai.get("summary"), json.dumps(ai.get("keywords", [])), json.dumps(ai.get("entities", {})), ai["language_detected"], ai["embedding_model"], ai["embedding_version"], ai["chunk_count"], ai["average_chunk_size"], ai["embedding_status"], ai["evaluation_score"], ai["confidence_score"]),
                         )
                     if ai_metadata:
-                        tables_updated.append("WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_ai_metadata")
+                        tables_updated.append("KNOWLEDGE_STUDIO.knowledge_document_ai_metadata")
 
                     # 19. Insert Knowledge Document Chunks
                     for chk in chunks:
                         cur.execute(
                             """
-                            MERGE INTO WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_chunks AS target
+                            MERGE INTO KNOWLEDGE_STUDIO.knowledge_document_chunks AS target
                             USING (SELECT %s AS id, %s AS document_id, %s AS workflow_version_id, %s AS state_id, %s AS step_id,
                                           %s AS chunk_order, %s AS character_count, %s AS token_count, %s AS chunk_content, %s AS embedding_ref,
                                           %s AS vector_status, %s AS chunk_hash, %s AS chunk_type, %s AS section_name) AS src
@@ -455,13 +455,13 @@ class OWDLoader:
                             (chk["id"], chk["document_id"], chk["workflow_version_id"], chk.get("state_id"), chk.get("step_id"), chk["chunk_order"], chk["character_count"], chk["token_count"], chk["chunk_content"], chk["embedding_ref"], chk["vector_status"], chk["chunk_hash"], chk["chunk_type"], chk.get("section_name")),
                         )
                     if chunks:
-                        tables_updated.append("WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_chunks")
+                        tables_updated.append("KNOWLEDGE_STUDIO.knowledge_document_chunks")
 
                     # 20. Insert Knowledge Document Lineage
                     for lin in lineage:
                         cur.execute(
                             """
-                            MERGE INTO WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_lineage AS target
+                            MERGE INTO KNOWLEDGE_STUDIO.knowledge_document_lineage AS target
                             USING (SELECT %s AS id, %s AS document_id, %s AS workflow_version_id, %s AS stage_file_uri, %s AS source_markdown_hash,
                                           %s AS parser_name, %s AS ast_hash, %s AS compiler_name, %s AS loader_name, %s AS status, %s AS executed_by, %s AS execution_notes) AS src
                             ON target.id = src.id
@@ -472,7 +472,7 @@ class OWDLoader:
                             (lin["id"], lin["document_id"], lin["workflow_version_id"], lin["stage_file_uri"], lin["source_markdown_hash"], lin["parser_name"], lin["ast_hash"], lin["compiler_name"], lin["loader_name"], lin["status"], lin["executed_by"], lin.get("execution_notes")),
                         )
                     if lineage:
-                        tables_updated.append("WORKMATE_AI.KNOWLEDGE_STUDIO.knowledge_document_lineage")
+                        tables_updated.append("KNOWLEDGE_STUDIO.knowledge_document_lineage")
 
                     cur.execute(
                         """
@@ -494,7 +494,7 @@ class OWDLoader:
                         raise OWDLoaderException("Post-load workflow invariants failed; transaction will be rolled back.")
                     cur.execute("COMMIT")
 
-            logger.info(f"[LOADER SUCCESS] Successfully loaded OWD v1.1 '{wf['workflow_code']}' into Snowflake ({len(set(tables_updated))} tables updated).")
+            logger.info(f"[LOADER SUCCESS] Successfully loaded OWD v1.1 '{wf['workflow_code']}' into PostgreSQL ({len(set(tables_updated))} tables updated).")
             return LoadResult(
                 success=True,
                 workflow_id=wf["id"],
@@ -509,5 +509,5 @@ class OWDLoader:
                         rollback_cur.execute("ROLLBACK")
                 except Exception as rollback_exc:
                     logger.debug("Loader rollback was already handled by the connection boundary: %s", rollback_exc)
-            logger.error(f"[LOADER ERROR] Failed to load compiled workflow into Snowflake: {str(e)}")
-            raise OWDLoaderException(message=f"Failed to persist OWD workflow in Snowflake: {str(e)}") from e
+            logger.error(f"[LOADER ERROR] Failed to load compiled workflow into PostgreSQL: {str(e)}")
+            raise OWDLoaderException(message=f"Failed to persist OWD workflow in PostgreSQL: {str(e)}") from e
