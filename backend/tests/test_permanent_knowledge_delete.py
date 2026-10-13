@@ -63,20 +63,23 @@ def test_permanent_delete_rolls_back_when_a_child_delete_fails(mock_connection):
     assert not any(call.args[0] == "COMMIT" for call in cursor.execute.call_args_list)
 
 
-@patch("app.services.ingestion.get_snowflake_connection")
-def test_staged_file_cleanup_accepts_only_exact_non_root_paths(mock_connection):
+@patch("app.services.ingestion.get_postgres_connection")
+def test_staged_file_cleanup_accepts_only_scoped_postgres_object_uris(mock_connection):
     manager, cursor = _mock_connection()
-    cursor.fetchall.return_value = [("source.md", "removed")]
     mock_connection.return_value = manager
+    object_id = "a" * 32
 
     removed = IngestionService.remove_staged_files(
-        ["@RAW_OWD_STAGE/SOP_INB_101/v1/source.md"]
+        [f"pgobj:{object_id}", f"pgobj:{object_id}"],
+        department_id="dept_inbound",
     )
 
     assert removed == 1
-    cursor.execute.assert_called_once_with(
-        "REMOVE @RAW_OWD_STAGE/SOP_INB_101/v1/source.md"
-    )
+    statement, params = cursor.execute.call_args.args
+    assert "DELETE FROM shared.source_objects" in statement
+    assert "AND department_id = %s" in statement
+    assert params == ([object_id], "dept_inbound")
 
-    with pytest.raises(WorkMateException):
-        IngestionService.remove_staged_files(["@RAW_OWD_STAGE"])
+    for invalid in ("@RAW_OWD_STAGE", "pgobj:../secrets", "pgobj:", "pgobj:abc"):
+        with pytest.raises(WorkMateException):
+            IngestionService.remove_staged_files([invalid], department_id="dept_inbound")
