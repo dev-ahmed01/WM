@@ -136,7 +136,12 @@ def main():
             admin.get_by_role("button", name="Archive document").click()
             expect(admin.get_by_text("ARCHIVED", exact=True)).to_be_visible(timeout=30000)
             search_sources(employee, expected=False)
-            print("BROWSER PASSED: login, real draft, approval, scoped search, archive, role forbidden.")
+            logout = employee.request.post(
+                f"{BASE}/api/session/logout", headers={"Origin": BASE}
+            )
+            assert logout.status == 200
+            assert employee.evaluate("async () => (await fetch('/api/session/me')).status") == 401
+            print("BROWSER PASSED: HttpOnly sessions, CSRF, logout, draft/approval, department isolation and archive.")
         except Exception:
             for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider)]:
                 if page is not None:
