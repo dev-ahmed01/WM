@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const ACCESS_COOKIE = 'wm_access';
@@ -59,9 +60,19 @@ export function jsonError(status: number, code: string, message: string) {
   });
 }
 
-export async function exchangeRefresh(request: NextRequest) {
-  const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
-  if (!refresh) return null;
+type RotatedSession = { access: string; refresh?: string };
+type RefreshFlights = Map<string, Promise<RotatedSession | null>>;
+
+// Different Next.js route bundles can import this module independently.
+// A Node-process-wide map coalesces simultaneous cookie refreshes on the same
+// replica without ever persisting the bearer material or logging it.
+const runtimeScope = globalThis as typeof globalThis & {
+  __wmRefreshFlights?: RefreshFlights;
+};
+const refreshFlights = runtimeScope.__wmRefreshFlights ?? new Map<string, Promise<RotatedSession | null>>();
+runtimeScope.__wmRefreshFlights = refreshFlights;
+
+async function performExchange(refresh: string): Promise<RotatedSession | null> {
   try {
     const response = await fetch(backendUrl('/auth/refresh'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -77,4 +88,22 @@ export async function exchangeRefresh(request: NextRequest) {
   } catch {
     return null;
   }
+}
+
+export async function exchangeRefresh(request: NextRequest): Promise<RotatedSession | null> {
+  const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
+  if (!refresh) return null;
+  const key = createHash('sha256').update(refresh).digest('hex');
+  const existing = refreshFlights.get(key);
+  if (existing) return existing;
+  const task = performExchange(refresh);
+  refreshFlights.set(key, task);
+  void task.finally(() => {
+    // Grace solely for simultaneous same-process requests with the same
+    // original cookie. PostgreSQL still rejects direct refresh-token replays.
+    setTimeout(() => {
+      if (refreshFlights.get(key) === task) refreshFlights.delete(key);
+    }, 2500).unref();
+  });
+  return task;
 }
