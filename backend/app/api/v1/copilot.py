@@ -491,6 +491,22 @@ def _recorded_completion_text(completed: list[int]) -> str:
     )
 
 
+def _voice_needs_confirmation(message: str, confidence: float, active_session: Any) -> bool:
+    """Never let uncertain speech directly attest or move an operational workflow."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    if confidence < 0.80:
+        return True
+    if active_session and getattr(active_session, "status", "") in {"active", "paused"}:
+        return True
+    if _is_step_completion_message(message) or _completion_through_target(message):
+        return True
+    if _requested_step_jump(message) or _claims_previous_steps_without_target(message):
+        return True
+    if re.match(r"^(?:yes|yeah|yep|no|confirm|start|begin|pause|resume|stop|cancel|abandon|next|advance|skip|finish|complete)(?:\\b|$)", normalized):
+        return True
+    return False
+
+
 @router.post(
     "/voice",
     response_model=VoiceCopilotResponse,
@@ -616,6 +632,28 @@ async def copilot_voice(
             transcript, detected_language
         )
         translation_ms = round((time.perf_counter() - started) * 1000)
+
+        # Voice is never an unreviewed step-completion or workflow decision
+        # authority. Return the captured transcript for the employee to edit
+        # and submit explicitly as text before a consequential transition.
+        active_voice_session = await run_in_threadpool(
+            WorkflowStateService.get_current_session, resolved_conversation_id,
+        )
+        if _voice_needs_confirmation(translated_transcript, transcription_confidence, active_voice_session):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": "VOICE_CONFIRM_TRANSCRIPT",
+                    "message": "Review the transcript and press Send to confirm. No workflow action was recorded.",
+                    "details": {
+                        "transcript": transcript,
+                        "translated_transcript": translated_transcript,
+                        "language": detected_language,
+                        "confidence": transcription_confidence,
+                        "conversation_id": resolved_conversation_id,
+                    },
+                },
+            )
 
         copilot_response = await copilot_message(
             CopilotMessageRequest(
