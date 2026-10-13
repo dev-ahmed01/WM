@@ -16,6 +16,20 @@ class TranscriptionResult(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+
+class VoiceTranscriptPreview(BaseModel):
+    """Speech-to-text only; no conversation or workflow write occurs."""
+
+    transcript: str = Field(min_length=1)
+    suggested_text: str = Field(min_length=1)
+    detected_language: Literal["en", "hi"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    transcription_ms: int = Field(ge=0)
+    translation_ms: int = Field(ge=0)
+    requires_confirmation: Literal[True] = True
+    warning: str = "Review names, numbers, units, and safety terms before sending."
+
+
 class VoiceCopilotResponse(BaseModel):
     language: str
     transcript: str
