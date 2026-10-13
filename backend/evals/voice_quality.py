@@ -47,7 +47,7 @@ def graphemes(value: str) -> list[str]:
 
 def edit_counts(reference: list[str], candidate: list[str]) -> dict[str, int]:
     """Levenshtein with explicit S/D/I counts; deterministic tie handling."""
-    old = [(i, 0, i, 0) for i in range(len(candidate) + 1)]
+    old = [(i, 0, 0, i) for i in range(len(candidate) + 1)]
     for ref in reference:
         new = [(old[0][0] + 1, old[0][1], old[0][2] + 1, old[0][3])]
         for j, hyp in enumerate(candidate, 1):
