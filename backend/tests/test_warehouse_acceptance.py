@@ -74,3 +74,7 @@ def test_live_runner_opt_in_and_label_count(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKMATE_EVAL_LIVE", "1")
     with pytest.raises(ValueError, match="cohort"):
         run(Namespace(manifest=path,min_cases=100))
+    with pytest.raises(ValueError, match="representation"):
+        run(Namespace(manifest=path,min_cases=0,min_per_language=1,min_negative=0))
+    with pytest.raises(ValueError, match="negative"):
+        run(Namespace(manifest=path,min_cases=0,min_per_language=0,min_negative=2))
