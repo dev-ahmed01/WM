@@ -61,9 +61,12 @@ state. Administrators may separately save extracted documents as `DRAFT` via
 `POST /api/v1/knowledge/references`; originals are staged and extracted chunks
 are transactionally stored in the new Snowflake reference tables. Only explicit
 administrator `approve` makes them available to department-scoped read-only
-`/knowledge/references/search`. Archiving revokes search access. This source
-search does not yet feed the Copilot answer orchestrator or the executable OWD
-graph. Scanned PDFs/images are not OCR-supported yet.
+`/knowledge/references/search`. Archiving revokes search access. Approved reference evidence now feeds Copilot only when the caller explicitly selects
+`mode="reference"` on `/copilot/message`. That mode returns an exact cited source span
+with document title and character offsets; it never initiates, completes, or advances
+an OWD workflow. The default `mode="workflow"` continues the existing SOP
+orchestration and response validation. The reference mode is currently extractive
+and text-only; semantic generation and voice-mode routing are not enabled. Scanned PDFs/images are not OCR-supported yet.
 
 The compiler is deterministic. The grammar is implemented under
 `backend/app/compiler/parsers/`; `OWDParser` builds a unified AST, `OWDValidator` enforces the
@@ -126,7 +129,7 @@ Before release:
 
 ## Explicitly out of scope
 
-- OCR, image-only PDF processing, automatic document-to-workflow conversion, and integration of reference material into Copilot's answer generation. Approved excerpts are currently available through dedicated read-only source search.
+- OCR, image-only PDF processing, automatic document-to-workflow conversion, unsupervised LLM paraphrasing of reference material, and reference-mode voice transcription. Approved excerpts are available in dedicated search and in explicitly read-only Copilot reference mode.
 - Managed Snowflake AI/search services.
 - A second database, vector store, or ingestion pipeline.
 - Jira or other ticketing integration unless separately authorized.
