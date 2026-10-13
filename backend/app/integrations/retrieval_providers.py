@@ -261,7 +261,7 @@ class SqlLexicalRetrievalProvider:
             return []
         statuses = allowed_statuses()
         status_placeholders = ", ".join(["%s"] * len(statuses))
-        score_parts = ["IFF(LOWER(sm.search_content) LIKE %s, 1, 0)" for _ in terms]
+        score_parts = ["CASE WHEN LOWER(sm.search_content) LIKE %s THEN 1 ELSE 0 END" for _ in terms]
         where_parts = ["LOWER(sm.search_content) LIKE %s" for _ in terms]
         # Long natural-language questions contain contextual terms that should
         # not dilute several strong lexical matches below the safety gate.
