@@ -22,7 +22,15 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   const contentType = request.headers.get('content-type');
   if (contentType) safeHeaders.set('Content-Type', contentType);
   safeHeaders.set('Authorization', `Bearer ${token}`);
+  const maxBodyBytes = 26 * 1024 * 1024;
+  const declaredSize = Number(request.headers.get('content-length') || 0);
+  if (!Number.isFinite(declaredSize) || declaredSize > maxBodyBytes) {
+    return jsonError(413, 'BODY_TOO_LARGE', 'Upload exceeds the 26 MB proxy limit.');
+  }
   const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
+  if (body && body.byteLength > maxBodyBytes) {
+    return jsonError(413, 'BODY_TOO_LARGE', 'Upload exceeds the 26 MB proxy limit.');
+  }
   async function send(access: string) {
     safeHeaders.set('Authorization', `Bearer ${access}`);
     return fetch(dest, {
