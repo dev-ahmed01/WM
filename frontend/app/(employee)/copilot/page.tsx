@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, ShieldCheck, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceCopilotResponse, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { ApiError, apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceCopilotResponse, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { WorkflowRail } from '@/components/chat/WorkflowRail';
@@ -251,10 +251,28 @@ function CopilotContent() {
       // the visible answer latency on supported browsers.
       speechSynthesis.speak(spokenText, assistantMessageId, voice.language);
     } catch (error) {
-      const errorMessage = getErrorMessage(error, 'WorkMate could not process that recording. Please try again.');
-      setMessages((current) => [...current, {
-        id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
-      }]);
+      if (error instanceof ApiError && error.error_code === 'VOICE_CONFIRM_TRANSCRIPT') {
+        const transcript = String(error.details?.transcript || '').trim();
+        const translated = String(error.details?.translated_transcript || '').trim();
+        const language = String(error.details?.language || 'en');
+        const returnedConversation = String(error.details?.conversation_id || '');
+        if (returnedConversation) setConversationId(returnedConversation);
+        setDetectedLanguage(language);
+        setTranscriptPreview(transcript);
+        // A transcript is a draft, never an automatic workflow attestation.
+        setInput(translated || transcript);
+        setAnswerMode('workflow');
+        setMessages((current) => [...current, {
+          id: createMessageId('voice-review'),
+          sender: 'assistant',
+          content: 'I heard: “' + (transcript || translated) + '”. Check the text in the message field, correct it if needed, then press Send to confirm. No workflow action was recorded.',
+        }]);
+      } else {
+        const errorMessage = getErrorMessage(error, 'WorkMate could not process that recording. Please try again.');
+        setMessages((current) => [...current, {
+          id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
+        }]);
+      }
     } finally {
       setIsVoiceProcessing(false);
       setIsSending(false);
