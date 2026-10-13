@@ -103,7 +103,7 @@ class TestOWDCompilerSubsystem(unittest.TestCase):
         self.assertEqual(len(compiled.rules_payload), 1)
         self.assertEqual(len(compiled.search_metadata_payload), 3)
 
-    @patch("app.compiler.loader.get_snowflake_connection")
+    @patch("app.compiler.loader.get_postgres_connection")
     def test_loader_module(self, mock_get_conn):
         """Tests that OWDLoader executes database MERGE queries."""
         mock_conn = MagicMock()
