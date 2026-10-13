@@ -355,7 +355,7 @@ class KnowledgeRepository:
         if not updates:
             return KnowledgeRepository.get_item_by_id(item_id)
 
-        updates.append("updated_at = CURRENT_TIMESTAMP()")
+        updates.append("updated_at = CURRENT_TIMESTAMP")
         params.append(item_id)
         query = f"UPDATE KNOWLEDGE_STUDIO.workflows SET {', '.join(updates)} WHERE id = %s"
 
@@ -401,7 +401,7 @@ class KnowledgeRepository:
 
     @staticmethod
     def update_version_status(version_id: str, status: str) -> bool:
-        published_at_clause = ", published_at = CURRENT_TIMESTAMP()" if status.lower() == "published" else ""
+        published_at_clause = ", published_at = CURRENT_TIMESTAMP" if status.lower() == "published" else ""
         query = f"UPDATE KNOWLEDGE_STUDIO.workflow_versions SET status = %s{published_at_clause} WHERE id = %s"
 
         try:
