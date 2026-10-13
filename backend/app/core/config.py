@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     # Production JWT claims are revalidated against PostgreSQL on every request.
     # Development unit suites may disable this, but production cannot.
     AUTH_REVALIDATE_DB: bool = False
+    AUTH_SESSION_STORE_ENABLED: bool = False
+    AUTH_RATE_LIMIT_ENABLED: bool = False
+    AUTH_RATE_MAX_ATTEMPTS: int = Field(default=10, ge=3, le=100)
+    AUTH_RATE_WINDOW_SECONDS: int = Field(default=900, ge=60, le=3600)
+    POSTGRES_RLS_REFERENCES: bool = False
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
@@ -134,6 +139,12 @@ class Settings(BaseSettings):
         if self.APP_ENV.strip().lower() in {"prod", "production"}:
             if not self.AUTH_REVALIDATE_DB:
                 raise ValueError("Production requires AUTH_REVALIDATE_DB=true")
+            missing_controls = [key for key in (
+                "AUTH_SESSION_STORE_ENABLED", "AUTH_RATE_LIMIT_ENABLED",
+                "POSTGRES_RLS_REFERENCES"
+            ) if not getattr(self, key)]
+            if missing_controls:
+                raise ValueError("Production requires security controls: " + ", ".join(missing_controls))
 
             protected_values = {
                 "DATABASE_URL": self.DATABASE_URL,
