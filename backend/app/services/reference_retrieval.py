@@ -47,10 +47,20 @@ _CANONICAL = {word: group[0] for group in _GROUPS for word in group}
 
 
 def tokens(text: str) -> tuple[str, ...]:
+    """Unicode NFKC tokens retaining combining marks in Devanagari words."""
     normalized = unicodedata.normalize("NFKC", text or "").casefold()
+    words = []
+    buffer = []
+    for char in normalized:
+        if unicodedata.category(char)[:1] in {"L", "N", "M"}:
+            buffer.append(char)
+        elif buffer:
+            words.append("".join(buffer))
+            buffer = []
+    if buffer:
+        words.append("".join(buffer))
     return tuple(dict.fromkeys(
-        word for word in re.findall(r"[^\W_]+", normalized, flags=re.UNICODE)
-        if len(word) >= 2 and word not in _STOPWORDS
+        word for word in words if len(word) >= 2 and word not in _STOPWORDS
     ))
 
 
