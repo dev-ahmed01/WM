@@ -6,17 +6,20 @@ from pathlib import Path
 
 import psycopg
 
-BASELINE = Path(__file__).resolve().parents[1] / "backend" / "migrations" / "postgres" / "001_baseline.sql"
+MIGRATIONS = Path(__file__).resolve().parents[1] / "backend" / "migrations" / "postgres"
 
 
 def migrate(dsn: str) -> None:
     if not dsn.startswith(("postgresql://", "postgres://")):
         raise ValueError("DATABASE_URL must target PostgreSQL")
-    source = BASELINE.read_text(encoding="utf-8")
+    files = sorted(MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
+    if not files:
+        raise RuntimeError("No PostgreSQL migrations found")
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
-            # A failed DDL statement rolls back the entire baseline.
-            cur.execute(source, prepare=False)
+            # One transaction for all migrations; failure never leaves half a schema.
+            for path in files:
+                cur.execute(path.read_text(encoding="utf-8"), prepare=False)
 
 
 if __name__ == "__main__":
@@ -24,4 +27,4 @@ if __name__ == "__main__":
     if not dsn:
         raise SystemExit("Set DATABASE_URL. Refusing implicit production configuration.")
     migrate(dsn)
-    print("PostgreSQL baseline applied successfully")
+    print("PostgreSQL schema and analytics views applied successfully")
