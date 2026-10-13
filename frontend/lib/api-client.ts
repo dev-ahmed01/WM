@@ -22,8 +22,10 @@ export class ApiError extends Error {
 export interface Citation {
   document_id: string;
   document_title: string;
-  version_number: number;
+  version_number: number | null;
   step_number?: number | string;
+  source_type?: 'workflow' | 'reference';
+  section_anchor?: string | null;
   chunk_id: string;
   excerpt: string;
   state_id?: string | null;
