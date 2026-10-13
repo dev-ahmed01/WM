@@ -180,6 +180,15 @@ class WorkflowSessionRepository:
                                 """,
                                 (execution_id, session_id, step_id, json.dumps(session_context), now),
                             )
+                        cur.execute(
+                            """INSERT INTO shared.audit_logs
+                               (id, user_id, role, action, resource, ip_address,
+                                status_code, created_at)
+                               SELECT %s, s.user_id, 'workflow', 'WORKFLOW_PROGRESS',
+                                      %s, 'internal', 200, CURRENT_TIMESTAMP
+                               FROM WORKMATE_COPILOT.workflow_sessions s WHERE s.id=%s""",
+                            (uuid.uuid4().hex, f"session:{session_id}:step:{step_id or '-'}", session_id),
+                        )
                         cur.execute("COMMIT")
                     except Exception:
                         cur.execute("ROLLBACK")
