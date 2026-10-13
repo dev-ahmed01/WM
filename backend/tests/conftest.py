@@ -29,4 +29,6 @@ def block_unmocked_postgres_connections(monkeypatch):
         del args, kwargs
         raise AssertionError("Unit tests must not open live PostgreSQL connections")
 
+    if os.getenv("WORKMATE_RUN_LIVE_TESTS") == "1":
+        return
     monkeypatch.setattr("psycopg.connect", blocked)
