@@ -29,7 +29,9 @@ def test_language_stratified_report_is_not_production_accuracy():
     assert report["overall"]["wer"] > 0
     assert report["by_language"]["en"]["language_detection_accuracy"] == 1
     assert report["by_language"]["hinglish"]["language_detection_accuracy"] is None
-    assert "transcript" not in json.dumps(report)
+    exported = json.dumps(report, ensure_ascii=False)
+    for private_text in ("Inspect the security seal", "पैकेज क्षतिग्रस्त है", "Pallet का barcode"):
+        assert private_text not in exported
     assert "accuracy score" in report["metric_notes"]
 
 
