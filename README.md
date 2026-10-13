@@ -5,7 +5,7 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 ## Technology
 
 - **Backend:** FastAPI on Python 3.11+
-- **Data:** Snowflake relational storage and OWD source Stage only
+- **Data:** PostgreSQL 16 relational storage and department-scoped source objects
 - **Local AI:** self-hosted Ollama embeddings and grounded generation, with SQL/extractive fallbacks
 - **Frontend:** Next.js, React, TypeScript, and Tailwind CSS
 - **Orchestration:** n8n for triggers, retries, approvals, and notifications only
@@ -17,12 +17,12 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 | --- | --- |
 | `backend/app/api` | Versioned FastAPI routes |
 | `backend/app/services` | Ingestion, retrieval, validation, workflow state, and analytics logic |
-| `backend/app/repositories` | Snowflake persistence boundaries |
+| `backend/app/repositories` | PostgreSQL persistence boundaries |
 | `backend/app/compiler` | Deterministic OWD parser, validator, compiler, and loader |
 | `backend/tests` | Backend unit and orchestration regression tests |
 | `frontend/app` | Next.js pages and route groups |
 | `frontend/components` | Reusable UI, chat, dashboard, and upload components |
-| `analytics/migrations` | Ordered Snowflake schema and service migrations |
+| `analytics/migrations` | Legacy Snowflake migration archive; new schema lives in `backend/migrations/postgres` |
 | `automation` | Optional n8n notification workflow definitions |
 | `ai-services` | Executable grounding evaluations |
 | `scripts` | Schema deployment, OWD loading, and verification CLIs |
@@ -35,7 +35,7 @@ Generated deployment reports belong in the ignored `logs/` directory. TypeScript
 - Docker with Docker Compose
 - Node.js 20.9+ and npm
 - Python 3.11+
-- A Snowflake account with database, stage, and least-privilege runtime access
+- PostgreSQL 16 (included in Docker Compose) with an application database
 - Enough local disk/RAM for the configured Ollama models
 
 ## Environment setup
@@ -46,7 +46,7 @@ Create the ignored backend runtime file from the sanitized template:
 cp backend/.env.example backend/.env
 ```
 
-Fill every blank credential in `backend/.env`. Use a least-privilege Snowflake runtime role; do not place real credentials in `.env.example` or any tracked document.
+Fill every blank credential in `backend/.env`. Configure the PostgreSQL DATABASE_URL for the correct environment; do not place real credentials in `.env.example` or any tracked document.
 
 For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env.local` and set its public API base URL.
 
@@ -105,14 +105,19 @@ The frontend is available at <http://localhost:3000>.
 
 ## Database setup and test users
 
-Deploy the Snowflake schema with the deployment CLI, then seed local test identities with the single canonical seed script:
+PostgreSQL 16 is provisioned by Docker Compose. Migrations are applied during backend startup. For a manual setup with `DATABASE_URL` set:
 
 ```bash
-PYTHONPATH=.:backend python scripts/deploy_owd_schema.py
-PYTHONPATH=.:backend python backend/scripts/seed_test_users.py
+python scripts/migrate_postgres.py
 ```
 
-These commands access Snowflake using `backend/.env`. Review the SQL migrations and role grants before running them outside a development account.
+Create the first administrator using **explicit environment variables**, never a fixed development password: `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_DEPARTMENT_ID` and `BOOTSTRAP_DEPARTMENT_NAME`.
+
+```bash
+PYTHONPATH=backend python scripts/bootstrap_postgres.py
+```
+
+See [PostgreSQL cutover](docs/postgres_cutover.md) for detailed setup, data-retention limitations, and security gates.
 
 ## Validation
 
@@ -126,9 +131,7 @@ npm run build
 ```
 
 See [`docs/local_ai_runtime.md`](docs/local_ai_runtime.md) for provider, index, grounding, model,
-health, hardware, and fallback behavior. Use the
-[`Snowflake runtime runbook`](docs/snowflake_runtime_runbook.md) for database/stage and live
-same-/cross-department validation.
+health, hardware, and fallback behavior. Use the [PostgreSQL cutover guide](docs/postgres_cutover.md) for database setup and live authorization verification.
 
 See [`docs/multilingual_voice.md`](docs/multilingual_voice.md) for Faster-Whisper, Ollama
 translation, Piper voices, language configuration, protected audio delivery, and voice analytics.

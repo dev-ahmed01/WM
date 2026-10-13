@@ -76,15 +76,12 @@ class QueryResolutionRepository:
     @staticmethod
     def list_confirmed(department_id: str, limit: int = 250) -> List[Dict[str, Any]]:
         query = """
-            SELECT id, normalized_query, original_query, translated_query,
+            SELECT DISTINCT ON (normalized_query, workflow_version_id)
+                   id, normalized_query, original_query, translated_query,
                    workflow_version_id, workflow_code, hit_count, updated_at
             FROM WORKMATE_COPILOT.query_resolution_memory
             WHERE department_id = %s AND resolution_status = 'CONFIRMED'
-            QUALIFY ROW_NUMBER() OVER (
-                PARTITION BY normalized_query, workflow_version_id
-                ORDER BY updated_at DESC
-            ) = 1
-            ORDER BY hit_count DESC, updated_at DESC
+            ORDER BY normalized_query, workflow_version_id, updated_at DESC
             LIMIT %s
         """
         try:

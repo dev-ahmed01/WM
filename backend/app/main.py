@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, requests_logger
-from app.core.database import ping_snowflake_connection
+from app.core.database import ping as ping_postgres_connection
 from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
@@ -142,7 +142,7 @@ async def root() -> Dict[str, Any]:
 @app.get("/health", tags=["Health"])
 async def health_check() -> Dict[str, Any]:
     """Health check endpoint validating system status and database connectivity."""
-    db_connected = ping_snowflake_connection()
+    db_connected = ping_postgres_connection()
     return {
         "status": "ok" if db_connected else "degraded",
         "database": "connected" if db_connected else "unreachable",

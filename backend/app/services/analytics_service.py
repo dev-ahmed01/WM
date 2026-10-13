@@ -29,7 +29,7 @@ class AnalyticsService:
         query = """
             INSERT INTO INTELLIGENCE_HUB.analytics_events
                 (id, event_type, conversation_message_id, workflow_version_id, payload, created_at)
-            SELECT %s, %s, %s, %s, PARSE_JSON(%s), %s
+            SELECT %s, %s, %s, %s, %s::jsonb, %s
         """
         try:
             with get_snowflake_connection() as conn:

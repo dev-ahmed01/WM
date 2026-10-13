@@ -210,10 +210,11 @@ def process_single_owd(
                 file_path.read_bytes(),
                 file_path.name,
                 f"{workflow_code}/v{version_number}/{source_hash[:12]}",
+                department_id=department_id,
             )
     except Exception as exc:
         message = getattr(exc, "message", str(exc))
-        logger.error(f"Snowflake preparation error for '{relative_path}': {message}")
+        logger.error(f"PostgreSQL preparation error for '{relative_path}': {message}")
         return {
             "file_path": relative_path,
             "title": file_path.stem.replace("_", " ").title(),
@@ -226,7 +227,7 @@ def process_single_owd(
             "version": version_number,
             "hash": source_hash,
             "status": "FAILED",
-            "reason": f"Snowflake preparation error: {message}",
+            "reason": f"PostgreSQL preparation error: {message}",
             "validation_errors": [],
             "compilation_errors": [],
             "snowflake_errors": [message],
