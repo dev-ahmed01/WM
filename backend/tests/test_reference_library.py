@@ -204,3 +204,21 @@ def test_stage_rejects_invalid_department_before_put():
 def test_extract_caps_document_text():
     with pytest.raises(DocumentExtractionError, match="1,000,000"):
         extract_document("large.txt", b"z" * 1_000_001)
+
+
+def test_approved_candidate_pool_is_scoped_and_defensively_filtered(monkeypatch):
+    cursor = Cursor(rows=[
+        ("doc1", "Receiving", "receiving", "c1",
+         "Inspect the damaged parcel and verify its seal.", 0, 0, 47, "APPROVED"),
+        ("doc2", "Payroll", "payroll", "c2",
+         "Sensitive payroll guidance not for receiving.", 0, 0, 45, "APPROVED"),
+        ("doc3", "Unapproved", "receiving", "c3",
+         "Draft receiving guidance is never searchable.", 0, 0, 45, "DRAFT"),
+    ])
+    patch_db(monkeypatch, cursor)
+    result = ReferenceDocumentRepository.list_approved_candidates("receiving", limit=50)
+    assert [entry["chunk_id"] for entry in result] == ["c1"]
+    sql, params = cursor.statements[0]
+    assert "d.status = 'APPROVED'" in sql
+    assert "d.department_id = %s AND c.department_id = %s" in sql
+    assert params == ("receiving", "receiving", 50)
