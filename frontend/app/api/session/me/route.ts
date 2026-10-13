@@ -10,10 +10,11 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(8000),
     });
     let refreshed = false;
+    let rotatedRefresh: string | undefined;
     if (upstream.status === 401) {
       const next = await exchangeRefresh(request);
       if (next) {
-        token = next; refreshed = true;
+        token = next.access; rotatedRefresh = next.refresh; refreshed = true;
         upstream = await fetch(backendUrl('/auth/me'), {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
           signal: AbortSignal.timeout(8000),
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       sub: profile.user_id, role: profile.role, department_id: profile.department_id,
       exp: Math.floor(Date.now() / 1000) + 1800,
     }, { headers: { 'Cache-Control': 'no-store' } });
-    if (refreshed && token) setAuthCookies(reply, token);
+    if (refreshed && token) setAuthCookies(reply, token, rotatedRefresh);
     return reply;
   } catch {
     return jsonError(503, 'AUTH_UNAVAILABLE', 'Account verification unavailable.');
