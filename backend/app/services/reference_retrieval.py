@@ -80,6 +80,19 @@ def lexical_score(query: str, passage: str, title: str = "") -> float:
     return round(min(1.0, coverage), 4)
 
 
+def script_affinity(question: str, evidence: str) -> float:
+    """Prefer the user's script on ties; never block cross-language evidence."""
+    def fraction(value: str) -> float:
+        letters = [ch for ch in value if unicodedata.category(ch).startswith("L")]
+        if not letters:
+            return 0.0
+        return sum("\\u0900" <= ch <= "\\u097f" for ch in letters) / len(letters)
+    q, e = fraction(question), fraction(evidence)
+    if 0.20 < q < 0.80:
+        return 0.5  # Mixed-script questions should not be pinned to one script.
+    return 1.0 if (q >= 0.5) == (e >= 0.5) else 0.0
+
+
 def authorized(source: Mapping[str, Any], department_id: str) -> bool:
     return bool(
         source.get("department_id") == department_id
@@ -103,7 +116,9 @@ def rerank_lexical(query: str, sources: Sequence[Mapping[str, Any]], department_
             query, str(source["excerpt"]), str(source["document_title"])
         )
         value["semantic_score"] = None
-        value["rank_score"] = value["lexical_score"]
+        value["rank_score"] = round(
+            0.92 * value["lexical_score"] + 0.08 * script_affinity(query, str(source["excerpt"])), 4
+        )
         value["retrieval_method"] = "lexical"
         if value["lexical_score"] <= 0.0:
             continue
@@ -181,7 +196,8 @@ class ReferenceRetrievalService:
                 # Conservative semantic-only candidate: discovery/review rather
                 # than a high-confidence quoted instruction.
                 row["rank_score"] = round(
-                    0.70 * lexical_strength + 0.30 * semantic, 4
+                    0.67 * lexical_strength + 0.28 * semantic
+                    + 0.05 * script_affinity(query, str(row["excerpt"])), 4
                 )
                 row["retrieval_method"] = "hybrid"
             # Keep unembedded lexical candidates eligible, never hide reliable
