@@ -160,8 +160,8 @@ class ReferenceDocumentRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE KNOWLEDGE_STUDIO.reference_documents
-                    SET status = %s, reviewed_by = %s, reviewed_at = CURRENT_TIMESTAMP(),
-                        updated_at = CURRENT_TIMESTAMP()
+                    SET status = %s, reviewed_by = %s, reviewed_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s AND department_id = %s AND status = %s""",
                     (to_status, reviewer_id, document_id, department_id, from_status),
                 )
