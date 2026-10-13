@@ -20,6 +20,9 @@ from fastapi import (
 
 from app.middleware.rbac_middleware import require_role
 from app.services.ingestion import IngestionService
+from app.services.document_extraction import (
+    DocumentExtractionError, MAX_DOCUMENT_BYTES, preview_document,
+)
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.compiler.pipeline import OWDCompilerPipeline
 from app.compiler.exceptions import OWDLoaderException, OWDParsingException
@@ -46,6 +49,35 @@ from app.models.knowledge import (
 ingestion_logger = logging.getLogger("ingestion_jobs")
 
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Studio"])
+
+
+@router.post(
+    "/preview",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def preview_knowledge_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """Extract text for administrator review; do not stage, compile, or publish."""
+    raw = await file.read(MAX_DOCUMENT_BYTES + 1)
+    try:
+        preview = preview_document(file.filename or "", raw)
+    except DocumentExtractionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "DOCUMENT_PREVIEW_FAILED",
+                "message": str(exc),
+                "details": None,
+            },
+        ) from exc
+    return {
+        "filename": preview.filename,
+        "file_type": preview.file_type,
+        "text_preview": preview.text_preview,
+        "total_characters": preview.total_characters,
+        "preview_truncated": preview.preview_truncated,
+        "warnings": preview.warnings,
+        "publication_status": "not_published",
+    }
 
 
 @router.post(
