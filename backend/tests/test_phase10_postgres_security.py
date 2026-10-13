@@ -68,10 +68,12 @@ def test_pg_reference_reader_role_cannot_cross_departments(monkeypatch):
 def test_pg_auth_refresh_replay_revoke_and_cross_worker_rate_limit(monkeypatch):
     suffix = uuid.uuid4().hex[:10]
     dept,user = f"auth_{suffix}", f"user_{suffix}"
+    peer_user = f"peer_{suffix}"
     email = f"{user}@example.test"
     password = "Synthetic-Auth-Secret-2026!"
     monkeypatch.setattr(settings, "AUTH_SESSION_STORE_ENABLED", True)
     monkeypatch.setattr(settings, "AUTH_RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(settings, "AUTH_RATE_IP_BUCKET_ENABLED", False)
     monkeypatch.setattr(settings, "AUTH_RATE_MAX_ATTEMPTS", 4)
     with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
         with conn.cursor() as cur:
@@ -79,6 +81,9 @@ def test_pg_auth_refresh_replay_revoke_and_cross_worker_rate_limit(monkeypatch):
                         (dept,dept.upper(),dept))
             cur.execute("""INSERT INTO security.users (id,email,hashed_password,department_id)
                            VALUES (%s,%s,%s,%s)""", (user,email,hash_password(password),dept))
+            cur.execute("""INSERT INTO security.users (id,email,hashed_password,department_id)
+                           VALUES (%s,%s,%s,%s)""",
+                        (peer_user,f"{peer_user}@example.test",hash_password(password),dept))
     try:
         with TestClient(app) as client:
             issued = client.post("/api/v1/auth/login",json={"email":email,"password":password})
@@ -100,10 +105,15 @@ def test_pg_auth_refresh_replay_revoke_and_cross_worker_rate_limit(monkeypatch):
                 assert denied.status_code == 401
             blocked = client.post("/api/v1/auth/login",json={"email":email,"password":password})
             assert blocked.status_code == 429
+            # Same proxy/client IP must not lock out another employee.
+            peer_login = client.post("/api/v1/auth/login", json={
+                "email":f"{peer_user}@example.test", "password":password,
+            })
+            assert peer_login.status_code == 200, peer_login.text
     finally:
         close_postgres_pool()
         with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM security.refresh_sessions WHERE user_id=%s", (user,))
-                cur.execute("DELETE FROM security.users WHERE id=%s", (user,))
+                cur.execute("DELETE FROM security.refresh_sessions WHERE user_id=ANY(%s)", ([user,peer_user],))
+                cur.execute("DELETE FROM security.users WHERE id=ANY(%s)", ([user,peer_user],))
                 cur.execute("DELETE FROM security.departments WHERE id=%s", (dept,))
