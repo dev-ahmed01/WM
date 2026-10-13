@@ -19,6 +19,7 @@ CREATE INDEX IF NOT EXISTS ix_pilot_feedback_department_time
 
 -- Runtime login must establish transaction-local tenant context.
 ALTER TABLE shared.pilot_feedback ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON shared.pilot_feedback TO workmate_scoped_reader;
 DO $$
 BEGIN
   IF NOT EXISTS (
