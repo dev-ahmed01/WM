@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, requests_logger
-from app.core.database import ping as ping_postgres_connection
+from app.core.database import ping as ping_postgres_connection, close_postgres_pool
 from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
@@ -40,7 +40,10 @@ async def lifespan(_: FastAPI):
             logger.info("Voice models ready in %.2fs", time.perf_counter() - started)
         except Exception:
             logger.exception("Voice model prewarming failed; continuing startup")
-    yield
+    try:
+        yield
+    finally:
+        close_postgres_pool()
 
 
 app = FastAPI(
