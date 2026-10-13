@@ -59,7 +59,7 @@ class IngestionService:
     validate_document = validate_upload
 
     @staticmethod
-    def stage_file(raw_bytes: bytes, filename: str, stage_prefix: str, stage_name: Optional[str] = None) -> str:
+    def stage_file(raw_bytes: bytes, filename: str, stage_prefix: str, stage_name: Optional[str] = None, allowed_extensions: Optional[frozenset[str]] = None) -> str:
         """Upload validated bytes to a unique, version-scoped Snowflake stage path."""
         stage_name = stage_name or settings.SNOWFLAKE_STAGE_NAME
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", stage_name):
@@ -70,8 +70,9 @@ class IngestionService:
         if not safe_prefix:
             raise WorkMateException(message="Invalid Snowflake stage prefix.")
         sanitized_filename = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename).name)
-        if not sanitized_filename.lower().endswith(".md"):
-            raise WorkMateException(message="Staged OWD source must have a .md extension.")
+        safe_extensions = allowed_extensions or frozenset({".md"})
+        if Path(sanitized_filename).suffix.lower() not in safe_extensions:
+            raise WorkMateException(message="Staged source format is not allowed.")
 
         try:
             with tempfile.TemporaryDirectory(prefix="workmate_owd_") as temp_dir:
@@ -106,6 +107,19 @@ class IngestionService:
         except Exception as exc:
             ingestion_logger.error(f"Failed to stage file in Snowflake: {str(exc)}")
             raise WorkMateException(message=f"Failed to stage document in Snowflake: {str(exc)}") from exc
+
+    @staticmethod
+    def stage_reference_file(raw_bytes: bytes, filename: str, department_id: str, document_id: str) -> str:
+        """Stage a validated reference source in an isolated department prefix."""
+        from app.services.document_extraction import SUPPORTED_DOCUMENT_EXTENSIONS
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", department_id):
+            raise WorkMateException(message="Invalid reference department identifier.")
+        if not re.fullmatch(r"[0-9a-f]{32}", document_id):
+            raise WorkMateException(message="Invalid reference document identifier.")
+        return IngestionService.stage_file(
+            raw_bytes, filename, f"reference/{department_id}/{document_id}",
+            allowed_extensions=SUPPORTED_DOCUMENT_EXTENSIONS,
+        )
 
     stage_file_in_snowflake = stage_file
 

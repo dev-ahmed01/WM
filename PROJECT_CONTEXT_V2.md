@@ -55,9 +55,15 @@ Employee text or voice query
 
 ## OWD Markdown
 
-An administrator-only `POST /api/v1/knowledge/preview` performs bounded, non-persistent
-text extraction on common formats. It does not write to Snowflake, index Copilot content,
-or generate validated workflows. Scanned PDFs/images are not OCR-supported yet.
+An administrator-only `POST /api/v1/knowledge/preview` performs bounded,
+non-persistent text extraction on common formats. It never publishes workflow
+state. Administrators may separately save extracted documents as `DRAFT` via
+`POST /api/v1/knowledge/references`; originals are staged and extracted chunks
+are transactionally stored in the new Snowflake reference tables. Only explicit
+administrator `approve` makes them available to department-scoped read-only
+`/knowledge/references/search`. Archiving revokes search access. This source
+search does not yet feed the Copilot answer orchestrator or the executable OWD
+graph. Scanned PDFs/images are not OCR-supported yet.
 
 The compiler is deterministic. The grammar is implemented under
 `backend/app/compiler/parsers/`; `OWDParser` builds a unified AST, `OWDValidator` enforces the
@@ -74,7 +80,7 @@ AST. Upload errors must identify validation problems without staging or partiall
 | Area | Current state |
 | --- | --- |
 | Authentication/RBAC | JWT access and refresh tokens; Snowflake users, roles, departments; audit middleware |
-| Knowledge Studio | OWD upload, compile, publish, list/detail, edit, version history, soft delete, permanent delete; bounded non-publishing document previews |
+| Knowledge Studio | OWD upload, compile, publish, list/detail, edit, version history, soft delete, permanent delete; document previews and separately reviewed/staged reference knowledge |
 | Copilot | Catalog matching, grounded retrieval, typo tolerance, workflow state, decisions, pause/resume/abandon, citations and escalation |
 | Query memory | Snowflake-backed pending/confirmed/rejected mappings with department scope and published-version validation |
 | Voice | English/Hindi recording, Faster-Whisper, M2M100 translation, Piper/deferred speech, protected audio |
@@ -120,7 +126,7 @@ Before release:
 
 ## Explicitly out of scope
 
-- OCR, image-only PDF processing, and direct publication/indexing of arbitrary documents (extraction preview only).
+- OCR, image-only PDF processing, automatic document-to-workflow conversion, and integration of reference material into Copilot's answer generation. Approved excerpts are currently available through dedicated read-only source search.
 - Managed Snowflake AI/search services.
 - A second database, vector store, or ingestion pipeline.
 - Jira or other ticketing integration unless separately authorized.
