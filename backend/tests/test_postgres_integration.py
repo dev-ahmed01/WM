@@ -163,3 +163,66 @@ Verified receiving checks finished.
     assert VoiceRepository.audio_belongs_to_user("audio_live_smoke", user)
     assert not VoiceRepository.audio_belongs_to_user("audio_live_smoke", "other_user")
     assert VoiceRepository.get_synthesis_source(message_id, user)["language"] == "hi"
+
+
+@pytest.mark.live_integration
+def test_postgres_workflow_progress_is_atomic_and_replay_safe():
+    """The production session repository must enforce one recorded step per transition."""
+    from app.repositories.conversation_repository import ConversationRepository
+    from app.repositories.workflow_session_repository import WorkflowSessionRepository
+    from app.exceptions.custom_exceptions import DatabaseException
+
+    suffix = uuid.uuid4().hex[:11]
+    dept, user, workflow = f"voice_{suffix}", f"user_{suffix}", f"wf_{suffix}"
+    version, initial, terminal, step = (f"ver_{suffix}", f"st_a_{suffix}",
+                                         f"st_b_{suffix}", f"step_{suffix}")
+    with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO security.departments (id,code,name) VALUES (%s,%s,%s)",
+                        (dept, dept.upper(), "Voice safety test"))
+            cur.execute("""INSERT INTO security.users (id,email,hashed_password,department_id)
+                        VALUES (%s,%s,%s,%s)""",
+                        (user, f"{user}@example.test", hash_password("dev-only-test"), dept))
+            cur.execute("""INSERT INTO knowledge_studio.workflows
+                        (id,workflow_code,title,department_id,category,created_by)
+                        VALUES (%s,%s,%s,%s,%s,%s)""",
+                        (workflow, f"SOP_{suffix.upper()}", "Receive Goods", dept, "receiving", user))
+            cur.execute("""INSERT INTO knowledge_studio.workflow_versions
+                        (id,workflow_id,version_number,stage_file_uri,ast_hash,status)
+                        VALUES (%s,%s,1,'pgobj:smoke','testhash','published')""",
+                        (version, workflow))
+            for id_, key, kind, ordinal in [
+                (initial, "START", "ATOMIC_STEP", 0), (terminal, "END", "END", 1)
+            ]:
+                cur.execute("""INSERT INTO knowledge_studio.workflow_states
+                            (id,workflow_version_id,state_key,state_type,title,
+                             is_initial,is_terminal,ordinal_index)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (id_, version, key, kind, key, id_ == initial, id_ == terminal, ordinal))
+            cur.execute("""INSERT INTO knowledge_studio.workflow_steps
+                        (id,state_id,step_code,instruction,expected_output_type,ordinal_index)
+                        VALUES (%s,%s,%s,%s,'CONFIRMATION',0)""",
+                        (step, initial, "CONFIRM_SEAL", "Confirm undamaged seal"))
+    conv = ConversationRepository.get_or_create_session(user, dept)
+    session_id = WorkflowSessionRepository.create(conv, version, initial, user, {})
+    state = WorkflowSessionRepository.get_active_by_conversation(conv)
+    assert state["id"] == session_id and state["current_state_id"] == initial
+    assert WorkflowSessionRepository.apply_progress(
+        session_id, initial, state["updated_at"],
+        {"verified_by": "explicit-user-confirmation"}, step_id=step,
+        next_state_id=terminal, new_status="completed",
+    )
+    with pytest.raises(DatabaseException, match="concurrently|no longer active"):
+        WorkflowSessionRepository.apply_progress(
+            session_id, initial, state["updated_at"], {}, step_id=step,
+            next_state_id=terminal, new_status="completed",
+        )
+    with get_postgres_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT current_state_id, previous_state_id, status
+                        FROM workmate_copilot.workflow_sessions WHERE id=%s""", (session_id,))
+            assert cur.fetchone() == (terminal, initial, "completed")
+            cur.execute("""SELECT count(*) FROM workmate_copilot.workflow_step_executions
+                        WHERE session_id=%s""", (session_id,))
+            assert cur.fetchone() == (1,)
+    assert WorkflowSessionRepository.get_active_by_conversation(conv) is None

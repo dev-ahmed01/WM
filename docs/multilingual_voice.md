@@ -1,4 +1,14 @@
-# English and Hindi voice
+# English, Hindi and Hinglish voice
+
+**Web microphone (Phase 7):** recording first calls authenticated
+`POST /api/v1/copilot/voice/transcribe` and only fills an editable text
+draft. The employee must review both the source transcript and suggested
+English version, then press Send. It does not create or advance workflow
+sessions or persist conversation records during preview. This is deliberately
+different from the legacy direct response endpoint described below. See
+[the real-audio benchmark protocol](voice_quality_benchmark.md) for measured
+English, Hindi and Hinglish error evaluation; no field ASR score is claimed.
+
 
 WorkMate's authenticated voice flow is:
 
