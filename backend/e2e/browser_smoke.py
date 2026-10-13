@@ -75,6 +75,15 @@ def main():
         outsider = None
         try:
             admin = sign_in(browser, "e2e_admin@workmate.test")
+            # Force short-lived access-cookie expiry while retaining the
+            # refresh cookie: the server must rotate the refresh chain.
+            old_cookies = {c["name"]: c["value"] for c in admin.context.cookies([BASE])}
+            assert "wm_refresh" in old_cookies
+            admin.context.clear_cookies(name="wm_access")
+            assert admin.evaluate("async () => (await fetch('/api/session/me')).status") == 200
+            new_cookies = {c["name"]: c["value"] for c in admin.context.cookies([BASE])}
+            assert new_cookies.get("wm_access")
+            assert new_cookies.get("wm_refresh") != old_cookies["wm_refresh"]
             admin.goto(f"{BASE}/knowledge-studio/upload")
             expect(admin.get_by_role("heading", name="Add knowledge")).to_be_visible()
             admin.locator("#document-preview-upload").set_input_files({

@@ -3,7 +3,8 @@
 # Assumption: Database connection failures raise HTTP 500 while auth credential mismatches raise HTTP 401 with ApiErrorPayload.
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from starlette.concurrency import run_in_threadpool
 
 from app.core.security import (
@@ -14,12 +15,15 @@ from app.core.security import (
 )
 from app.middleware.auth_middleware import get_current_user
 from app.repositories.user_repository import UserRepository
+from app.repositories.session_security_repository import SessionSecurityRepository, AuthThrottleRepository
+from app.core.config import settings
 from app.exceptions import TokenExpiredError, TokenInvalidError, WorkMateException
 from app.models.user import (
     LoginRequest,
     RefreshTokenRequest,
     TokenResponse,
     RefreshTokenResponse,
+    RevokeRefreshRequest,
     UserProfileResponse,
 )
 
@@ -27,8 +31,24 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest) -> TokenResponse:
-    """Verifies credentials against users table in PostgreSQL and returns JWT access + refresh tokens."""
+async def login(payload: LoginRequest, request: Request) -> TokenResponse:
+    """Verifies credentials against PostgreSQL and creates a revocable refresh session."""
+    if settings.AUTH_RATE_LIMIT_ENABLED:
+        try:
+            permitted = await run_in_threadpool(
+                AuthThrottleRepository.consume, "login", payload.email,
+                request.client.host if request.client else "unresolved",
+            )
+        except Exception as exc:
+            raise HTTPException(503, detail={
+                "error_code": "AUTH_RATE_UNAVAILABLE",
+                "message": "Authentication controls are temporarily unavailable.",
+            }) from exc
+        if not permitted:
+            raise HTTPException(429, detail={
+                "error_code": "AUTH_RATE_LIMITED",
+                "message": "Too many sign-in attempts. Try again later.",
+            }, headers={"Retry-After": str(settings.AUTH_RATE_WINDOW_SECONDS)})
     try:
         user = await run_in_threadpool(UserRepository.get_user_by_email, payload.email)
     except WorkMateException as exc:
@@ -58,6 +78,18 @@ async def login(payload: LoginRequest) -> TokenResponse:
         department_id=user["department_id"],
     )
     refresh_token = create_refresh_token(user_id=user["id"])
+    if settings.AUTH_SESSION_STORE_ENABLED:
+        claims = decode_token(refresh_token)
+        try:
+            await run_in_threadpool(
+                SessionSecurityRepository.record_refresh, claims["jti"], user["id"],
+                datetime.fromtimestamp(claims["exp"], timezone.utc),
+            )
+        except Exception as exc:
+            raise HTTPException(503, detail={
+                "error_code": "AUTH_SESSION_UNAVAILABLE",
+                "message": "Could not establish a secure session.",
+            }) from exc
 
     return TokenResponse(
         access_token=access_token,
@@ -70,7 +102,7 @@ async def login(payload: LoginRequest) -> TokenResponse:
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
-async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
+async def refresh_token(payload: RefreshTokenRequest, request: Request) -> RefreshTokenResponse:
     """Exchanges a valid refresh token for a newly issued access token."""
     try:
         claims = decode_token(payload.refresh_token)
@@ -106,6 +138,24 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if settings.AUTH_RATE_LIMIT_ENABLED:
+        try:
+            allowed = await run_in_threadpool(
+                AuthThrottleRepository.consume, "refresh",
+                str(claims.get("sub", "unknown")),
+                request.client.host if request.client else "unresolved",
+            )
+        except Exception as exc:
+            raise HTTPException(503, detail={
+                "error_code": "AUTH_RATE_UNAVAILABLE",
+                "message": "Session verification is temporarily unavailable.",
+            }) from exc
+        if not allowed:
+            raise HTTPException(429, detail={
+                "error_code": "AUTH_RATE_LIMITED",
+                "message": "Too many session refresh attempts.",
+            }, headers={"Retry-After": str(settings.AUTH_RATE_WINDOW_SECONDS)})
+
     user_id = claims.get("sub")
     if not user_id:
         raise HTTPException(
@@ -139,6 +189,33 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
             },
         )
 
+    rotated_refresh = None
+    if settings.AUTH_SESSION_STORE_ENABLED:
+        jti = claims.get("jti")
+        if not isinstance(jti, str) or not jti:
+            raise HTTPException(401, detail={
+                "error_code": "AUTH_SESSION_REVOKED",
+                "message": "Refresh session is no longer valid. Sign in again.",
+            })
+        rotated_refresh = create_refresh_token(user_id=user["id"])
+        next_claims = decode_token(rotated_refresh)
+        try:
+            allowed = await run_in_threadpool(
+                SessionSecurityRepository.rotate_refresh,
+                jti, next_claims["jti"], user["id"],
+                datetime.fromtimestamp(next_claims["exp"], timezone.utc),
+            )
+        except Exception as exc:
+            raise HTTPException(503, detail={
+                "error_code": "AUTH_SESSION_UNAVAILABLE",
+                "message": "Could not verify the refresh session.",
+            }) from exc
+        if not allowed:
+            raise HTTPException(401, detail={
+                "error_code": "AUTH_SESSION_REVOKED",
+                "message": "Refresh session is no longer valid. Sign in again.",
+            })
+
     new_access_token = create_access_token(
         user_id=user["id"],
         role=user["role"],
@@ -147,8 +224,33 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
 
     return RefreshTokenResponse(
         access_token=new_access_token,
+        refresh_token=rotated_refresh,
         token_type="bearer",
     )
+
+
+@router.post("/revoke")
+async def revoke_refresh(payload: RevokeRefreshRequest) -> Dict[str, bool]:
+    """Idempotent sign-out invalidates one refresh chain server-side."""
+    if not settings.AUTH_SESSION_STORE_ENABLED:
+        return {"revoked": True}
+    try:
+        claims = decode_token(payload.refresh_token)
+    except (TokenInvalidError, TokenExpiredError):
+        return {"revoked": True}
+    if claims.get("type") != "refresh" or not claims.get("jti"):
+        return {"revoked": True}
+    try:
+        await run_in_threadpool(
+            SessionSecurityRepository.revoke_refresh,
+            str(claims["jti"]), str(claims["sub"]),
+        )
+    except Exception as exc:
+        raise HTTPException(503, detail={
+            "error_code": "AUTH_SESSION_UNAVAILABLE",
+            "message": "Could not revoke session. Retry sign-out.",
+        }) from exc
+    return {"revoked": True}
 
 
 @router.get("/me", response_model=UserProfileResponse)

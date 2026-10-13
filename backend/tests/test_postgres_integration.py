@@ -225,4 +225,10 @@ def test_postgres_workflow_progress_is_atomic_and_replay_safe():
             cur.execute("""SELECT count(*) FROM workmate_copilot.workflow_step_executions
                         WHERE session_id=%s""", (session_id,))
             assert cur.fetchone() == (1,)
+            cur.execute(
+                """SELECT count(*) FROM shared.audit_logs
+                   WHERE user_id=%s AND action='WORKFLOW_PROGRESS' AND resource LIKE %s""",
+                (user, f"session:{session_id}:%"),
+            )
+            assert cur.fetchone() == (1,)
     assert WorkflowSessionRepository.get_active_by_conversation(conv) is None

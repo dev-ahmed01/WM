@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
 
 
@@ -32,3 +33,7 @@ class UserProfileResponse(BaseModel):
     role: str
     department_id: str
     email: Optional[str] = None
+
+
+class RevokeRefreshRequest(BaseModel):
+    refresh_token: str

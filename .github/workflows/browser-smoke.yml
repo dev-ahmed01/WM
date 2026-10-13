@@ -32,6 +32,9 @@ jobs:
       WORKMATE_BROWSER_SMOKE: '1'
       WORKMATE_E2E_PASSWORD: browser-qa-only-strong-password-2026
       AUTH_REVALIDATE_DB: 'true'
+      AUTH_SESSION_STORE_ENABLED: 'true'
+      AUTH_RATE_LIMIT_ENABLED: 'true'
+      POSTGRES_RLS_REFERENCES: 'true'
       LOCAL_AI_ENABLED: 'false'
       VOICE_ENABLED: 'false'
       VOICE_PREWARM_MODELS: 'false'

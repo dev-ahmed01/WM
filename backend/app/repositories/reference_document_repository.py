@@ -7,12 +7,14 @@ no LLM call; evidence is returned as verbatim excerpts with stable anchors.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 from app.core.database import get_snowflake_connection
+from app.core.config import settings
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,35 @@ def _serialize(row: Any) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def scoped_reference_read(department_id: str):
+    """Run reference SELECTs as a RLS-limited PostgreSQL role.
+
+    SET LOCAL ROLE + local tenant value are scoped to one explicit transaction,
+    preventing pooled-connection tenant bleed. Application DB role must be a
+    member of workmate_scoped_reader; otherwise access fails closed.
+    """
+    with get_snowflake_connection() as conn:
+        if not settings.POSTGRES_RLS_REFERENCES:
+            yield conn
+            return
+        if not department_id:
+            raise ValueError("Department scope is required for reference reads")
+        with conn.cursor() as cur:
+            cur.execute("BEGIN")
+            try:
+                cur.execute("SET LOCAL ROLE workmate_scoped_reader")
+                cur.execute(
+                    "SELECT set_config('workmate.department_id', %s, true)",
+                    (department_id,),
+                )
+                yield conn
+                cur.execute("COMMIT")
+            except Exception:
+                cur.execute("ROLLBACK")
+                raise
+
+
 class ReferenceDocumentRepository:
     BASE_SELECT = """
         SELECT d.id, d.department_id, d.title, d.original_filename,
@@ -128,7 +159,7 @@ class ReferenceDocumentRepository:
 
     @staticmethod
     def list_documents(department_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        with get_snowflake_connection() as conn:
+        with scoped_reference_read(department_id) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     ReferenceDocumentRepository.BASE_SELECT
@@ -139,7 +170,7 @@ class ReferenceDocumentRepository:
 
     @staticmethod
     def get_document(document_id: str, department_id: str) -> dict[str, Any] | None:
-        with get_snowflake_connection() as conn:
+        with scoped_reference_read(department_id) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     ReferenceDocumentRepository.BASE_SELECT
@@ -190,7 +221,7 @@ class ReferenceDocumentRepository:
     @staticmethod
     def read_chunks(document_id: str, department_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Administrators review source content before approving; no source Stage GET required."""
-        with get_snowflake_connection() as conn:
+        with scoped_reference_read(department_id) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT c.id, c.ordinal_index, c.start_offset, c.end_offset, c.content
@@ -217,7 +248,7 @@ class ReferenceDocumentRepository:
         if not department_id:
             return []
         limit = max(1, min(int(limit), 150))
-        with get_snowflake_connection() as conn:
+        with scoped_reference_read(department_id) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT d.id, d.title, d.department_id, c.id, c.content,
@@ -263,7 +294,7 @@ class ReferenceDocumentRepository:
         """
         # Escaped SQL LIKE wildcards: tokens contain Unicode letters/numbers only.
         search_params = tuple(f"%{token}%" for token in tokens)
-        with get_snowflake_connection() as conn:
+        with scoped_reference_read(department_id) as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (department_id, department_id, *search_params))
                 rows = cur.fetchall()
