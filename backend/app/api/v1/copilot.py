@@ -26,6 +26,7 @@ from app.models.copilot import (
 )
 from app.models.voice import (
     VoiceCopilotResponse,
+    VoiceTranscriptPreview,
     VoiceSynthesisRequest,
     VoiceSynthesisResponse,
 )
@@ -489,6 +490,96 @@ def _recorded_completion_text(completed: list[int]) -> str:
         f"Recorded your completion attestation for steps {completed[0]} "
         f"through {completed[-1]}."
     )
+
+
+def _effective_voice_language(transcript: str, reported: str, selected: str) -> str:
+    """Treat Indic script as a Hindi hint only when language was auto-detected."""
+    if selected != "auto":
+        return selected
+    letters = [character for character in transcript if character.isalpha()]
+    hindi = sum(0x0900 <= ord(character) <= 0x097F for character in letters)
+    if letters and hindi / len(letters) >= 0.20:
+        return "hi"
+    return reported if reported in SUPPORTED_LANGUAGES else "und"
+
+
+@router.post(
+    "/voice/transcribe",
+    response_model=VoiceTranscriptPreview,
+    summary="Private read-only voice transcription for explicit review",
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def voice_transcript_preview(
+    audio: UploadFile = File(...),
+    language: str = Form("auto"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    speech_service: FasterWhisperSpeechRecognitionService = Depends(get_speech_recognition_service),
+    translation_service: TranslationService = Depends(get_translation_service),
+) -> VoiceTranscriptPreview:
+    """No conversation, workflow, analytics, or voice database write is allowed.
+
+    The caller edits and submits the suggested text through the existing
+    authenticated text Copilot endpoint. Original transcript is always returned
+    for comparing Hindi/Hinglish terminology and quantities.
+    """
+    if not settings.VOICE_ENABLED:
+        raise HTTPException(503, detail={
+            "error_code": "VOICE_DISABLED", "message": "Voice input is disabled."
+        })
+    selected = language.strip().casefold()
+    enabled = {value.strip() for value in settings.VOICE_SUPPORTED_LANGUAGES.split(",")}
+    if selected != "auto" and selected not in enabled:
+        raise HTTPException(422, detail={
+            "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+            "message": "Select Auto, English, or Hindi.",
+        })
+    if not current_user.get("sub") or not current_user.get("department_id"):
+        raise HTTPException(401, detail={
+            "error_code": "VOICE_AUTH_REQUIRED", "message": "Authentication required."
+        })
+    temporary_path = await _save_voice_upload(audio)
+    try:
+        started = time.perf_counter()
+        result = await speech_service.transcribe(
+            temporary_path, None if selected == "auto" else selected
+        )
+        transcription_ms = round((time.perf_counter() - started) * 1000)
+        actual_language = _effective_voice_language(result.transcript, result.language.casefold(), selected)
+        if actual_language not in enabled or actual_language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(422, detail={
+                "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+                "message": "The detected language is not supported; no action was taken.",
+            })
+        translated_start = time.perf_counter()
+        suggestion = await translation_service.translate_to_english(
+            result.transcript, actual_language
+        )
+        translation_ms = round((time.perf_counter() - translated_start) * 1000)
+        if not suggestion.strip():
+            raise HTTPException(422, detail={
+                "error_code": "VOICE_NO_TRANSCRIPT", "message": "No meaningful speech detected.",
+            })
+        return VoiceTranscriptPreview(
+            transcript=result.transcript,
+            suggested_text=suggestion.strip(),
+            detected_language=actual_language,
+            confidence=result.confidence,
+            transcription_ms=transcription_ms,
+            translation_ms=translation_ms,
+            requires_confirmation=True,
+        )
+    except SpeechRecognitionError as exc:
+        raise HTTPException(422, detail={
+            "error_code": "VOICE_TRANSCRIPTION_FAILED",
+            "message": "Could not transcribe the recording. Please retry or type your request.",
+        }) from exc
+    except TranslationError as exc:
+        raise HTTPException(503, detail={
+            "error_code": "VOICE_TRANSLATION_FAILED",
+            "message": "Could not translate the recording. Please retry or type your request.",
+        }) from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _voice_needs_confirmation(message: str, confidence: float, active_session: Any) -> bool:
