@@ -7,6 +7,7 @@ role isolation and independent departmental search.
 from __future__ import annotations
 
 import os
+import signal
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
@@ -23,7 +24,9 @@ DOCUMENT_TEXT = (
 
 def sign_in(browser, email):
     page = browser.new_page()
-    page.goto(f"{BASE}/login")
+    page.set_default_timeout(12000)
+    page.set_default_navigation_timeout(12000)
+    page.goto(f"{BASE}/login", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Welcome back")).to_be_visible()
     page.get_by_placeholder("name@workmate.ai").fill(email)
     page.get_by_placeholder("Enter your password").fill(PASSWORD)
@@ -58,6 +61,11 @@ def search_sources(page, expected: bool):
 
 
 def main():
+    if hasattr(signal, "SIGALRM"):
+        def timeout_handler(_signum, _frame):
+            raise TimeoutError("Browser smoke exceeded 120 seconds; inspect the active Python stack")
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(120)
     if os.environ.get("WORKMATE_BROWSER_SMOKE") != "1" or not PASSWORD:
         raise SystemExit("Refusing non-test browser session")
     with sync_playwright() as playwright:
