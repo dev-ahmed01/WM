@@ -47,6 +47,8 @@ RUN mkdir -p ${PIPER_VOICE_DIR} /app/data/voice/audio /app/data/voice/whisper &&
       en_US-lessac-medium hi_IN-pratham-medium
 
 COPY backend/app ./app
+COPY backend/migrations /app/backend/migrations
+COPY scripts/migrate_postgres.py /app/scripts/migrate_postgres.py
 
 EXPOSE 8000
 
