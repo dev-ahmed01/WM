@@ -11,12 +11,10 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Mapping, Sequence
 
-from starlette.concurrency import run_in_threadpool
 
 from app.models.copilot import Citation, ValidatedResponse
-from app.repositories.reference_document_repository import ReferenceDocumentRepository
 from app.services.validation import CANONICAL_FALLBACK
-from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score
+from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score, tokens
 
 # These are conversational fillers, not evidence-bearing terms.
 _STOPWORDS = frozenset({
@@ -30,10 +28,9 @@ _STOPWORDS = frozenset({
 
 
 def _terms(text: str) -> tuple[str, ...]:
-    words = re.findall(r"[^\W_]+", text.casefold(), flags=re.UNICODE)
-    return tuple(dict.fromkeys(
-        word for word in words if len(word) >= 2 and word not in _STOPWORDS
-    ))
+    # Shared tokenization retains Hindi combining marks for both retrieval
+    # ranking and the final evidence support threshold.
+    return tokens(text)
 
 
 @dataclass(frozen=True)
