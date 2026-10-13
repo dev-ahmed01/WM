@@ -502,7 +502,7 @@ def _voice_needs_confirmation(message: str, confidence: float, active_session: A
         return True
     if _requested_step_jump(message) or _claims_previous_steps_without_target(message):
         return True
-    if re.match(r"^(?:yes|yeah|yep|no|confirm|start|begin|pause|resume|stop|cancel|abandon|next|advance|skip|finish|complete)(?:\\b|$)", normalized):
+    if re.match(r"^(?:yes|yeah|yep|no|confirm|start|begin|pause|resume|stop|cancel|abandon|next|advance|skip|finish|complete)(?:\b|$)", normalized):
         return True
     return False
 
