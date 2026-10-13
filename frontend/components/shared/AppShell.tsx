@@ -10,6 +10,8 @@ import {
   Building2,
   ChevronDown,
   History,
+  Search,
+  Library,
   LogOut,
   Menu,
   ShieldCheck,
@@ -44,6 +46,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'manager', 'employee'],
   },
   {
+    label: 'Source search',
+    description: 'Approved reference excerpts',
+    href: '/copilot/sources',
+    icon: Search,
+    roles: ['admin', 'manager', 'employee'],
+  },
+  {
     label: 'Session history',
     description: 'Resume past work',
     href: '/copilot/history',
@@ -58,6 +67,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin'],
   },
   {
+    label: 'Reference library',
+    description: 'Review document drafts',
+    href: '/knowledge-studio/references',
+    icon: Library,
+    roles: ['admin'],
+  },
+  {
     label: 'Intelligence hub',
     description: 'Operational insights',
     href: '/intelligence-hub',
@@ -68,6 +84,7 @@ const NAV_ITEMS: NavItem[] = [
 
 function isActiveRoute(pathname: string, href: string) {
   if (href === '/copilot') return pathname === href;
+  if (href === '/knowledge-studio') return !pathname.startsWith('/knowledge-studio/references') && (pathname === href || pathname.startsWith(`${href}/`));
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
