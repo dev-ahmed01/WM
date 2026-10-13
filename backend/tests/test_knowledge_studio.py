@@ -168,7 +168,8 @@ def test_permanent_delete_removes_graph_stage_and_cache(
     assert response.json()["stage_files_deleted"] == 2
     permanently_delete.assert_called_once_with("workflow-id")
     remove_staged_files.assert_called_once_with(
-        ["@RAW_OWD_STAGE/SOP_INB_101/v1/source.md"]
+        ["@RAW_OWD_STAGE/SOP_INB_101/v1/source.md"],
+        department_id="dept_inbound",
     )
     invalidate_department.assert_called_once_with("dept_inbound")
 
