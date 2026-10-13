@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.middleware.rbac_middleware import require_role
 from app.repositories.knowledge_repository import KnowledgeRepository
@@ -36,7 +37,7 @@ async def upload_reference(
         raise _problem(422, "INVALID_TITLE", "Document title must be 1–512 characters.")
     raw = await file.read(MAX_DOCUMENT_BYTES + 1)
     try:
-        extracted = extract_document(file.filename or "", raw)
+        extracted = await run_in_threadpool(extract_document, file.filename or "", raw)
     except DocumentExtractionError as exc:
         raise _problem(422, "DOCUMENT_EXTRACTION_FAILED", str(exc)) from exc
     try:
