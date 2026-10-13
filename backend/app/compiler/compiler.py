@@ -68,7 +68,7 @@ class OWDCompiler:
             "workflow_id": workflow_id,
             "version_number": wf.version_number,
             "semantic_version": meta.version if (meta and meta.version) else f"{wf.version_number}.0.0",
-            "stage_file_uri": stage_file_uri or f"@{settings.SNOWFLAKE_STAGE_NAME}/{wf.workflow_code}_v{wf.version_number}.md",
+            "stage_file_uri": stage_file_uri or f"unpersisted:{wf.workflow_code}_v{wf.version_number}.md",
             "ast_hash": owd_document.raw_source_hash,
             "status": "compiled",
         }
