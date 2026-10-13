@@ -163,7 +163,8 @@ async def evaluate_live(rows: list[dict[str, Any]]) -> dict[str, Any]:
         elapsed_ms = (time.perf_counter() - start) * 1000
         expected = case["expected_document_id"]
         citations = answer.citations
-        correct = bool(expected and citations and citations[0].document_id == expected and all(valid))
+        correct = bool(expected and answer.is_grounded and not answer.requires_escalation
+                       and citations and citations[0].document_id == expected and all(valid))
         gold = case.get("expected_evidence", "")
         evidence = bool(correct and (not gold or any(
             gold in citation.excerpt for citation in citations
@@ -192,6 +193,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     rows = validate_manifest(json.loads(private_bytes))
     if args.min_cases and len(rows) < args.min_cases:
         raise ValueError("Manifest smaller than user-specified acceptance cohort")
+    min_per_language = getattr(args, "min_per_language", 0)
+    for language in LANGUAGES:
+        if sum(row["language"] == language for row in rows) < min_per_language:
+            raise ValueError("Held-out cohort lacks required representation: " + language)
+    if sum(row["expected_document_id"] is None for row in rows) < getattr(args, "min_negative", 0):
+        raise ValueError("Held-out cohort lacks required negative/abstention labels")
     result = asyncio.run(evaluate_live(rows))
     result["manifest_sha256"] = hashlib.sha256(private_bytes).hexdigest()
     result["reference_semantic_enabled"] = bool(
@@ -206,6 +213,8 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, help="Optional aggregate-only report; keep private")
     parser.add_argument("--min-cases", type=int, default=0)
+    parser.add_argument("--min-per-language", type=int, default=0)
+    parser.add_argument("--min-negative", type=int, default=0)
     parser.add_argument("--fail-on-invalid", action="store_true")
     parsed = parser.parse_args()
     report = run(parsed)
