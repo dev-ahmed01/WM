@@ -123,6 +123,11 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
+    # Pilot feedback is disabled unless the operator names a specific cohort.
+    PILOT_FEEDBACK_ENABLED: bool = False
+    PILOT_ALLOWED_DEPARTMENTS: str = ""
+    PILOT_FEEDBACK_MAX_PER_USER_PER_DAY: int = Field(default=30, ge=1, le=200)
+
     # Internal Webhook & Service Security
     INTERNAL_WEBHOOK_SECRET: str = Field(min_length=16)
 
@@ -139,6 +144,10 @@ class Settings(BaseSettings):
             raise ValueError("OCR_LANGUAGES may contain only eng and hin.")
         if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
+        if self.PILOT_FEEDBACK_ENABLED and not [
+            dept for dept in self.PILOT_ALLOWED_DEPARTMENTS.split(",") if dept.strip()
+        ]:
+            raise ValueError("Pilot feedback requires explicit PILOT_ALLOWED_DEPARTMENTS")
         if self.APP_ENV.strip().lower() in {"staging", "prod", "production"}:
             if not self.AUTH_REVALIDATE_DB:
                 raise ValueError("Staging/production requires AUTH_REVALIDATE_DB=true")
