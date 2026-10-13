@@ -11,13 +11,27 @@ import subprocess
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote, parse_qs
 
 
 def backup(dsn: str, recipient: str, directory: Path, retention_days: int) -> Path:
     parsed = urlsplit(dsn)
     if parsed.scheme not in {"postgresql", "postgres"} or not parsed.hostname:
         raise ValueError("BACKUP_DATABASE_URL must be a PostgreSQL connection URL")
+    if not parsed.username or not parsed.path.strip("/"):
+        raise ValueError("Backup PostgreSQL credentials require login and database")
+    pg_env = os.environ.copy()
+    pg_env.pop("BACKUP_DATABASE_URL", None)
+    pg_env["PGHOST"] = parsed.hostname
+    pg_env["PGUSER"] = unquote(parsed.username)
+    pg_env["PGDATABASE"] = parsed.path.lstrip("/")
+    pg_env["PGPASSWORD"] = unquote(parsed.password or "")
+    if parsed.port:
+        pg_env["PGPORT"] = str(parsed.port)
+    query = parse_qs(parsed.query)
+    pg_env["PGSSLMODE"] = query.get("sslmode", ["require"])[0]
+    if query.get("sslrootcert"):
+        pg_env["PGSSLROOTCERT"] = query["sslrootcert"][0]
     if not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{40,120}", recipient):
         raise ValueError("BACKUP_AGE_RECIPIENT must be a valid age public recipient")
     if not 1 <= retention_days <= 90:
@@ -32,8 +46,8 @@ def backup(dsn: str, recipient: str, directory: Path, retention_days: int) -> Pa
     os.close(fd)
     try:
         dump = subprocess.Popen(
-            ["pg_dump", "--format=custom", "--no-owner", "--no-acl", "--dbname", dsn],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ["pg_dump", "--format=custom", "--no-owner", "--no-acl"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=pg_env,
         )
         assert dump.stdout is not None
         try:
