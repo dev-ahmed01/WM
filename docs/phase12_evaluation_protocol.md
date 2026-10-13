@@ -22,6 +22,7 @@ Write the following JSON into a private `/private/workmate_gold.json`, replacing
   {
     "id": "operator-en-001",
     "language": "en",
+    "scenario": "routine",
     "department_id": "receiving",
     "question": "What is the required check before putaway?",
     "expected_document_id": "actual-approved-document-id",
@@ -30,6 +31,7 @@ Write the following JSON into a private `/private/workmate_gold.json`, replacing
   {
     "id": "missing-qa-001",
     "language": "hinglish",
+    "scenario": "missing_evidence",
     "department_id": "receiving",
     "question": "What is our undocumented compressor pressure limit?",
     "expected_document_id": null
@@ -51,7 +53,7 @@ python backend/evals/warehouse_acceptance.py \
   --fail-on-invalid --output /private/workmate_aggregate.json
 ```
 
-The script computes current department-scoped retrieval, actual answer validation, and resolves cited chunks directly from PostgreSQL to check approval status and exact offsets. It reports top-1/recall@5, first-citation document match, adjudicated evidence coverage, negative-case abstention, false answers, citation precision, invalid spans and latency p50/p95 by language.
+The script computes current department-scoped retrieval, actual answer validation, and resolves cited chunks directly from PostgreSQL to check approval status and exact offsets. It reports top-1/recall@5, first-citation document match, adjudicated evidence coverage, negative-case abstention, false answers, citation precision, invalid spans and latency p50/p95 by language **and by scenario** (routine, missing evidence, unsafe instruction, cross-department, draft, archived, conflicting revision). Every report also includes the SHA-256 of the private input manifest, flags whether the live local semantic reranker was enabled, and includes an optional `WORKMATE_EVAL_RELEASE_SHA` revision. These metadata identify the evaluation without publishing the raw questions.
 
 **Critical limitations:** this is an extractive answer / citation test, not a benchmark for generative model reasoning, semantic equivalence, procedural safety, hardware performance or a deployed network hop. If Ollama is disabled, results are lexical fallback only; report the actual model/device settings. Direct database evaluation measures API-layer services, not browser-to-server latency. A correctly quoted but obsolete/wrong SOP still needs human rejection. The harness currently reads trusted approved documents from PostgreSQL but does not automatically assess contradictory approved-source revisions.
 
