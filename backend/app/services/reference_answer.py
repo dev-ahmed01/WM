@@ -2,7 +2,7 @@
 
 Approved reference chunks are *not* instructions for the state machine. This
 service returns only verbatim source language, never invented procedures, and
-requires complete provenance from the Snowflake department/approval filter.
+requires complete provenance from PostgreSQL department and approval checks.
 """
 from __future__ import annotations
 
