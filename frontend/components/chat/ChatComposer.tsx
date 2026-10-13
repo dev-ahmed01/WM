@@ -3,7 +3,7 @@ import { ArrowUp, Mic, MicOff } from 'lucide-react';
 import type { VoiceLanguage } from '@/lib/api-client';
 
 const VOICE_LANGUAGES: Array<{ value: VoiceLanguage; label: string }> = [
-  { value: 'auto', label: 'Auto Detect' },
+  { value: 'auto', label: 'English + Hindi · Auto' },
   { value: 'en', label: 'English' },
   { value: 'hi', label: 'हिन्दी · Hindi' },
 ];
@@ -80,7 +80,7 @@ export function ChatComposer({
                   value={voiceLanguage}
                   disabled={busy || listening}
                   onChange={(event) => onVoiceLanguageChange(event.target.value as VoiceLanguage)}
-                  className="h-9 max-w-40 rounded-xl border border-border bg-muted/50 px-2 text-[11px] font-medium text-foreground outline-none transition focus:border-emerald-500 disabled:opacity-50"
+                  className="h-9 max-w-[11rem] rounded-xl border border-border bg-muted/50 px-2 text-[11px] font-medium text-foreground outline-none transition focus:border-emerald-500 disabled:opacity-50"
                 >
                   {VOICE_LANGUAGES.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
@@ -109,7 +109,7 @@ export function ChatComposer({
               ? 'Recording received. Preparing the transcript and verified answer locally…'
               : transcriptPreview
                 ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-                : 'Select Speak once, talk, then pause. Your question sends automatically and receives a grounded spoken reply.')}
+                : 'Speak in English, Hindi, or a mix. Auto detect stays enabled across recordings.')}
         </div>
       </div>
     </footer>
