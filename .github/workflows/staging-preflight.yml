@@ -81,3 +81,21 @@ jobs:
         run: |
           python scripts/verify_runtime_database.py
           python scripts/verify_staging_role_flow.py
+      - name: Encrypt staging backup and verify decryptable pg_dump archive
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age postgresql-client
+          mkdir -p /tmp/workmate-backup-smoke
+          age-keygen -o /tmp/workmate-backup-identity.txt >/dev/null 2>&1
+          export BACKUP_AGE_RECIPIENT="$(age-keygen -y /tmp/workmate-backup-identity.txt)"
+          export BACKUP_DATABASE_URL="$MIGRATION_DATABASE_URL"
+          export BACKUP_DIRECTORY=/tmp/workmate-backup-smoke
+          python scripts/backup_postgres_encrypted.py
+          test "$(find /tmp/workmate-backup-smoke -name '*.age' | wc -l)" = "1"
+          test "$(find /tmp/workmate-backup-smoke -name '*.dump' | wc -l)" = "0"
+          age -d -i /tmp/workmate-backup-identity.txt -o /tmp/workmate-decrypted-test.dump \
+            /tmp/workmate-backup-smoke/wm-*.dump.age
+          pg_restore --list /tmp/workmate-decrypted-test.dump | grep -q 'TABLE .* departments'
+          rm -f /tmp/workmate-decrypted-test.dump /tmp/workmate-backup-identity.txt
+          echo "Encrypted pg_dump can be decrypted and parsed as a PostgreSQL restore archive"
+
