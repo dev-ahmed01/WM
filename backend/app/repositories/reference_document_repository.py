@@ -156,18 +156,36 @@ class ReferenceDocumentRepository:
             raise ValueError("Invalid reference review action")
         from_status = "DRAFT" if action == "approve" else "APPROVED"
         to_status = "APPROVED" if action == "approve" else "ARCHIVED"
+        # One PostgreSQL transaction for the approval decision and its durable
+        # audit event. A failed audit insert MUST roll back status visibility.
         with get_snowflake_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE KNOWLEDGE_STUDIO.reference_documents
-                    SET status = %s, reviewed_by = %s, reviewed_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s AND department_id = %s AND status = %s""",
-                    (to_status, reviewer_id, document_id, department_id, from_status),
-                )
-                count = cur.rowcount
-                cur.execute("COMMIT")
-                return bool(count)
+                cur.execute("BEGIN")
+                try:
+                    cur.execute(
+                        """UPDATE KNOWLEDGE_STUDIO.reference_documents
+                        SET status = %s, reviewed_by = %s,
+                            reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s AND department_id = %s AND status = %s""",
+                        (to_status, reviewer_id, document_id, department_id, from_status),
+                    )
+                    count = cur.rowcount
+                    if count:
+                        cur.execute(
+                            """INSERT INTO shared.audit_logs
+                               (id, user_id, role, action, resource, ip_address,
+                                status_code, created_at)
+                               VALUES (%s, %s, 'admin', %s, %s, 'internal', 200,
+                                       CURRENT_TIMESTAMP)""",
+                            (uuid4().hex, reviewer_id,
+                             f"REFERENCE_{action.upper()}",
+                             f"reference:{department_id}/{document_id}"),
+                        )
+                    cur.execute("COMMIT")
+                    return bool(count)
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
 
     @staticmethod
     def read_chunks(document_id: str, department_id: str, *, limit: int = 50) -> list[dict[str, Any]]:

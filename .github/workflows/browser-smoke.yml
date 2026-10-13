@@ -81,6 +81,29 @@ jobs:
           cat /tmp/workmate-next.log
           exit 1
 
+      - name: Check Next.js HttpOnly login and CSRF with direct HTTP
+        run: |
+          set -euo pipefail
+          COOKIE_JAR="$(mktemp)"
+          BODY="$(mktemp)"
+          status=$(curl -sS -o "$BODY" -w '%{http_code}' \
+            -c "$COOKIE_JAR" \
+            -H "Origin: http://127.0.0.1:3000" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"e2e_admin@workmate.test","password":"browser-qa-only-strong-password-2026"}' \
+            http://127.0.0.1:3000/api/session/login)
+          if [ "$status" != "200" ]; then echo "Next login returned status $status"; cat "$BODY"; exit 1; fi
+          grep -q 'wm_access' "$COOKIE_JAR" || (echo 'No HttpOnly access cookie' && exit 1)
+          profile_status=$(curl -sS -o "$BODY" -w '%{http_code}' \
+            -b "$COOKIE_JAR" http://127.0.0.1:3000/api/session/me)
+          echo "Session verification HTTP: $profile_status"
+          if [ "$profile_status" != "200" ]; then cat "$BODY"; exit 1; fi
+          csrf_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -b "$COOKIE_JAR" -H "Origin: https://attacker.example" -X POST \
+            http://127.0.0.1:3000/api/session/logout)
+          test "$csrf_status" = "403"
+          rm -f "$COOKIE_JAR" "$BODY"
+
       - name: Browser login to archive lifecycle against actual PostgreSQL
         run: python backend/e2e/browser_smoke.py
 

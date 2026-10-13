@@ -107,6 +107,17 @@ def test_real_api_login_review_search_archive_and_revocation(monkeypatch):
             )
             assert archived.status_code == 200, archived.text
             assert search(employee).json()["sources"] == []
+            with psycopg.connect(settings.DATABASE_URL) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT action FROM shared.audit_logs
+                           WHERE user_id=%s AND resource=%s
+                           AND action IN ('REFERENCE_APPROVE', 'REFERENCE_ARCHIVE')""",
+                        (admin_id, f"reference:{department}/{document_id}"),
+                    )
+                    assert sorted(row[0] for row in cur.fetchall()) == [
+                        "REFERENCE_APPROVE", "REFERENCE_ARCHIVE"
+                    ]
             # Audit events must persist in PostgreSQL, not silently fail under
             # the legacy Snowflake UUID_STRING() function.
             with psycopg.connect(settings.DATABASE_URL) as audit_conn:

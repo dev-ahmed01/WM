@@ -7,6 +7,7 @@ role isolation and independent departmental search.
 from __future__ import annotations
 
 import os
+import signal
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
@@ -23,12 +24,25 @@ DOCUMENT_TEXT = (
 
 def sign_in(browser, email):
     page = browser.new_page()
-    page.goto(f"{BASE}/login")
+    page.set_default_timeout(12000)
+    page.set_default_navigation_timeout(12000)
+    page.goto(f"{BASE}/login", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Welcome back")).to_be_visible()
     page.get_by_placeholder("name@workmate.ai").fill(email)
     page.get_by_placeholder("Enter your password").fill(PASSWORD)
-    page.get_by_role("button", name="Sign in").click()
-    page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/copilot", timeout=30000)
+    with page.expect_response(lambda resp: "/api/session/login" in resp.url, timeout=15000) as auth:
+        page.get_by_role("button", name="Sign in").click()
+    login_response = auth.value
+    if login_response.status != 200:
+        raise AssertionError(f"Login proxy status {login_response.status}: {login_response.text()[:350]}")
+    try:
+        page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/copilot", timeout=12000)
+    except Exception as exc:
+        cookie_names = [(item['name'], item['httpOnly'], item['secure']) for item in page.context.cookies([BASE])]
+        profile_status = page.evaluate("async () => (await fetch('/api/session/me')).status")
+        raise AssertionError(
+            f"Login session not accepted: current={page.url} cookies={cookie_names}, me_status={profile_status}"
+        ) from exc
     return page
 
 
@@ -47,6 +61,11 @@ def search_sources(page, expected: bool):
 
 
 def main():
+    if hasattr(signal, "SIGALRM"):
+        def timeout_handler(_signum, _frame):
+            raise TimeoutError("Browser smoke exceeded 120 seconds; inspect the active Python stack")
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(120)
     if os.environ.get("WORKMATE_BROWSER_SMOKE") != "1" or not PASSWORD:
         raise SystemExit("Refusing non-test browser session")
     with sync_playwright() as playwright:
@@ -76,12 +95,27 @@ def main():
             search_sources(outsider, expected=False)
 
             # Browser sessions carry real access tokens, never fake provider mocks.
-            token = employee.evaluate("localStorage.getItem('token')")
-            forbidden = employee.request.get(
-                "http://127.0.0.1:8000/api/v1/knowledge/references?department_id=e2e_ops",
-                headers={"Authorization": f"Bearer {token}"},
+            # Browser JavaScript must never have a bearer or refresh credential.
+            assert employee.evaluate("localStorage.getItem('token')") is None
+            assert employee.evaluate("localStorage.getItem('refresh_token')") is None
+            browser_cookies = employee.context.cookies([BASE])
+            assert any(c["name"] == "wm_access" and c["httpOnly"] for c in browser_cookies)
+            assert any(c["name"] == "wm_refresh" and c["httpOnly"] for c in browser_cookies)
+            forbidden_status = employee.evaluate("""async () => {
+                const response = await fetch('/api/backend/knowledge/references?department_id=e2e_ops');
+                return response.status;
+            }""")
+            assert forbidden_status == 403
+
+            # CSRF: foreign Origin never allowed to mutate even with valid cookie.
+            # A browser cannot override the forbidden Origin header in fetch.
+            # The context request shares the session cookie and can simulate a
+            # hostile cross-site form request with an explicit foreign Origin.
+            csrf_attempt = employee.request.post(
+                f"{BASE}/api/session/logout",
+                headers={"Origin": "https://attacker.example"},
             )
-            assert forbidden.status == 403
+            assert csrf_attempt.status == 403
 
             admin.goto(f"{BASE}/knowledge-studio/references")
             expect(admin.get_by_role("heading", name="Reference library")).to_be_visible()
@@ -102,7 +136,12 @@ def main():
             admin.get_by_role("button", name="Archive document").click()
             expect(admin.get_by_text("ARCHIVED", exact=True)).to_be_visible(timeout=30000)
             search_sources(employee, expected=False)
-            print("BROWSER PASSED: login, real draft, approval, scoped search, archive, role forbidden.")
+            logout = employee.request.post(
+                f"{BASE}/api/session/logout", headers={"Origin": BASE}
+            )
+            assert logout.status == 200
+            assert employee.evaluate("async () => (await fetch('/api/session/me')).status") == 401
+            print("BROWSER PASSED: HttpOnly sessions, CSRF, logout, draft/approval, department isolation and archive.")
         except Exception:
             for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider)]:
                 if page is not None:
