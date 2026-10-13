@@ -65,6 +65,17 @@ export interface WorkflowDecisionOption {
 
 export type VoiceLanguage = 'auto' | 'en' | 'hi';
 
+export interface VoiceTranscriptPreview {
+  transcript: string;
+  suggested_text: string;
+  detected_language: 'en' | 'hi';
+  confidence: number;
+  transcription_ms: number;
+  translation_ms: number;
+  requires_confirmation: true;
+  warning: string;
+}
+
 export interface VoiceCopilotResponse {
   language: Exclude<VoiceLanguage, 'auto'>;
   transcript: string;
