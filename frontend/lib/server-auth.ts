@@ -15,13 +15,16 @@ export function backendUrl(path: string): string {
 
 export function checkCsrf(request: NextRequest): boolean {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
-  const origin = request.headers.get('origin');
-  const referer = request.headers.get('referer');
-  const target = request.nextUrl.origin;
-  // Require the browser Origin; non-browser clients have no authenticated cookie.
-  if (origin) return origin === target;
-  if (!referer) return false;
-  try { return new URL(referer).origin === target; } catch { return false; }
+  // Compare to the actual Host header, since a reverse proxy can have a
+  // different internal NextRequest URL. Do not accept arbitrary forwarded Host.
+  const host = request.headers.get('host')?.toLowerCase();
+  const proto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '')).toLowerCase();
+  const supplied = request.headers.get('origin') || request.headers.get('referer');
+  if (!host || !supplied || !['http', 'https'].includes(proto)) return false;
+  try {
+    const source = new URL(supplied);
+    return source.host.toLowerCase() === host && source.protocol === proto + ':';
+  } catch { return false; }
 }
 
 export function cookieOptions(maxAge: number) {
