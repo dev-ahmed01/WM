@@ -76,12 +76,26 @@ def main():
             search_sources(outsider, expected=False)
 
             # Browser sessions carry real access tokens, never fake provider mocks.
-            token = employee.evaluate("localStorage.getItem('token')")
-            forbidden = employee.request.get(
-                "http://127.0.0.1:8000/api/v1/knowledge/references?department_id=e2e_ops",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            assert forbidden.status == 403
+            # Browser JavaScript must never have a bearer or refresh credential.
+            assert employee.evaluate("localStorage.getItem('token')") is None
+            assert employee.evaluate("localStorage.getItem('refresh_token')") is None
+            browser_cookies = employee.context.cookies([BASE])
+            assert any(c["name"] == "wm_access" and c["httpOnly"] for c in browser_cookies)
+            assert any(c["name"] == "wm_refresh" and c["httpOnly"] for c in browser_cookies)
+            forbidden_status = employee.evaluate("""async () => {
+                const response = await fetch('/api/backend/knowledge/references?department_id=e2e_ops');
+                return response.status;
+            }""")
+            assert forbidden_status == 403
+
+            # CSRF: foreign Origin never allowed to mutate even with valid cookie.
+            csrf_status = employee.evaluate("""async () => {
+                const response = await fetch('/api/session/logout', {
+                    method: 'POST', headers: { 'Origin': 'https://attacker.example' }
+                });
+                return response.status;
+            }""")
+            assert csrf_status == 403
 
             admin.goto(f"{BASE}/knowledge-studio/references")
             expect(admin.get_by_role("heading", name="Reference library")).to_be_visible()
