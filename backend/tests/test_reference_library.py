@@ -224,3 +224,18 @@ def test_approved_candidate_pool_is_scoped_and_defensively_filtered(monkeypatch)
     assert "d.status = 'APPROVED'" in sql
     assert "d.department_id = %s AND c.department_id = %s" in sql
     assert params == ("receiving", "receiving", 50)
+
+
+def test_audit_insert_failure_rolls_back_reference_approval(monkeypatch):
+    cursor = Cursor(rowcount=1, fail_insert=True)
+    patch_db(monkeypatch, cursor)
+    with pytest.raises(RuntimeError, match="Simulated DB outage"):
+        ReferenceDocumentRepository.change_status(
+            "doc1", "receiving", "admin_01", action="approve",
+        )
+    statements = [sql for sql, _ in cursor.statements]
+    assert statements[0] == "BEGIN"
+    assert any("UPDATE KNOWLEDGE_STUDIO.reference_documents" in sql for sql in statements)
+    assert any("INSERT INTO shared.audit_logs" in sql for sql in statements)
+    assert statements[-1] == "ROLLBACK"
+    assert "COMMIT" not in statements
