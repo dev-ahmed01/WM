@@ -50,6 +50,7 @@ export WORKMATE_EVAL_LIVE=1
 # permissions for current approved references, not an owner or production writer.
 python backend/evals/warehouse_acceptance.py \
   --manifest /private/workmate_gold.json --min-cases 120 \
+  --min-per-language 30 --min-negative 20 \
   --fail-on-invalid --output /private/workmate_aggregate.json
 ```
 
