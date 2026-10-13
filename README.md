@@ -50,6 +50,20 @@ Fill every blank credential in `backend/.env`. Configure the PostgreSQL DATABASE
 
 For a separately hosted frontend, copy `frontend/.env.example` to `frontend/.env.local` and set its public API base URL.
 
+## Staging deployment (Phase 11)
+
+The audited staging topology and operator instructions are in
+[deploy/staging/README.md](deploy/staging/README.md). It uses private
+Next.js/FastAPI services behind HTTPS, an existing managed PostgreSQL
+database, separate migration/runtime credentials, a non-owner RLS-enforced
+runtime preflight, and opt-in encrypted logical backups.
+
+**No cloud resources are provisioned automatically.** This configuration
+deliberately disables LLM and voice processing to keep staging lean; it
+is a document/workflow/auth infrastructure acceptance environment, not full
+AI or bilingual voice acceptance. Production needs separate security,
+hosted backup/PITR, deployment and model evaluations.
+
 ## Run locally
 
 ### Self-hosted local AI
