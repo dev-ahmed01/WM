@@ -101,8 +101,12 @@ async def workmate_exception_handler(request: Request, exc: WorkMateException):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error_code": getattr(exc, "error_code", "WORKMATE_ERROR"),
-            "message": getattr(exc, "message", str(exc)),
-            "details": getattr(exc, "details", None),
+            "message": (getattr(exc, "message", str(exc))
+                       if settings.APP_ENV.strip().lower() in {"dev", "development", "test"}
+                       else "An internal operation failed."),
+            "details": (getattr(exc, "details", None)
+                       if settings.APP_ENV.strip().lower() in {"dev", "development", "test"}
+                       else None),
         },
     )
 
