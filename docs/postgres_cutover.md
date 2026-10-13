@@ -29,6 +29,21 @@ This branch replaces the expired Snowflake runtime with a PostgreSQL 16 foundati
 - CI runs PostgreSQL schema application twice and real integrations for auth/reference lifecycle and compiled SOP/conversation/voice data, plus existing focused backend regression and frontend build.
 - Full system browser E2E and production traffic/load tests remain separate release gates.
 
+## Voice action safety during PostgreSQL cutover
+
+The existing Faster-Whisper/Piper pipeline is preserved. A high-confidence
+informational utterance outside an active workflow may still receive a response.
+However, spoken completion/confirmation commands, any speech during an active
+or paused workflow, and low-confidence transcripts are never treated as
+authoritative state mutations. The voice endpoint returns HTTP 409 with a
+transcript for editing; the frontend places the translated text in the
+composer for explicit Send. These 409 attempts are recorded as unexecuted
+voice interactions in PostgreSQL for audit.
+
+The 0.80 confidence cutoff is a conservative control threshold, NOT a measured
+Hindi/Hinglish error-rate guarantee. Held-out bilingual audio benchmarks and
+noise evaluations are still required before claiming voice reliability.
+
 ## CI integration run
 
 Use the GitHub Actions WorkMate quality gates pipeline. Locally, with a disposable DATABASE_URL:
