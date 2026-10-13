@@ -9,11 +9,12 @@ from contextlib import asynccontextmanager
 from typing import Dict, Any
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, requests_logger
-from app.core.database import ping as ping_postgres_connection
+from app.core.database import ping as ping_postgres_connection, close_postgres_pool
 from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
@@ -39,7 +40,10 @@ async def lifespan(_: FastAPI):
             logger.info("Voice models ready in %.2fs", time.perf_counter() - started)
         except Exception:
             logger.exception("Voice model prewarming failed; continuing startup")
-    yield
+    try:
+        yield
+    finally:
+        close_postgres_pool()
 
 
 app = FastAPI(
@@ -101,8 +105,12 @@ async def workmate_exception_handler(request: Request, exc: WorkMateException):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error_code": getattr(exc, "error_code", "WORKMATE_ERROR"),
-            "message": getattr(exc, "message", str(exc)),
-            "details": getattr(exc, "details", None),
+            "message": (getattr(exc, "message", str(exc))
+                       if settings.APP_ENV.strip().lower() in {"dev", "development", "test"}
+                       else "An internal operation failed."),
+            "details": (getattr(exc, "details", None)
+                       if settings.APP_ENV.strip().lower() in {"dev", "development", "test"}
+                       else None),
         },
     )
 
@@ -138,11 +146,24 @@ async def root() -> Dict[str, Any]:
     }
 
 
+@app.get("/ready", tags=["Health"])
+async def readiness_check():
+    """503 when PostgreSQL is down; liveness remains independent at GET /."""
+    connected = await run_in_threadpool(ping_postgres_connection)
+    if not connected:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "database": "unreachable"},
+        )
+    return {"status": "ready", "database": "connected"}
+
+
+
 # Lightweight Health Check Endpoint
 @app.get("/health", tags=["Health"])
 async def health_check() -> Dict[str, Any]:
     """Health check endpoint validating system status and database connectivity."""
-    db_connected = ping_postgres_connection()
+    db_connected = await run_in_threadpool(ping_postgres_connection)
     return {
         "status": "ok" if db_connected else "degraded",
         "database": "connected" if db_connected else "unreachable",
