@@ -219,17 +219,30 @@ class WorkflowSessionRepository:
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        query,
-                        (
-                            new_status,
-                            json.dumps(session_context),
-                            now,
-                            completed_at,
-                            session_id,
-                            expected_status,
-                        ),
-                    )
-                    return cur.rowcount == 1
+                    cur.execute("BEGIN")
+                    try:
+                        cur.execute(
+                            query,
+                            (new_status, json.dumps(session_context), now,
+                             completed_at, session_id, expected_status),
+                        )
+                        changed = cur.rowcount == 1
+                        if changed:
+                            cur.execute(
+                                """INSERT INTO shared.audit_logs
+                                   (id,user_id,role,action,resource,ip_address,
+                                    status_code,created_at)
+                                   SELECT %s,s.user_id,'workflow',%s,%s,'internal',
+                                          200,CURRENT_TIMESTAMP
+                                   FROM WORKMATE_COPILOT.workflow_sessions s
+                                   WHERE s.id=%s""",
+                                (uuid.uuid4().hex, f"WORKFLOW_STATUS_{new_status.upper()}",
+                                 f"session:{session_id}", session_id),
+                            )
+                        cur.execute("COMMIT")
+                        return changed
+                    except Exception:
+                        cur.execute("ROLLBACK")
+                        raise
         except Exception as exc:
             raise DatabaseException(message=f"Failed to update session status: {exc}") from exc
