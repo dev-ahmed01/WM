@@ -159,18 +159,18 @@ async def upload_knowledge(
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error_code": "SNOWFLAKE_LOOKUP_FAILED", "message": exc.message, "details": None},
+            detail={"error_code": "POSTGRES_LOOKUP_FAILED", "message": exc.message, "details": None},
         ) from exc
 
     prepared_document.workflow.version_number = version_number
     source_hash = hashlib.sha256(raw_bytes).hexdigest()
     stage_prefix = f"{workflow_code}/v{version_number}/{source_hash[:12]}"
     try:
-        stage_file_uri = IngestionService.stage_file(raw_bytes, file.filename or f"{workflow_code}.md", stage_prefix)
+        stage_file_uri = IngestionService.stage_file(raw_bytes, file.filename or f"{workflow_code}.md", stage_prefix, department_id=department_id)
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error_code": "SNOWFLAKE_STAGE_FAILED", "message": exc.message, "details": None},
+            detail={"error_code": "POSTGRES_SOURCE_STORE_FAILED", "message": exc.message, "details": None},
         ) from exc
 
     user_id = current_user.get("sub", "admin")
