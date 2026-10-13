@@ -1,6 +1,6 @@
 # WorkMate AI — As-Built Project Context
 
-Updated: 2026-08-14
+Updated: 2026-10-13
 
 This document is the source of truth for the current implementation. It replaces historical
 descriptions of abandoned managed-AI, duplicate ingestion, and pre-voice architectures.
@@ -11,13 +11,14 @@ WorkMate AI is a state-aware operational guidance platform. Administrators publi
 Operational Workflow Definition (OWD) Markdown files. Employees receive grounded, step-by-step
 text or voice guidance. Managers review adoption, confidence, FAQ, and escalation analytics.
 
-It is not a generic document-chat product. The ingestion boundary intentionally accepts UTF-8
-OWD Markdown rather than arbitrary PDF, Word, image, or prose documents.
+It is not a generic document-chat product. The **publication boundary** accepts validated UTF-8 OWD Markdown. Administrators can also
+preview extracted text from PDF, Word, Excel, PowerPoint, HTML, CSV, JSON, RTF, and plain-text
+files through a separate non-publishing endpoint. Preview is not ingestion or approved knowledge.
 
 ## Active request flow
 
 ```text
-Knowledge Studio upload
+Knowledge Studio OWD publication
   -> FastAPI validation
   -> deterministic OWD parse/compile
   -> transactional Snowflake load and source staging
@@ -54,6 +55,10 @@ Employee text or voice query
 
 ## OWD Markdown
 
+An administrator-only `POST /api/v1/knowledge/preview` performs bounded, non-persistent
+text extraction on common formats. It does not write to Snowflake, index Copilot content,
+or generate validated workflows. Scanned PDFs/images are not OCR-supported yet.
+
 The compiler is deterministic. The grammar is implemented under
 `backend/app/compiler/parsers/`; `OWDParser` builds a unified AST, `OWDValidator` enforces the
 workflow contract, `OWDCompiler` generates deterministic identifiers, and `OWDLoader` performs
@@ -69,7 +74,7 @@ AST. Upload errors must identify validation problems without staging or partiall
 | Area | Current state |
 | --- | --- |
 | Authentication/RBAC | JWT access and refresh tokens; Snowflake users, roles, departments; audit middleware |
-| Knowledge Studio | OWD upload, compile, publish, list/detail, edit, version history, soft delete, permanent delete |
+| Knowledge Studio | OWD upload, compile, publish, list/detail, edit, version history, soft delete, permanent delete; bounded non-publishing document previews |
 | Copilot | Catalog matching, grounded retrieval, typo tolerance, workflow state, decisions, pause/resume/abandon, citations and escalation |
 | Query memory | Snowflake-backed pending/confirmed/rejected mappings with department scope and published-version validation |
 | Voice | English/Hindi recording, Faster-Whisper, M2M100 translation, Piper/deferred speech, protected audio |
@@ -115,7 +120,7 @@ Before release:
 
 ## Explicitly out of scope
 
-- OCR and arbitrary PDF/DOCX/image ingestion.
+- OCR, image-only PDF processing, and direct publication/indexing of arbitrary documents (extraction preview only).
 - Managed Snowflake AI/search services.
 - A second database, vector store, or ingestion pipeline.
 - Jira or other ticketing integration unless separately authorized.

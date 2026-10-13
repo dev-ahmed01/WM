@@ -2,7 +2,7 @@
 
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Radio, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, ShieldCheck, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
 import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceCopilotResponse, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
@@ -37,6 +37,7 @@ function CopilotContent() {
   const [activeStepTitle, setActiveStepTitle] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
   const [abandonOpen, setAbandonOpen] = useState(false);
+  const [mobileWorkflowOpen, setMobileWorkflowOpen] = useState(false);
   const [abandonReason, setAbandonReason] = useState('');
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>('auto');
   const [detectedLanguage, setDetectedLanguage] = useState<string>();
@@ -225,7 +226,6 @@ function CopilotContent() {
       setActiveStepNumber(response.active_step_number ?? undefined);
       setActiveStepTitle(response.active_step_title ?? undefined);
       setDetectedLanguage(voice.language);
-      if (voiceLanguage === 'auto') setVoiceLanguage(voice.language);
       setTranscriptPreview(voice.transcript);
       const assistantMessageId = response.message_id || createMessageId('assistant');
       setMessages((current) => [
@@ -262,7 +262,7 @@ function CopilotContent() {
   const voiceRecorder = useVoiceRecorder(submitVoice);
 
   const handleSend = () => {
-    voiceRecorder.stopListening();
+    voiceRecorder.cancelListening();
     void submitMessage(input);
   };
 
@@ -327,22 +327,33 @@ function CopilotContent() {
         : 'Describe the task, issue, or SOP you need…';
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] min-h-[38rem] flex-col overflow-hidden bg-white">
+    <div className="flex h-[calc(100dvh-4rem)] min-h-[30rem] flex-col overflow-hidden bg-[#fcfdfc]">
       <header className="flex flex-none items-center justify-between gap-4 border-b border-border/80 bg-white px-4 py-3 sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">Operational Copilot</h1>
-            <Badge className="hidden sm:inline-flex"><Radio className="h-3 w-3" />Live</Badge>
+            <Badge variant="neutral" className="hidden sm:inline-flex"><ShieldCheck className="h-3 w-3" />SOP-grounded</Badge>
           </div>
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id || 'your department'}</p>
         </div>
         <div className="flex flex-none items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground hover:border-emerald-200 hover:bg-emerald-50 lg:hidden"
+            aria-controls="mobile-workflow-panel"
+            aria-expanded={mobileWorkflowOpen}
+            onClick={() => setMobileWorkflowOpen((open) => !open)}
+          >
+            Workflow
+            {workflowDecisionOptions.length > 0 ? <span className="h-2 w-2 rounded-full bg-amber-500" aria-label="Decision required" /> : null}
+            {mobileWorkflowOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
           {conversationId ? <span className="hidden max-w-44 truncate rounded-lg bg-muted px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground md:block">{conversationId}</span> : null}
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-700" title="Grounded reasoning enabled"><Sparkles className="h-4 w-4" /></span>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_21rem] lg:grid-rows-1">
+      <div className={`grid min-h-0 flex-1 ${mobileWorkflowOpen ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]'} lg:grid-cols-[minmax(0,1fr)_21rem] lg:grid-rows-1`}>
         <section className="order-2 flex min-h-0 flex-col lg:order-1" aria-label="Copilot conversation">
           <main className="min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(209,250,229,0.22),transparent_28rem)]">
             <ChatThread
@@ -374,7 +385,7 @@ function CopilotContent() {
             onVoiceLanguageChange={setVoiceLanguage}
           />
         </section>
-        <div className="order-1 max-h-[18rem] min-h-0 overflow-hidden lg:order-2 lg:max-h-none">
+        <div id="mobile-workflow-panel" className={`${mobileWorkflowOpen ? 'order-1 max-h-[18rem]' : 'hidden'} min-h-0 overflow-hidden lg:order-2 lg:block lg:max-h-none`}>
           <WorkflowRail
             sessionId={workflowSessionId}
             status={workflowSessionStatus}
