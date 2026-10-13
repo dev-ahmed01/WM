@@ -115,7 +115,9 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                           {data.is_grounded ? <ShieldCheck className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
                           {data.is_grounded ? 'Grounded' : 'Needs review'}
                         </Badge>
-                        <Badge variant="neutral">{Math.round(data.confidence_score * 100)}% confidence</Badge>
+                        <Badge variant="neutral">
+                          {Math.round(data.confidence_score * 100)}% {data.citations?.some((citation) => citation.source_type === 'reference') ? 'evidence match' : 'confidence'}
+                        </Badge>
                         {data.requires_escalation ? <Badge variant="danger"><CircleAlert className="h-3 w-3" />Escalated</Badge> : null}
                       </>
                     ) : null}
