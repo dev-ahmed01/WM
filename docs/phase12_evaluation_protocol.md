@@ -70,6 +70,16 @@ PYTHONPATH=backend python backend/evals/voice_quality.py \
 
 Review English/Hindi/Hinglish WER, grapheme CER, missed/false command words, language detection on the two supported base languages, and p95 inference latency on the intended hardware. A low WER is **not** proof that translation preserved safety instructions. Manually inspect negations, numbers, imperative commands and mistranslated escalation steps. The browser still requires explicit transcript review before a consequential workflow message.
 
+## Approval revocation during retrieval
+
+The reference answering service now queries the authoritative PostgreSQL document
+status again after selecting an evidence passage and immediately before returning
+the citation. A document archived after candidate retrieval causes abstention;
+this is covered by focused regression tests. The status recheck reduces the
+stale-source race window, but does **not** create an atomic database snapshot
+across the entire HTTP response lifecycle. Stronger transactional snapshot and
+versioned-reference guarantees remain future security work.
+
 ## Release criteria (proposed, require human acceptance)
 
 Before a pilot, prefer: **zero cross-department citations**, **zero unapproved/archived citations**, **zero citation offset mismatches**, **zero automatic voice-driven workflow advances**, a human-reviewed low false-answer/unsafe-action rate on safety-critical queries, documented answer/abstention quality by language, and acceptable p95 latency on the actual deployed system. Tune thresholds from a disclosed frozen holdout and operational severity review, not from this synthetic CI suite.
