@@ -35,6 +35,7 @@ from app.repositories.owd_repository import OWDRepository
 from app.repositories.query_resolution_repository import QueryResolutionRepository
 from app.repositories.voice_repository import VoiceRepository
 from app.services.retrieval import RetrievalService
+from app.services.reference_answer import ReferenceAnswerService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowCompletionResult, WorkflowStateService
 from app.services.speech_recognition_service import (
@@ -944,6 +945,77 @@ async def copilot_message(
     history: list[Dict[str, Any]] = []
     started_workflow_this_turn = False
     active_session = WorkflowStateService.get_current_session(conversation_id)
+
+    # Read-only evidence mode: resolve *before* every confirmation, completion,
+    # decision, or workflow advancement branch. Even "done" in this mode cannot
+    # mutate the persisted operational state.
+    if payload.mode == "reference":
+        try:
+            validated_reference = await ReferenceAnswerService.answer(
+                payload.message, department_id,
+            )
+        except Exception as exc:
+            copilot_logger.exception("Department-scoped reference answering failed")
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error_code": "REFERENCE_ANSWER_UNAVAILABLE",
+                    "message": "Approved reference evidence is unavailable right now.",
+                },
+            ) from exc
+        ConversationRepository.update_message_intent(user_message_id, "REFERENCE_LOOKUP")
+        reference_message_id = ConversationRepository.persist_message(
+            conversation_id=conversation_id,
+            sender="ai",
+            content=validated_reference.answer,
+            intent="REFERENCE_ANSWER",
+            confidence_score=validated_reference.confidence_score,
+            retrieved_state_ids=[],
+            citations=[citation.model_dump() for citation in validated_reference.citations],
+            escalated=validated_reference.requires_escalation,
+        )
+        if validated_reference.requires_escalation:
+            try:
+                await EscalationService().escalate(
+                    conversation_message_id=reference_message_id,
+                    reason="Approved reference evidence missing or insufficient",
+                )
+            except Exception:
+                copilot_logger.exception("Reference evidence escalation failed")
+        try:
+            AnalyticsService.record_event(
+                event_type="copilot.reference_turn",
+                conversation_message_id=reference_message_id,
+                payload={
+                    "user_id": user_id,
+                    "department_id": department_id,
+                    "confidence_score": validated_reference.confidence_score,
+                    "requires_escalation": validated_reference.requires_escalation,
+                },
+            )
+        except Exception:
+            copilot_logger.exception("Reference telemetry write failed")
+        reference_position = (
+            WorkflowStateService.get_position(active_session)
+            if active_session and active_session.status in {"active", "paused"}
+            else None
+        )
+        return CopilotResponse(
+            conversation_id=conversation_id,
+            message_id=reference_message_id,
+            answer=validated_reference.answer,
+            citations=validated_reference.citations,
+            confidence_score=validated_reference.confidence_score,
+            is_grounded=validated_reference.is_grounded,
+            requires_escalation=validated_reference.requires_escalation,
+            active_session_id=active_session.id if active_session else None,
+            active_session_status=active_session.status if active_session else None,
+            active_sop_id=active_session.workflow_version_id if active_session else None,
+            active_step_number=reference_position.step_number if reference_position else None,
+            active_step_title=reference_position.step_title if reference_position else None,
+            active_decision_options=reference_position.decision_options if reference_position else [],
+        )
+
     resolved_position: Any = None
     prechecked_position: Any = None
     confirmation_response = WorkflowIntentService.confirmation_response(payload.message)

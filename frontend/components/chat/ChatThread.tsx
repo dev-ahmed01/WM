@@ -84,8 +84,13 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                           <li key={citation.chunk_id} className="rounded-xl bg-muted/70 p-3">
                             <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                               <span className="font-semibold text-foreground">{citation.document_title}</span>
-                              <span className="text-muted-foreground">v{citation.version_number}</span>
+                              {citation.source_type === 'reference' ? (
+                                <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-emerald-800">Approved reference</span>
+                              ) : citation.version_number != null ? (
+                                <span className="text-muted-foreground">v{citation.version_number}</span>
+                              ) : null}
                               {citation.step_number ? <span className="text-muted-foreground">· state {citation.step_number}</span> : null}
+                              {citation.section_anchor ? <span className="text-muted-foreground">· {citation.section_anchor}</span> : null}
                             </div>
                             {citation.excerpt ? <p className="mt-1.5 line-clamp-2 text-[10px] leading-4 text-muted-foreground">{citation.excerpt}</p> : null}
                           </li>

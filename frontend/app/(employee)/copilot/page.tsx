@@ -29,6 +29,7 @@ function CopilotContent() {
   const sessionId = searchParams.get('session');
 
   const [input, setInput] = useState('');
+  const [answerMode, setAnswerMode] = useState<'workflow' | 'reference'>('workflow');
   const [conversationId, setConversationId] = useState<string | undefined>(sessionId || undefined);
   const [workflowSessionId, setWorkflowSessionId] = useState<string | undefined>();
   const [workflowSessionStatus, setWorkflowSessionStatus] = useState<CopilotResponse['active_session_status']>();
@@ -154,6 +155,7 @@ function CopilotContent() {
           selected_workflow_code: selection?.workflowCode,
           original_query: selection?.originalQuery,
           response_language: selection?.responseLanguage,
+          mode: selection ? 'workflow' : answerMode,
         }),
       });
       setConversationId(response.conversation_id || conversationId);
@@ -185,7 +187,7 @@ function CopilotContent() {
     } finally {
       setIsSending(false);
     }
-  }, [conversationId, isSending, speechSynthesis.speak]);
+  }, [conversationId, isSending, speechSynthesis.speak, answerMode]);
 
   const handleSelectSop = useCallback((
     suggestion: SopSuggestion,
@@ -367,7 +369,9 @@ function CopilotContent() {
           </main>
           <ChatComposer
             value={input}
-            placeholder={composerPlaceholder}
+            placeholder={answerMode === 'reference' ? 'Ask what an approved company document says…' : composerPlaceholder}
+            answerMode={answerMode}
+            onAnswerModeChange={setAnswerMode}
             busy={isSending}
             listening={voiceRecorder.isListening}
             voiceProcessing={isVoiceProcessing}

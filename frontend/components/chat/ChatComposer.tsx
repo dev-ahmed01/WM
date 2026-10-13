@@ -11,6 +11,8 @@ const VOICE_LANGUAGES: Array<{ value: VoiceLanguage; label: string }> = [
 interface ChatComposerProps {
   value: string;
   placeholder: string;
+  answerMode: 'workflow' | 'reference';
+  onAnswerModeChange: (mode: 'workflow' | 'reference') => void;
   busy: boolean;
   listening: boolean;
   voiceProcessing: boolean;
@@ -29,7 +31,7 @@ interface ChatComposerProps {
 }
 
 export function ChatComposer({
-  value, placeholder, busy, listening, voiceProcessing, voiceInputLevel,
+  value, placeholder, answerMode, onAnswerModeChange, busy, listening, voiceProcessing, voiceInputLevel,
   voiceRecordingSeconds, microphonePermission, speechSupported, speechError,
   voiceLanguage, detectedLanguage, transcriptPreview, onChange, onSend,
   onToggleListening, onVoiceLanguageChange,
@@ -37,6 +39,25 @@ export function ChatComposer({
   return (
     <footer className="border-t border-border/80 bg-white/95 p-3 backdrop-blur-xl sm:p-4">
       <div className="mx-auto max-w-4xl">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-border bg-muted/60 p-1" role="group" aria-label="Copilot answer mode">
+            <button
+              type="button"
+              aria-pressed={answerMode === 'workflow'}
+              disabled={busy || listening}
+              onClick={() => onAnswerModeChange('workflow')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${answerMode === 'workflow' ? 'bg-white text-emerald-800 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >SOP guidance</button>
+            <button
+              type="button"
+              aria-pressed={answerMode === 'reference'}
+              disabled={busy || listening}
+              onClick={() => onAnswerModeChange('reference')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${answerMode === 'reference' ? 'bg-white text-emerald-800 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >Ask documents</button>
+          </div>
+          <span className="text-[11px] text-muted-foreground">{answerMode === 'reference' ? 'Read-only answers from approved sources' : 'Verified procedural steps and workflow progress'}</span>
+        </div>
         <div className="rounded-2xl border border-input bg-white p-2 shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100/70">
           <textarea
             rows={2}
@@ -58,8 +79,8 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={onToggleListening}
-                disabled={busy || !speechSupported}
-                aria-label={!speechSupported ? 'Voice input is not supported in this browser' : listening ? 'Stop voice input' : 'Start voice input'}
+                disabled={busy || !speechSupported || answerMode === 'reference'}
+                aria-label={answerMode === 'reference' ? 'Voice input is available in SOP guidance mode' : !speechSupported ? 'Voice input is not supported in this browser' : listening ? 'Stop voice input' : 'Start voice input'}
                 aria-pressed={listening}
                 className={`flex h-9 flex-none items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-35 ${listening ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
               >
@@ -109,7 +130,7 @@ export function ChatComposer({
               ? 'Recording received. Preparing the transcript and verified answer locally…'
               : transcriptPreview
                 ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-                : 'Speak in English, Hindi, or a mix. Auto detect stays enabled across recordings.')}
+                : answerMode === 'reference' ? 'Answers quote approved department documents. Switch to SOP guidance to use voice or complete steps.' : 'Speak in English, Hindi, or a mix. Auto detect stays enabled across recordings.')}
         </div>
       </div>
     </footer>

@@ -136,8 +136,8 @@ def test_search_department_comes_from_identity_not_query(monkeypatch):
 
 def test_sql_filters_approved_and_both_department_columns(monkeypatch):
     cursor = Cursor(rows=[
-        ("doc1", "Receipts", "receiving", "chunk1", "Damaged parcel", 0, 0, 14),
-        ("doc2", "Other", "other", "chunk2", "Damaged parcel", 0, 0, 14),
+        ("doc1", "Receipts", "receiving", "chunk1", "Damaged parcel", 0, 0, 14, "APPROVED"),
+        ("doc2", "Other", "other", "chunk2", "Damaged parcel", 0, 0, 14, "APPROVED"),
     ])
     patch_db(monkeypatch, cursor)
     result = ReferenceDocumentRepository.search_approved("damaged", "receiving")
