@@ -99,6 +99,27 @@ def main():
 
             employee = sign_in(browser, "e2e_employee@workmate.test")
             outsider = sign_in(browser, "e2e_other@workmate.test")
+            # Pilot feedback stays behind real HttpOnly sessions and the
+            # explicit e2e_ops cohort; outsiders must see 404.
+            posted = employee.evaluate("""async () => {
+                const response = await fetch('/api/backend/pilot/feedback', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({surface:'reference',verdict:'needs_review',issue:'missing_evidence'})
+                });
+                return response.status;
+            }""")
+            assert posted == 201
+            outsider_status = outsider.evaluate("""async () => {
+                const response = await fetch('/api/backend/pilot/feedback', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({surface:'reference',verdict:'helpful',issue:'none'})
+                });
+                return response.status;
+            }""")
+            assert outsider_status == 404
+            admin.goto(f"{BASE}/pilot")
+            expect(admin.get_by_role("heading", name="Pilot review")).to_be_visible()
+            expect(admin.get_by_text("reference · missing evidence")).to_be_visible(timeout=20000)
             # Draft must not be visible to either employee.
             search_sources(employee, expected=False)
             search_sources(outsider, expected=False)
@@ -150,7 +171,7 @@ def main():
             )
             assert logout.status == 200
             assert employee.evaluate("async () => (await fetch('/api/session/me')).status") == 401
-            print("BROWSER PASSED: HttpOnly sessions, CSRF, logout, draft/approval, department isolation and archive.")
+            print("BROWSER PASSED: pilot feedback/RBAC/summary, HttpOnly sessions, CSRF, document approvals, tenant isolation and archive.")
         except Exception:
             for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider)]:
                 if page is not None:
