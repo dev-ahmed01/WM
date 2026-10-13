@@ -12,7 +12,7 @@ services:
       APP_ENV: staging
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Missing migration-only PostgreSQL URL}
       DATABASE_URL: ${DATABASE_URL:?Missing runtime PostgreSQL URL}
-    command: ["python", "scripts/migrate_postgres.py"]
+    command: ["sh", "-ec", "python scripts/migrate_postgres.py && python scripts/grant_pg_runtime.py"]
     networks: [internal]
 
   backend:
