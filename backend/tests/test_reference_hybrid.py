@@ -115,3 +115,15 @@ def test_paraphrased_safe_reference_still_requires_exact_verbatim_quote():
     assert result.is_grounded
     assert result.citations[0].excerpt in text
     assert "recorded workflow" in result.answer
+
+
+def test_english_questions_prefer_english_evidence_on_bilingual_ties():
+    english = source("english", "If a carton is damaged, inspect the seal and quarantine the parcel.")
+    hindi = source("hindi", "यदि पैकेज क्षतिग्रस्त है तो सील की जांच करें और माल अलग रखें।")
+    ranked = rerank_lexical("broken box seal quarantine", [hindi, english], "receiving")
+    assert ranked[0]["chunk_id"] == "english"
+    validated = ReferenceAnswerService.validate_reference_answer(
+        "broken box seal quarantine", ranked, "receiving"
+    )
+    assert validated.is_grounded
+    assert validated.citations[0].chunk_id == "english"
