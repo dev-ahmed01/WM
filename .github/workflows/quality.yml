@@ -44,6 +44,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://workmate:workmate_ci_password@localhost:5432/workmate
           PYTHONPATH: backend
+          WORKMATE_RUN_LIVE_TESTS: "1"
         run: |
           python scripts/migrate_postgres.py
           python scripts/migrate_postgres.py
