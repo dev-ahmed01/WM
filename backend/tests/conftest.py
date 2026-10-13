@@ -6,10 +6,7 @@ import pytest
 
 
 # Unit tests never depend on developer or production credentials. These values
-# satisfy import-time configuration while all live Snowflake access stays blocked.
-os.environ.setdefault("SNOWFLAKE_ACCOUNT", "unit-test-account")
-os.environ.setdefault("SNOWFLAKE_USER", "unit-test-user")
-os.environ.setdefault("SNOWFLAKE_PASSWORD", "unit-test-password")
+# satisfy import-time configuration while all live PostgreSQL access stays blocked.
 os.environ.setdefault("JWT_SECRET", "unit-test-jwt-secret-with-32-characters")
 os.environ.setdefault("INTERNAL_WEBHOOK_SECRET", "unit-test-webhook-secret")
 
@@ -25,11 +22,11 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(autouse=True)
-def block_unmocked_snowflake_connections(monkeypatch):
+def block_unmocked_postgres_connections(monkeypatch):
     """Fail immediately if a unit test accidentally reaches live Snowflake."""
 
     def blocked(*args, **kwargs):
         del args, kwargs
-        raise AssertionError("Unit tests must not open live Snowflake connections")
+        raise AssertionError("Unit tests must not open live PostgreSQL connections")
 
-    monkeypatch.setattr("snowflake.connector.connect", blocked)
+    monkeypatch.setattr("psycopg.connect", blocked)
