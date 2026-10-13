@@ -93,6 +93,24 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  backup:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: deploy/staging/backup.Dockerfile
+    restart: "no"
+    environment:
+      BACKUP_DATABASE_URL: ${BACKUP_DATABASE_URL:?Missing dedicated backup PostgreSQL URL}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?Missing age encryption public key}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_DIRECTORY: /backups
+    volumes:
+      - ./backups:/backups
+    networks: [internal]
+    security_opt:
+      - no-new-privileges:true
+
+
 networks:
   internal:
     internal: true
