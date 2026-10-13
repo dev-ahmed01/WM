@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   ACCESS_COOKIE, backendUrl, checkCsrf, clearAuthCookies,
-  cookieOptions, exchangeRefresh, jsonError,
+  cookieOptions, exchangeRefresh, jsonError, setAuthCookies,
 } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
@@ -40,10 +40,10 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   }
   try {
     let response = await send(token);
-    let refreshed: string | null = null;
+    let refreshed: { access: string; refresh?: string } | null = null;
     if (response.status === 401) {
       refreshed = await exchangeRefresh(request);
-      if (refreshed) response = await send(refreshed);
+      if (refreshed) response = await send(refreshed.access);
     }
     const reply = new NextResponse(response.body, {
       status: response.status,
@@ -53,7 +53,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
         'X-Content-Type-Options': 'nosniff',
       },
     });
-    if (refreshed && response.ok) reply.cookies.set(ACCESS_COOKIE, refreshed, cookieOptions(60 * 60));
+    if (refreshed && response.ok) setAuthCookies(reply, refreshed.access, refreshed.refresh);
     if (response.status === 401) clearAuthCookies(reply);
     return reply;
   } catch {
