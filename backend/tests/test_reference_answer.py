@@ -1,4 +1,5 @@
 """Explicit read-only Copilot mode: evidence integrity and workflow non-mutation."""
+import pytest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
