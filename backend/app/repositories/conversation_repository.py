@@ -176,14 +176,12 @@ class ConversationRepository:
                     query = """
                         SELECT c.id, c.user_id, c.started_at AS created_at,
                                c.ended_at AS updated_at,
-                               COALESCE(ws.status, IFF(c.ended_at IS NULL, 'active', 'completed')) AS status
+                               COALESCE(ws.status, CASE WHEN c.ended_at IS NULL THEN 'active' ELSE 'completed' END) AS status
                         FROM WORKMATE_COPILOT.conversations c
                         LEFT JOIN (
-                            SELECT conversation_id, status
+                            SELECT DISTINCT ON (conversation_id) conversation_id, status
                             FROM WORKMATE_COPILOT.workflow_sessions
-                            QUALIFY ROW_NUMBER() OVER (
-                                PARTITION BY conversation_id ORDER BY started_at DESC
-                            ) = 1
+                            ORDER BY conversation_id, started_at DESC
                         ) ws ON ws.conversation_id = c.id
                         WHERE c.user_id = %s
                         ORDER BY c.started_at DESC
