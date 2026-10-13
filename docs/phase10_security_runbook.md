@@ -19,6 +19,7 @@
 
 - **RLS is currently scoped to the governed reference library and source objects.** Conversations, workflows, analytics, voice records and other tables remain protected by application checks, not complete independent row-level policies. Do not present this as end-to-end DB-enforced multi-tenancy.
 - Existing session expiry and status are checked during refresh; access tokens may remain valid until expiry unless the account's role, department or status changes. Global access-token revocation and device/session management remain future tasks.
+- The Next.js server coalesces simultaneous refresh attempts within one Node process for 2.5 seconds. Refresh races across distinct server replicas remain a release concern: configure sticky routing or implement cross-replica coordination before claiming seamless multi-region login. Old JWTs are still rejected by PostgreSQL on replay.
 - Remaining sensitive actions beyond workflow progress/status and reference approval/archive need transactional audit or outbox verification.
 - No system-wide rate limiting for every Copilot/voice/embedding endpoint, no hosted penetration test, and no realistic Hindi/Hinglish audio field benchmark were performed.
 - Production DB role grants and external TLS infrastructure are not yet validated in a hosted environment.
