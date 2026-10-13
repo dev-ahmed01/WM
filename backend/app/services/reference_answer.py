@@ -2,7 +2,7 @@
 
 Approved reference chunks are *not* instructions for the state machine. This
 service returns only verbatim source language, never invented procedures, and
-requires complete provenance from the Snowflake department/approval filter.
+requires complete provenance from PostgreSQL department and approval checks.
 """
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from typing import Any, Mapping, Sequence
 from app.models.copilot import Citation, ValidatedResponse
 from app.services.validation import CANONICAL_FALLBACK
 from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score, tokens, script_affinity
+from app.repositories.reference_document_repository import ReferenceDocumentRepository
+from starlette.concurrency import run_in_threadpool
 
 # These are conversational fillers, not evidence-bearing terms.
 _STOPWORDS = frozenset({
@@ -149,4 +151,18 @@ class ReferenceAnswerService:
     async def answer(cls, query: str, department_id: str) -> ValidatedResponse:
         # Database code is synchronous: keep ASGI event loop responsive.
         results = await ReferenceRetrievalService.search(query, department_id, limit=20)
-        return cls.validate_reference_answer(query, results, department_id)
+        evaluated = cls.validate_reference_answer(query, results, department_id)
+        # A reference can be archived after ranking but before answer emission.
+        # Recheck the authoritative PostgreSQL approval state before returning
+        # even an exact quoted passage. No caching of reviewer decisions.
+        for citation in evaluated.citations:
+            current = await run_in_threadpool(
+                ReferenceDocumentRepository.get_document,
+                citation.document_id, department_id,
+            )
+            if not current or current.get("status") != "APPROVED":
+                return ValidatedResponse(
+                    answer=CANONICAL_FALLBACK, citations=[], confidence_score=0.0,
+                    is_grounded=False, requires_escalation=True,
+                )
+        return evaluated

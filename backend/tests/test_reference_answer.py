@@ -1,4 +1,5 @@
 """Explicit read-only Copilot mode: evidence integrity and workflow non-mutation."""
+import pytest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
@@ -124,3 +125,34 @@ def test_invalid_answer_mode_rejected_by_schema():
         json={"message": "find policy", "mode": "disable_validation"},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_approval_revoked_after_retrieval_cannot_be_cited(monkeypatch):
+    from app.repositories.reference_document_repository import ReferenceDocumentRepository
+    from app.services.reference_retrieval import ReferenceRetrievalService
+
+    async def stale_approved_search(*_args, **_kwargs):
+        return [source()]
+    monkeypatch.setattr(ReferenceRetrievalService, "search", stale_approved_search)
+    monkeypatch.setattr(ReferenceDocumentRepository, "get_document",
+                        lambda _id, _dept: {"status": "ARCHIVED"})
+    output = await ReferenceAnswerService.answer("damaged carton", "receiving")
+    assert output.requires_escalation
+    assert not output.is_grounded
+    assert output.citations == []
+
+
+@pytest.mark.asyncio
+async def test_post_retrieval_approval_check_allows_current_reference(monkeypatch):
+    from app.repositories.reference_document_repository import ReferenceDocumentRepository
+    from app.services.reference_retrieval import ReferenceRetrievalService
+
+    async def current_search(*_args, **_kwargs):
+        return [source()]
+    monkeypatch.setattr(ReferenceRetrievalService, "search", current_search)
+    monkeypatch.setattr(ReferenceDocumentRepository, "get_document",
+                        lambda _id, _dept: {"status": "APPROVED"})
+    output = await ReferenceAnswerService.answer("damaged carton", "receiving")
+    assert output.is_grounded
+    assert output.citations

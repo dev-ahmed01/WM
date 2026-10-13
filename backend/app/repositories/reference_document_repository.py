@@ -1,4 +1,4 @@
-"""Department-isolated Snowflake repository for approved reference documents.
+"""Department-isolated PostgreSQL repository for approved reference documents.
 
 Reference material is not an OWD workflow and cannot mutate workflow state.
 Every read and write carries an explicit department scope. This repository has
@@ -246,7 +246,7 @@ class ReferenceDocumentRepository:
         """Bounded, department-filtered semantic candidate pool.
 
         No vector index or cache may silently retain an archived source. Querying
-        Snowflake on each request guarantees current approval status; the bounded
+        PostgreSQL on each request ensures current approval status is checked; the bounded
         pool is a recall limitation, not a claim of exhaustive semantic search.
         """
         if not department_id:
@@ -281,7 +281,7 @@ class ReferenceDocumentRepository:
 
     @staticmethod
     def search_approved(query: str, department_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        """Lexical recall only, with status and department scoped in Snowflake SQL."""
+        """Lexical recall only, with status and department scoped in PostgreSQL SQL."""
         tokens = list(dict.fromkeys(re.findall(r"[^\W_]{2,}", query.casefold(), flags=re.UNICODE)))[:6]
         if not tokens:
             return []
