@@ -86,7 +86,7 @@ def script_affinity(question: str, evidence: str) -> float:
         letters = [ch for ch in value if unicodedata.category(ch).startswith("L")]
         if not letters:
             return 0.0
-        return sum("\\u0900" <= ch <= "\\u097f" for ch in letters) / len(letters)
+        return sum(0x0900 <= ord(ch) <= 0x097F for ch in letters) / len(letters)
     q, e = fraction(question), fraction(evidence)
     if 0.20 < q < 0.80:
         return 0.5  # Mixed-script questions should not be pinned to one script.
