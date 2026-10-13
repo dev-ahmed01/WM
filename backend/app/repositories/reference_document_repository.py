@@ -213,6 +213,8 @@ class ReferenceDocumentRepository:
                 rows = cur.fetchall()
         scored = []
         for row in rows:
+            if str(row[2]) != department_id:
+                continue  # defence-in-depth against bad cache/mocked-provider boundaries
             content = str(row[4])
             score = sum(1 for token in tokens if token in content.casefold()) / len(tokens)
             scored.append({
