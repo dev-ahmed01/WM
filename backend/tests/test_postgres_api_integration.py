@@ -107,6 +107,16 @@ def test_real_api_login_review_search_archive_and_revocation(monkeypatch):
             )
             assert archived.status_code == 200, archived.text
             assert search(employee).json()["sources"] == []
+            # Audit events must persist in PostgreSQL, not silently fail under
+            # the legacy Snowflake UUID_STRING() function.
+            with psycopg.connect(settings.DATABASE_URL) as audit_conn:
+                with audit_conn.cursor() as audit_cur:
+                    audit_cur.execute(
+                        """SELECT count(*) FROM shared.audit_logs
+                           WHERE action LIKE 'POST /api/v1/knowledge/references%'
+                             AND status_code IN (200,201)""",
+                    )
+                    assert audit_cur.fetchone()[0] >= 3
 
             # Existing JWT is no longer enough after an account is disabled.
             with psycopg.connect(settings.DATABASE_URL, autocommit=True) as conn:
