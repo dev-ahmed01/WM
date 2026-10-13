@@ -67,6 +67,12 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
   }, []);
 
+  // Sending a typed message must not also submit an in-progress voice clip.
+  const cancelListening = useCallback(() => {
+    discardRef.current = true;
+    stopListening();
+  }, [stopListening]);
+
   const startListening = useCallback(async () => {
     if (
       !('mediaDevices' in navigator)
@@ -180,6 +186,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
     permissionState,
     recordingSeconds,
     stopListening,
+    cancelListening,
     toggleListening,
   };
 }

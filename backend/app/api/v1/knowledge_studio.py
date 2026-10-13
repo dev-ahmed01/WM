@@ -7,6 +7,8 @@ metadata edits, and soft-delete. Protected by admin RBAC.
 import logging
 import hashlib
 from typing import Optional, Dict, Any, List
+from starlette.concurrency import run_in_threadpool
+from app.services.private_ocr import ocr_capability
 from fastapi import (
     APIRouter,
     Depends,
@@ -20,6 +22,9 @@ from fastapi import (
 
 from app.middleware.rbac_middleware import require_role
 from app.services.ingestion import IngestionService
+from app.services.document_extraction import (
+    DocumentExtractionError, MAX_DOCUMENT_BYTES, preview_document,
+)
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.compiler.pipeline import OWDCompilerPipeline
 from app.compiler.exceptions import OWDLoaderException, OWDParsingException
@@ -46,6 +51,41 @@ from app.models.knowledge import (
 ingestion_logger = logging.getLogger("ingestion_jobs")
 
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Studio"])
+
+
+@router.get("/ocr-status", dependencies=[Depends(require_role("admin"))])
+async def get_ocr_status() -> Dict[str, Any]:
+    """Report whether local eng/hin OCR is provisioned without sharing a document."""
+    return await run_in_threadpool(ocr_capability)
+
+
+@router.post(
+    "/preview",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def preview_knowledge_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """Extract text for administrator review; do not stage, compile, or publish."""
+    raw = await file.read(MAX_DOCUMENT_BYTES + 1)
+    try:
+        preview = await run_in_threadpool(preview_document, file.filename or "", raw)
+    except DocumentExtractionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "DOCUMENT_PREVIEW_FAILED",
+                "message": str(exc),
+                "details": None,
+            },
+        ) from exc
+    return {
+        "filename": preview.filename,
+        "file_type": preview.file_type,
+        "text_preview": preview.text_preview,
+        "total_characters": preview.total_characters,
+        "preview_truncated": preview.preview_truncated,
+        "warnings": preview.warnings,
+        "publication_status": "not_published",
+    }
 
 
 @router.post(
@@ -119,18 +159,18 @@ async def upload_knowledge(
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error_code": "SNOWFLAKE_LOOKUP_FAILED", "message": exc.message, "details": None},
+            detail={"error_code": "POSTGRES_LOOKUP_FAILED", "message": exc.message, "details": None},
         ) from exc
 
     prepared_document.workflow.version_number = version_number
     source_hash = hashlib.sha256(raw_bytes).hexdigest()
     stage_prefix = f"{workflow_code}/v{version_number}/{source_hash[:12]}"
     try:
-        stage_file_uri = IngestionService.stage_file(raw_bytes, file.filename or f"{workflow_code}.md", stage_prefix)
+        stage_file_uri = IngestionService.stage_file(raw_bytes, file.filename or f"{workflow_code}.md", stage_prefix, department_id=department_id)
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error_code": "SNOWFLAKE_STAGE_FAILED", "message": exc.message, "details": None},
+            detail={"error_code": "POSTGRES_SOURCE_STORE_FAILED", "message": exc.message, "details": None},
         ) from exc
 
     user_id = current_user.get("sub", "admin")

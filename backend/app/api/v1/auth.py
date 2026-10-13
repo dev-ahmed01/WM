@@ -28,7 +28,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest) -> TokenResponse:
-    """Verifies credentials against users table in Snowflake and returns JWT access + refresh tokens."""
+    """Verifies credentials against users table in PostgreSQL and returns JWT access + refresh tokens."""
     try:
         user = await run_in_threadpool(UserRepository.get_user_by_email, payload.email)
     except WorkMateException as exc:
@@ -36,7 +36,7 @@ async def login(payload: LoginRequest) -> TokenResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error_code": "DATABASE_ERROR",
-                "message": f"Failed to execute user authentication query: {exc.message}",
+                "message": "Authentication service is temporarily unavailable.",
                 "details": None,
             },
         ) from exc
@@ -89,7 +89,7 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "error_code": "AUTH_INVALID",
-                "message": f"Invalid refresh token: {exc.message}",
+                "message": "Invalid refresh token.",
                 "details": None,
             },
             headers={"WWW-Authenticate": "Bearer"},
@@ -124,7 +124,7 @@ async def refresh_token(payload: RefreshTokenRequest) -> RefreshTokenResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error_code": "DATABASE_ERROR",
-                "message": f"Database error during token refresh: {exc.message}",
+                "message": "Authentication service is temporarily unavailable.",
                 "details": None,
             },
         ) from exc

@@ -1,5 +1,4 @@
 // Typed Fetch Client Wrapper for WorkMate AI FastAPI Endpoints
-import { refreshAccessToken } from '@/lib/auth';
 
 export interface ApiErrorPayload {
   error_code: string;
@@ -22,8 +21,10 @@ export class ApiError extends Error {
 export interface Citation {
   document_id: string;
   document_title: string;
-  version_number: number;
+  version_number: number | null;
   step_number?: number | string;
+  source_type?: 'workflow' | 'reference';
+  section_anchor?: string | null;
   chunk_id: string;
   excerpt: string;
   state_id?: string | null;
@@ -62,6 +63,17 @@ export interface WorkflowDecisionOption {
 }
 
 export type VoiceLanguage = 'auto' | 'en' | 'hi';
+
+export interface VoiceTranscriptPreview {
+  transcript: string;
+  suggested_text: string;
+  detected_language: 'en' | 'hi';
+  confidence: number;
+  transcription_ms: number;
+  translation_ms: number;
+  requires_confirmation: true;
+  warning: string;
+}
 
 export interface VoiceCopilotResponse {
   language: Exclude<VoiceLanguage, 'auto'>;
@@ -200,84 +212,39 @@ export interface CopilotConversationDetail {
   active_decision_options?: WorkflowDecisionOption[];
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = '/api/backend';
 
 export async function apiClient<T>(
   endpoint: string,
-  options: RequestInit & { _isRetry?: boolean } = {}
+  options: RequestInit = {},
 ): Promise<T> {
-  const { _isRetry, ...fetchOptions } = options;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
-  const headers: Record<string, string> = {
-    ...(fetchOptions.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  const headers = new Headers(options.headers);
+  if (!(options.body instanceof FormData) && options.body != null) {
+    headers.set('Content-Type', 'application/json');
   }
-
-  if (!(fetchOptions.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  let response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...fetchOptions,
-    headers,
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options, headers, credentials: 'same-origin', cache: 'no-store',
   });
-
-  // Automatic 401 refresh token retry logic
-  if (response.status === 401 && endpoint !== '/auth/refresh' && !_isRetry) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...fetchOptions,
-        headers,
-      });
-    } else {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
-      }
-    }
+  if (response.status === 401 && typeof window !== 'undefined') {
+    if (window.location.pathname !== '/login') window.location.href = '/login';
   }
-
   if (!response.ok) {
-    let errorPayload: ApiErrorPayload;
+    let payload: ApiErrorPayload;
     try {
-      const body = await response.json();
-      // FastAPI HTTPException responses wrap the application payload in
-      // `detail`; global exception handlers return it at the top level.
-      errorPayload = body?.detail ?? body;
+      const json = await response.json();
+      payload = json?.detail ?? json;
     } catch {
-      errorPayload = {
-        error_code: 'HTTP_ERROR',
-        message: response.statusText || 'An unexpected error occurred.',
-      };
+      payload = { error_code: 'HTTP_ERROR', message: response.statusText || 'Request failed.' };
     }
-    throw new ApiError(errorPayload, response.status);
+    throw new ApiError(payload, response.status);
   }
-
   return response.json() as Promise<T>;
 }
 
 export async function apiBlob(endpoint: string): Promise<Blob> {
-  let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  let response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    credentials: 'same-origin', cache: 'no-store',
   });
-  if (response.status === 401) {
-    token = await refreshAccessToken();
-    if (token) {
-      response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    }
-  }
   if (!response.ok) {
     throw new ApiError(
       { error_code: 'VOICE_AUDIO_ERROR', message: 'Voice audio is unavailable or expired.' },

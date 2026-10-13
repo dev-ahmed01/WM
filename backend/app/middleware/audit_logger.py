@@ -1,6 +1,7 @@
-"""Audit logging middleware recording state-changing API operations to Snowflake."""
+"""Audit logging middleware recording state-changing API operations to PostgreSQL."""
 
 import json
+from uuid import uuid4
 import logging
 from typing import Callable, Dict, Any
 
@@ -27,19 +28,14 @@ def _record_audit_entry_sync(audit_entry: Dict[str, Any]) -> None:
                     IP_ADDRESS,
                     STATUS_CODE,
                     CREATED_AT
-                ) SELECT
-                    UUID_STRING(),
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    CURRENT_TIMESTAMP()
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP
+                )
             """
             cursor.execute(
                 query,
                 (
+                    uuid4().hex,
                     audit_entry["user_id"],
                     audit_entry["role"],
                     audit_entry["action"],
@@ -51,14 +47,14 @@ def _record_audit_entry_sync(audit_entry: Dict[str, Any]) -> None:
     except Exception as exc:
         # Log local exception without breaking client response flow
         logger.error(
-            "Failed to record audit log entry in Snowflake: %s | Details: %s",
+            "Failed to record audit log entry in PostgreSQL: %s | Details: %s",
             exc,
             json.dumps(audit_entry),
         )
 
 
 class AuditLoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware writing audit trails to Snowflake AUDIT_LOG for POST, PUT, PATCH, and DELETE operations."""
+    """Middleware writing audit trails to PostgreSQL shared.audit_logs for POST, PUT, PATCH, and DELETE operations."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response = await call_next(request)

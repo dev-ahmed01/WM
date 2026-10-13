@@ -26,6 +26,7 @@ from app.models.copilot import (
 )
 from app.models.voice import (
     VoiceCopilotResponse,
+    VoiceTranscriptPreview,
     VoiceSynthesisRequest,
     VoiceSynthesisResponse,
 )
@@ -35,6 +36,7 @@ from app.repositories.owd_repository import OWDRepository
 from app.repositories.query_resolution_repository import QueryResolutionRepository
 from app.repositories.voice_repository import VoiceRepository
 from app.services.retrieval import RetrievalService
+from app.services.reference_answer import ReferenceAnswerService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowCompletionResult, WorkflowStateService
 from app.services.speech_recognition_service import (
@@ -490,6 +492,112 @@ def _recorded_completion_text(completed: list[int]) -> str:
     )
 
 
+def _effective_voice_language(transcript: str, reported: str, selected: str) -> str:
+    """Treat Indic script as a Hindi hint only when language was auto-detected."""
+    if selected != "auto":
+        return selected
+    letters = [character for character in transcript if character.isalpha()]
+    hindi = sum(0x0900 <= ord(character) <= 0x097F for character in letters)
+    if letters and hindi / len(letters) >= 0.20:
+        return "hi"
+    return reported if reported in SUPPORTED_LANGUAGES else "und"
+
+
+@router.post(
+    "/voice/transcribe",
+    response_model=VoiceTranscriptPreview,
+    summary="Private read-only voice transcription for explicit review",
+    dependencies=[Depends(require_role("employee", "admin", "manager"))],
+)
+async def voice_transcript_preview(
+    audio: UploadFile = File(...),
+    language: str = Form("auto"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    speech_service: FasterWhisperSpeechRecognitionService = Depends(get_speech_recognition_service),
+    translation_service: TranslationService = Depends(get_translation_service),
+) -> VoiceTranscriptPreview:
+    """No conversation, workflow, analytics, or voice database write is allowed.
+
+    The caller edits and submits the suggested text through the existing
+    authenticated text Copilot endpoint. Original transcript is always returned
+    for comparing Hindi/Hinglish terminology and quantities.
+    """
+    if not settings.VOICE_ENABLED:
+        raise HTTPException(503, detail={
+            "error_code": "VOICE_DISABLED", "message": "Voice input is disabled."
+        })
+    selected = language.strip().casefold()
+    enabled = {value.strip() for value in settings.VOICE_SUPPORTED_LANGUAGES.split(",")}
+    if selected != "auto" and selected not in enabled:
+        raise HTTPException(422, detail={
+            "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+            "message": "Select Auto, English, or Hindi.",
+        })
+    if not current_user.get("sub") or not current_user.get("department_id"):
+        raise HTTPException(401, detail={
+            "error_code": "VOICE_AUTH_REQUIRED", "message": "Authentication required."
+        })
+    temporary_path = await _save_voice_upload(audio)
+    try:
+        started = time.perf_counter()
+        result = await speech_service.transcribe(
+            temporary_path, None if selected == "auto" else selected
+        )
+        transcription_ms = round((time.perf_counter() - started) * 1000)
+        actual_language = _effective_voice_language(result.transcript, result.language.casefold(), selected)
+        if actual_language not in enabled or actual_language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(422, detail={
+                "error_code": "VOICE_LANGUAGE_UNSUPPORTED",
+                "message": "The detected language is not supported; no action was taken.",
+            })
+        translated_start = time.perf_counter()
+        suggestion = await translation_service.translate_to_english(
+            result.transcript, actual_language
+        )
+        translation_ms = round((time.perf_counter() - translated_start) * 1000)
+        if not suggestion.strip():
+            raise HTTPException(422, detail={
+                "error_code": "VOICE_NO_TRANSCRIPT", "message": "No meaningful speech detected.",
+            })
+        return VoiceTranscriptPreview(
+            transcript=result.transcript,
+            suggested_text=suggestion.strip(),
+            detected_language=actual_language,
+            confidence=result.confidence,
+            transcription_ms=transcription_ms,
+            translation_ms=translation_ms,
+            requires_confirmation=True,
+        )
+    except SpeechRecognitionError as exc:
+        raise HTTPException(422, detail={
+            "error_code": "VOICE_TRANSCRIPTION_FAILED",
+            "message": "Could not transcribe the recording. Please retry or type your request.",
+        }) from exc
+    except TranslationError as exc:
+        raise HTTPException(503, detail={
+            "error_code": "VOICE_TRANSLATION_FAILED",
+            "message": "Could not translate the recording. Please retry or type your request.",
+        }) from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _voice_needs_confirmation(message: str, confidence: float, active_session: Any) -> bool:
+    """Never let uncertain speech directly attest or move an operational workflow."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.casefold()))
+    if confidence < 0.80:
+        return True
+    if active_session and getattr(active_session, "status", "") in {"active", "paused"}:
+        return True
+    if _is_step_completion_message(message) or _completion_through_target(message):
+        return True
+    if _requested_step_jump(message) or _claims_previous_steps_without_target(message):
+        return True
+    if re.match(r"^(?:yes|yeah|yep|no|confirm|start|begin|pause|resume|stop|cancel|abandon|next|advance|skip|finish|complete)(?:\b|$)", normalized):
+        return True
+    return False
+
+
 @router.post(
     "/voice",
     response_model=VoiceCopilotResponse,
@@ -615,6 +723,28 @@ async def copilot_voice(
             transcript, detected_language
         )
         translation_ms = round((time.perf_counter() - started) * 1000)
+
+        # Voice is never an unreviewed step-completion or workflow decision
+        # authority. Return the captured transcript for the employee to edit
+        # and submit explicitly as text before a consequential transition.
+        active_voice_session = await run_in_threadpool(
+            WorkflowStateService.get_current_session, resolved_conversation_id,
+        )
+        if _voice_needs_confirmation(translated_transcript, transcription_confidence, active_voice_session):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": "VOICE_CONFIRM_TRANSCRIPT",
+                    "message": "Review the transcript and press Send to confirm. No workflow action was recorded.",
+                    "details": {
+                        "transcript": transcript,
+                        "translated_transcript": translated_transcript,
+                        "language": detected_language,
+                        "confidence": transcription_confidence,
+                        "conversation_id": resolved_conversation_id,
+                    },
+                },
+            )
 
         copilot_response = await copilot_message(
             CopilotMessageRequest(
@@ -944,6 +1074,77 @@ async def copilot_message(
     history: list[Dict[str, Any]] = []
     started_workflow_this_turn = False
     active_session = WorkflowStateService.get_current_session(conversation_id)
+
+    # Read-only evidence mode: resolve *before* every confirmation, completion,
+    # decision, or workflow advancement branch. Even "done" in this mode cannot
+    # mutate the persisted operational state.
+    if payload.mode == "reference":
+        try:
+            validated_reference = await ReferenceAnswerService.answer(
+                payload.message, department_id,
+            )
+        except Exception as exc:
+            copilot_logger.exception("Department-scoped reference answering failed")
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error_code": "REFERENCE_ANSWER_UNAVAILABLE",
+                    "message": "Approved reference evidence is unavailable right now.",
+                },
+            ) from exc
+        ConversationRepository.update_message_intent(user_message_id, "REFERENCE_LOOKUP")
+        reference_message_id = ConversationRepository.persist_message(
+            conversation_id=conversation_id,
+            sender="ai",
+            content=validated_reference.answer,
+            intent="REFERENCE_ANSWER",
+            confidence_score=validated_reference.confidence_score,
+            retrieved_state_ids=[],
+            citations=[citation.model_dump() for citation in validated_reference.citations],
+            escalated=validated_reference.requires_escalation,
+        )
+        if validated_reference.requires_escalation:
+            try:
+                await EscalationService().escalate(
+                    conversation_message_id=reference_message_id,
+                    reason="Approved reference evidence missing or insufficient",
+                )
+            except Exception:
+                copilot_logger.exception("Reference evidence escalation failed")
+        try:
+            AnalyticsService.record_event(
+                event_type="copilot.reference_turn",
+                conversation_message_id=reference_message_id,
+                payload={
+                    "user_id": user_id,
+                    "department_id": department_id,
+                    "confidence_score": validated_reference.confidence_score,
+                    "requires_escalation": validated_reference.requires_escalation,
+                },
+            )
+        except Exception:
+            copilot_logger.exception("Reference telemetry write failed")
+        reference_position = (
+            WorkflowStateService.get_position(active_session)
+            if active_session and active_session.status in {"active", "paused"}
+            else None
+        )
+        return CopilotResponse(
+            conversation_id=conversation_id,
+            message_id=reference_message_id,
+            answer=validated_reference.answer,
+            citations=validated_reference.citations,
+            confidence_score=validated_reference.confidence_score,
+            is_grounded=validated_reference.is_grounded,
+            requires_escalation=validated_reference.requires_escalation,
+            active_session_id=active_session.id if active_session else None,
+            active_session_status=active_session.status if active_session else None,
+            active_sop_id=active_session.workflow_version_id if active_session else None,
+            active_step_number=reference_position.step_number if reference_position else None,
+            active_step_title=reference_position.step_title if reference_position else None,
+            active_decision_options=reference_position.decision_options if reference_position else [],
+        )
+
     resolved_position: Any = None
     prechecked_position: Any = None
     confirmation_response = WorkflowIntentService.confirmation_response(payload.message)

@@ -1,0 +1,121 @@
+name: WorkMate PostgreSQL browser integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-to-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: workmate
+          POSTGRES_PASSWORD: workmate_browser_ci_password
+          POSTGRES_DB: workmate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workmate -d workmate"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_ENV: dev
+      DATABASE_URL: postgresql://workmate:workmate_browser_ci_password@localhost:5432/workmate
+      JWT_SECRET: browser-ci-only-secret-has-at-least-32-characters
+      INTERNAL_WEBHOOK_SECRET: browser-ci-only-webhook-secret
+      WORKMATE_BROWSER_SMOKE: '1'
+      WORKMATE_E2E_PASSWORD: browser-qa-only-strong-password-2026
+      AUTH_REVALIDATE_DB: 'true'
+      LOCAL_AI_ENABLED: 'false'
+      VOICE_ENABLED: 'false'
+      VOICE_PREWARM_MODELS: 'false'
+      FRONTEND_ORIGIN: http://127.0.0.1:3000,http://localhost:3000
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000/api/v1
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend and Chromium test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uvicorn playwright pytest pytest-asyncio bcrypt PyYAML fastapi httpx pydantic-settings python-multipart 'python-jose[cryptography]' 'psycopg[binary]>=3.2,<4' 'psycopg-pool>=3.2,<4' 'pypdf>=5,<7' 'python-docx>=1.2,<2' 'openpyxl>=3.1.5,<4' 'python-pptx>=1.0.2,<2' 'beautifulsoup4>=4.12,<5' 'striprtf>=0.0.26,<1' 'Pillow>=10.4,<12' 'pytesseract>=0.3.13,<1' 'pypdfium2>=4.30,<5'
+          python -m playwright install --with-deps chromium
+
+      - name: Apply PostgreSQL schema and seed disposable test accounts
+        run: |
+          python scripts/migrate_postgres.py
+          python backend/scripts/seed_browser_smoke.py
+
+      - name: Build Next.js browser client
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start real PostgreSQL-backed FastAPI and Next.js servers
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/workmate-api.log 2>&1 &
+          cd frontend
+          nohup npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/workmate-next.log 2>&1 &
+          for i in $(seq 1 50); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null && curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/workmate-api.log
+          cat /tmp/workmate-next.log
+          exit 1
+
+      - name: Check Next.js HttpOnly login and CSRF with direct HTTP
+        run: |
+          set -euo pipefail
+          COOKIE_JAR="$(mktemp)"
+          BODY="$(mktemp)"
+          status=$(curl -sS -o "$BODY" -w '%{http_code}' \
+            -c "$COOKIE_JAR" \
+            -H "Origin: http://127.0.0.1:3000" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"e2e_admin@workmate.test","password":"browser-qa-only-strong-password-2026"}' \
+            http://127.0.0.1:3000/api/session/login)
+          if [ "$status" != "200" ]; then echo "Next login returned status $status"; cat "$BODY"; exit 1; fi
+          grep -q 'wm_access' "$COOKIE_JAR" || (echo 'No HttpOnly access cookie' && exit 1)
+          profile_status=$(curl -sS -o "$BODY" -w '%{http_code}' \
+            -b "$COOKIE_JAR" http://127.0.0.1:3000/api/session/me)
+          echo "Session verification HTTP: $profile_status"
+          if [ "$profile_status" != "200" ]; then cat "$BODY"; exit 1; fi
+          csrf_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -b "$COOKIE_JAR" -H "Origin: https://attacker.example" -X POST \
+            http://127.0.0.1:3000/api/session/logout)
+          test "$csrf_status" = "403"
+          rm -f "$COOKIE_JAR" "$BODY"
+
+      - name: Browser login to archive lifecycle against actual PostgreSQL
+        run: python backend/e2e/browser_smoke.py
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          tail -n 150 /tmp/workmate-api.log || true
+          tail -n 150 /tmp/workmate-next.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: workmate-browser-failure
+          path: /tmp/workmate-*-failure.png
+          if-no-files-found: ignore
+          retention-days: 3

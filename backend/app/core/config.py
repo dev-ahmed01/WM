@@ -22,24 +22,32 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
-    # Snowflake persistence and source-stage connection settings
-    SNOWFLAKE_ACCOUNT: str = Field(min_length=1)
-    SNOWFLAKE_USER: str = Field(min_length=1)
-    SNOWFLAKE_PASSWORD: str = Field(min_length=1)
-    SNOWFLAKE_WAREHOUSE: str = "COMPUTE_WH"
-    SNOWFLAKE_DATABASE: str = "WORKMATE_AI"
-    SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
-    SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
-    SNOWFLAKE_POOL_SIZE: int = 4
-    SNOWFLAKE_POOL_ACQUIRE_TIMEOUT_SECONDS: float = 5.0
-    SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
-    OWD_CLI_USER_ID: str = "usr_admin001"
+    # PostgreSQL is the only runtime database. Set DATABASE_URL in production.
+    DATABASE_URL: str = "postgresql://workmate:workmate_dev_only@localhost:5432/workmate"
+    POSTGRES_POOL_SIZE: int = Field(default=6, ge=1, le=30)
+    POSTGRES_POOL_TIMEOUT_SECONDS: float = Field(default=5.0, ge=1.0, le=30.0)
+    SOURCE_OBJECT_MAX_BYTES: int = 25 * 1024 * 1024
+
+    # Local/private OCR of scanned operational references. No external API calls.
+    OCR_ENABLED: bool = True
+    OCR_LANGUAGES: str = "eng+hin"
+    OCR_PDF_DPI: int = Field(default=150, ge=100, le=200)
+    OCR_MAX_PAGES: int = Field(default=12, ge=1, le=30)
+    OCR_MAX_IMAGE_PIXELS: int = Field(default=16_000_000, ge=1_000_000, le=30_000_000)
+    OCR_TIMEOUT_SECONDS: int = Field(default=20, ge=3, le=60)
 
     # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
     COPILOT_MIN_CONFIDENCE_THRESHOLD: float = 0.70
     COPILOT_HISTORY_LIMIT: int = 6
+
+    # Reference search: a bounded, live-approval candidate pool rather than a
+    # persistent in-memory vector index (archival must revoke access immediately).
+    REFERENCE_HYBRID_ENABLED: bool = True
+    REFERENCE_POOL_LIMIT: int = Field(default=80, ge=1, le=150)
+    REFERENCE_EMBED_MAX_CANDIDATES: int = Field(default=32, ge=1, le=64)
+    REFERENCE_SEMANTIC_TIMEOUT_SECONDS: float = Field(default=5.0, ge=0.5, le=20.0)
 
     # Free/self-hosted Ollama runtime. Snowflake is candidate storage only.
     LOCAL_AI_ENABLED: bool = True
@@ -101,6 +109,9 @@ class Settings(BaseSettings):
     # Auth & Security Credentials
     JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
+    # Production JWT claims are revalidated against PostgreSQL on every request.
+    # Development unit suites may disable this, but production cannot.
+    AUTH_REVALIDATE_DB: bool = False
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
@@ -114,13 +125,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_security(self) -> Self:
+        # Prevent language code injection into the local OCR subprocess.
+        requested = self.OCR_LANGUAGES.split("+")
+        if len(requested) != len(set(requested)) or not set(requested) or not set(requested) <= {"eng", "hin"}:
+            raise ValueError("OCR_LANGUAGES may contain only eng and hin.")
         if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
         if self.APP_ENV.strip().lower() in {"prod", "production"}:
+            if not self.AUTH_REVALIDATE_DB:
+                raise ValueError("Production requires AUTH_REVALIDATE_DB=true")
+
             protected_values = {
-                "SNOWFLAKE_ACCOUNT": self.SNOWFLAKE_ACCOUNT,
-                "SNOWFLAKE_USER": self.SNOWFLAKE_USER,
-                "SNOWFLAKE_PASSWORD": self.SNOWFLAKE_PASSWORD,
+                "DATABASE_URL": self.DATABASE_URL,
                 "JWT_SECRET": self.JWT_SECRET,
                 "INTERNAL_WEBHOOK_SECRET": self.INTERNAL_WEBHOOK_SECRET,
             }
@@ -130,6 +146,8 @@ class Settings(BaseSettings):
                 for name, value in protected_values.items()
                 if not value or any(marker in value.casefold() for marker in markers)
             ]
+            if "workmate_dev_only" in self.DATABASE_URL or "localhost" in self.DATABASE_URL:
+                invalid.append("DATABASE_URL")
             if invalid:
                 raise ValueError(
                     "Production configuration contains missing or placeholder secrets: "

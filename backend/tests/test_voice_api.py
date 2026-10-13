@@ -24,6 +24,13 @@ app.include_router(router, prefix="/api/v1")
 client = TestClient(app)
 TOKEN = create_access_token("usr_emp", "employee", "dept_ops")
 
+@pytest.fixture(autouse=True)
+def no_current_workflow_for_voice_unit_tests(monkeypatch):
+    # Each voice route remains hermetic; explicit workflow-context checks are
+    # tested separately without accidentally opening a real PostgreSQL pool.
+    monkeypatch.setattr("app.api.v1.copilot.WorkflowStateService.get_current_session", lambda _: None)
+
+
 
 class FakeSpeechRecognition:
     async def transcribe(self, _path: Path, requested_language: str | None = None):
@@ -395,3 +402,137 @@ def test_compact_voice_defaults_fit_the_constrained_runtime():
     assert settings.WHISPER_CPU_THREADS == 4
     assert settings.VOICE_MODEL_REUSE_MIN_MEMORY_GB == 3.5
     assert "क्षतिग्रस्त" in settings.WHISPER_HOTWORDS
+
+
+def test_voice_action_guard_requires_review_for_ambiguous_commands():
+    from app.api.v1.copilot import _voice_needs_confirmation
+    from types import SimpleNamespace
+    for command in ("done", "yes", "next", "jump to step 3", "pause", "complete through step 2"):
+        assert _voice_needs_confirmation(command, 0.99, None)
+    assert _voice_needs_confirmation("How do I inspect a seal?", 0.35, None)
+    assert _voice_needs_confirmation("Where is the receiving station?", 0.99, SimpleNamespace(status="active"))
+    assert not _voice_needs_confirmation("Where is the receiving station?", 0.99, None)
+
+
+def test_unsafe_voice_step_command_returns_editable_transcript_without_execution():
+    class SpokenCommand:
+        async def transcribe(self, _path, _language=None):
+            return TranscriptionResult(transcript="done", language="en", confidence=0.98)
+    class IdentityTranslation:
+        async def translate_to_english(self, text, _language):
+            return text
+    app.dependency_overrides[get_speech_recognition_service] = SpokenCommand
+    app.dependency_overrides[get_translation_service] = IdentityTranslation
+    try:
+        with (
+            patch("app.api.v1.copilot.ConversationRepository.get_or_create_session", return_value="conv_voice"),
+            patch("app.api.v1.copilot.copilot_message", new_callable=AsyncMock) as unsafe_copilot,
+            patch("app.api.v1.copilot.VoiceRepository.persist_interaction", return_value="voice_review_row") as persist,
+            patch("app.api.v1.copilot.AnalyticsService.record_event"),
+        ):
+            response = client.post(
+                "/api/v1/copilot/voice",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                data={"language": "auto"},
+                files={"audio": ("voice.webm", b"sample audio", "audio/webm")},
+            )
+        assert response.status_code == 409
+        detail = response.json()["detail"]
+        assert detail["error_code"] == "VOICE_CONFIRM_TRANSCRIPT"
+        assert detail["details"]["translated_transcript"] == "done"
+        assert detail["details"]["conversation_id"] == "conv_voice"
+        unsafe_copilot.assert_not_awaited()
+        assert persist.call_args.kwargs["success"] is False
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_transcription_preview_never_creates_conversation_or_changes_workflow():
+    class EnglishVoice:
+        async def transcribe(self, _path, language=None):
+            assert language is None
+            return TranscriptionResult(
+                transcript="Inspect the incoming pallet", language="en", confidence=0.94
+            )
+
+    class EnglishTranslation:
+        async def translate_to_english(self, text, language):
+            assert (text, language) == ("Inspect the incoming pallet", "en")
+            return text
+
+    app.dependency_overrides[get_speech_recognition_service] = EnglishVoice
+    app.dependency_overrides[get_translation_service] = EnglishTranslation
+    try:
+        with (
+            patch("app.api.v1.copilot.ConversationRepository.get_or_create_session") as conversation,
+            patch("app.api.v1.copilot.copilot_message", new_callable=AsyncMock) as copilot,
+            patch("app.api.v1.copilot.WorkflowStateService.get_current_session") as workflow,
+            patch("app.api.v1.copilot.VoiceRepository.persist_interaction") as audit,
+        ):
+            response = client.post(
+                "/api/v1/copilot/voice/transcribe",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                data={"language": "auto"},
+                files={"audio": ("voice.webm", b"audio bytes", "audio/webm")},
+            )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["transcript"] == "Inspect the incoming pallet"
+        assert data["suggested_text"] == data["transcript"]
+        assert data["detected_language"] == "en"
+        assert data["requires_confirmation"] is True
+        conversation.assert_not_called()
+        workflow.assert_not_called()
+        copilot.assert_not_awaited()
+        audit.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_hinglish_devanagari_preview_translates_without_workflow_mutation():
+    class HinglishVoice:
+        async def transcribe(self, _path, _requested=None):
+            return TranscriptionResult(
+                transcript="Barcode को scan करो", language="en", confidence=0.55,
+            )
+    class HinglishTranslation:
+        async def translate_to_english(self, text, language):
+            assert language == "hi"  # Script evidence corrects auto-detection.
+            assert text == "Barcode को scan करो"
+            return "Scan the barcode"
+
+    app.dependency_overrides[get_speech_recognition_service] = HinglishVoice
+    app.dependency_overrides[get_translation_service] = HinglishTranslation
+    try:
+        with patch("app.api.v1.copilot.copilot_message", new_callable=AsyncMock) as copilot:
+            response = client.post(
+                "/api/v1/copilot/voice/transcribe",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                files={"audio": ("voice.webm", b"audio bytes", "audio/webm")},
+            )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["detected_language"] == "hi"
+        assert data["confidence"] == 0.55
+        assert data["suggested_text"] == "Scan the barcode"
+        assert data["requires_confirmation"] is True
+        copilot.assert_not_awaited()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_transcription_preview_requires_authentication():
+    response = client.post(
+        "/api/v1/copilot/voice/transcribe",
+        files={"audio": ("voice.webm", b"audio bytes", "audio/webm")},
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_transcription_preview_rejects_wrong_media_before_model():
+    response = client.post(
+        "/api/v1/copilot/voice/transcribe",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        files={"audio": ("voice.exe", b"malformed", "application/x-msdownload")},
+    )
+    assert response.status_code == 415

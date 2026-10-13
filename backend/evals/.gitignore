@@ -1,0 +1,13 @@
+# Private held-out voice data must never be committed.
+# Commit only redacted aggregate metrics and synthetic text-only fixtures.
+private_audio/
+heldout/
+recordings/
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.webm
+*.flac
+*.ogg
+*.aac

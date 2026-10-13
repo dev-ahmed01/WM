@@ -58,12 +58,12 @@ class CandidateRepository:
                    sm.department_id AS source_department_id,
                    %s AS department_id,
                    LOWER(wv.status) AS status
-            FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata sm
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions wv
+            FROM KNOWLEDGE_STUDIO.workflow_search_metadata sm
+            JOIN KNOWLEDGE_STUDIO.workflow_versions wv
               ON sm.workflow_version_id = wv.id
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflows w
+            JOIN KNOWLEDGE_STUDIO.workflows w
               ON wv.workflow_id = w.id
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_states s
+            JOIN KNOWLEDGE_STUDIO.workflow_states s
               ON sm.state_id = s.id
             WHERE LOWER(wv.status) IN ({placeholders})
               AND LOWER(sm.status) = 'published'
@@ -73,7 +73,7 @@ class CandidateRepository:
               )
               AND wv.version_number = (
                   SELECT MAX(candidate_version.version_number)
-                  FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
+                  FROM KNOWLEDGE_STUDIO.workflow_versions candidate_version
                   WHERE candidate_version.workflow_id = wv.workflow_id
                     AND LOWER(candidate_version.status) IN ({placeholders})
               )
@@ -261,7 +261,7 @@ class SqlLexicalRetrievalProvider:
             return []
         statuses = allowed_statuses()
         status_placeholders = ", ".join(["%s"] * len(statuses))
-        score_parts = ["IFF(LOWER(sm.search_content) LIKE %s, 1, 0)" for _ in terms]
+        score_parts = ["CASE WHEN LOWER(sm.search_content) LIKE %s THEN 1 ELSE 0 END" for _ in terms]
         where_parts = ["LOWER(sm.search_content) LIKE %s" for _ in terms]
         # Long natural-language questions contain contextual terms that should
         # not dilute several strong lexical matches below the safety gate.
@@ -285,12 +285,12 @@ class SqlLexicalRetrievalProvider:
                    %s AS department_id,
                    LOWER(wv.status) AS status,
                    {score_expression} AS score
-            FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_search_metadata sm
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions wv
+            FROM KNOWLEDGE_STUDIO.workflow_search_metadata sm
+            JOIN KNOWLEDGE_STUDIO.workflow_versions wv
               ON sm.workflow_version_id = wv.id
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflows w
+            JOIN KNOWLEDGE_STUDIO.workflows w
               ON wv.workflow_id = w.id
-            JOIN WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_states s
+            JOIN KNOWLEDGE_STUDIO.workflow_states s
               ON sm.state_id = s.id
             WHERE LOWER(wv.status) IN ({status_placeholders})
               AND LOWER(sm.status) = 'published'
@@ -300,7 +300,7 @@ class SqlLexicalRetrievalProvider:
               )
               AND wv.version_number = (
                   SELECT MAX(candidate_version.version_number)
-                  FROM WORKMATE_AI.KNOWLEDGE_STUDIO.workflow_versions candidate_version
+                  FROM KNOWLEDGE_STUDIO.workflow_versions candidate_version
                   WHERE candidate_version.workflow_id = wv.workflow_id
                     AND LOWER(candidate_version.status) IN ({status_placeholders})
               )
