@@ -1,0 +1,83 @@
+name: WorkMate staging infrastructure checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  staging-role-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: workmate
+          POSTGRES_PASSWORD: workmate_ci_password
+          POSTGRES_DB: workmate
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U workmate -d workmate"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_ENV: dev
+      JWT_SECRET: staging-ci-jwt-secret-has-at-least-32-characters
+      INTERNAL_WEBHOOK_SECRET: staging-ci-webhook-secret
+      MIGRATION_DATABASE_URL: postgresql://workmate:workmate_ci_password@localhost:5432/workmate
+      DATABASE_URL: postgresql://wm_stage_runtime:ci_stage_runtime_password@localhost:5432/workmate
+      PYTHONPATH: backend
+      WORKMATE_STAGING_ROLE_SMOKE: "1"
+      POSTGRES_RLS_REFERENCES: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify staging Compose topology without provisioning cloud resources
+        run: |
+          docker compose --env-file deploy/staging/.env.example \
+            -f deploy/staging/compose.yml config --quiet
+      - name: Install isolated test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bcrypt PyYAML fastapi httpx pydantic-settings python-multipart 'python-jose[cryptography]' 'psycopg[binary]>=3.2,<4' 'psycopg-pool>=3.2,<4' 'pypdf>=5,<7' 'python-docx>=1.2,<2' 'openpyxl>=3.1.5,<4' 'python-pptx>=1.0.2,<2' 'beautifulsoup4>=4.12,<5' 'striprtf>=0.0.26,<1' 'Pillow>=10.4,<12' 'pytesseract>=0.3.13,<1' 'pypdfium2>=4.30,<5'
+      - name: Apply schema as owner and create separate non-owner CI login
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect(os.environ['MIGRATION_DATABASE_URL'],autocommit=True) as conn:
+              conn.execute("CREATE ROLE wm_stage_runtime LOGIN PASSWORD 'ci_stage_runtime_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION")
+          PY
+          APP_ENV=staging python scripts/migrate_postgres.py
+          python scripts/grant_pg_runtime.py
+      - name: Ensure staging migration/runtime separation fails closed
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.migrate_postgres import select_migration_url
+          from app.core.config import Settings
+          invalid = dict(os.environ,APP_ENV='staging',MIGRATION_DATABASE_URL=os.environ['DATABASE_URL'])
+          try:
+              select_migration_url(invalid)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('Staging migration allowed runtime-owned schema')
+          try:
+              Settings(_env_file=None,APP_ENV='staging',DATABASE_URL='postgresql://runtime:secret@db.example.net/workmate',
+                       FRONTEND_ORIGIN='https://stage.example.org',
+                       AUTH_REVALIDATE_DB=False)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('Staging accepted insecure auth configuration')
+          PY
+      - name: Verify restricted runtime role and real tenant write/read flow
+        run: |
+          python scripts/verify_runtime_database.py
+          python scripts/verify_staging_role_flow.py
