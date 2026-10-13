@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { AlertCircle, FileSearch, FileText, ShieldCheck, UploadCloud } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -22,10 +23,49 @@ export function DocumentPreviewImport() {
   const [isWorking, setIsWorking] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [title, setTitle] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [departments, setDepartments] = useState<Array<{id: string; name: string}>>([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<{id: string; status: string} | null>(null);
+
+  useEffect(() => {
+    apiClient<Array<{id: string; name: string}>>('/knowledge/departments')
+      .then((result) => {
+        setDepartments(result);
+        setDepartmentId((current) => current || result[0]?.id || '');
+      })
+      .catch(() => setError('Could not load active departments. Try reloading.'));
+  }, []);
+
+  const saveDraft = async () => {
+    if (!selectedFile || !preview || !departmentId || !title.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = new FormData();
+      payload.append('file', selectedFile);
+      payload.append('department_id', departmentId);
+      payload.append('title', title.trim());
+      const response = await apiClient<{id: string; status: string}>('/knowledge/references', {
+        method: 'POST', body: payload,
+      });
+      setSaved(response);
+      setSelectedFile(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save the document draft.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const previewFile = async (file: File) => {
     setError(null);
     setPreview(null);
+    setSelectedFile(null);
+    setSaved(null);
+    setTitle(file.name.replace(/\.[^.]+$/, ''));
     setFileName(file.name);
     if (file.size > 25 * 1024 * 1024) {
       setError('This file exceeds the 25 MB preview limit.');
@@ -40,6 +80,7 @@ export function DocumentPreviewImport() {
         body: form,
       });
       setPreview(response);
+      setSelectedFile(file);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not extract this document.');
     } finally {
@@ -104,6 +145,14 @@ export function DocumentPreviewImport() {
         </div>
       ) : null}
 
+
+      {saved ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-950">
+          <div><p className="font-semibold">Document saved as a draft</p><p className="mt-1">It is not searchable by employees until approved.</p></div>
+          <Link href="/knowledge-studio/references" className="rounded-lg bg-emerald-700 px-4 py-2.5 font-semibold text-white hover:bg-emerald-800">Review library</Link>
+        </div>
+      ) : null}
+
       {preview ? (
         <section className="wm-panel overflow-hidden" aria-label="Extracted document preview">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5 sm:px-7">
@@ -122,6 +171,16 @@ export function DocumentPreviewImport() {
           ) : null}
           <pre className="max-h-[26rem] overflow-auto whitespace-pre-wrap break-words p-5 font-sans text-sm leading-6 text-foreground sm:p-7">{preview.text_preview}</pre>
           {preview.preview_truncated ? <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground sm:px-7">Preview limited to the first 12,000 characters. The entire document has not been shown.</p> : null}
+          {!saved ? (
+            <div className="space-y-4 border-t border-border bg-muted/20 p-5 sm:p-7">
+              <div><h4 className="text-sm font-semibold">Save for administrator review</h4><p className="mt-1 text-xs text-muted-foreground">The document stays in draft until an admin reviews and approves the extracted text. Review the full source before approving.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block"><span className="wm-label">Document title</span><input className="wm-input" value={title} maxLength={512} onChange={(event) => setTitle(event.target.value)} disabled={saving} /></label>
+                <label className="block"><span className="wm-label">Department</span><select className="wm-input" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} disabled={saving}>{departments.map((dep) => <option value={dep.id} key={dep.id}>{dep.name}</option>)}</select></label>
+              </div>
+              <button type="button" onClick={() => void saveDraft()} disabled={saving || !selectedFile || !title.trim() || !departmentId} className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving draft…' : 'Save as draft'}</button>
+            </div>
+          ) : null}
         </section>
       ) : fileName && isWorking ? (
         <p aria-live="polite" className="text-sm text-muted-foreground">Extracting readable text from {fileName}…</p>
