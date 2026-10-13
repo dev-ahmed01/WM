@@ -12,6 +12,7 @@ import {
   History,
   Search,
   Library,
+  ClipboardCheck,
   LogOut,
   Menu,
   ShieldCheck,
@@ -78,6 +79,13 @@ const NAV_ITEMS: NavItem[] = [
     description: 'Operational insights',
     href: '/intelligence-hub',
     icon: BarChart3,
+    roles: ['manager', 'admin'],
+  },
+  {
+    label: 'Pilot review',
+    description: 'Anonymized department feedback',
+    href: '/pilot',
+    icon: ClipboardCheck,
     roles: ['manager', 'admin'],
   },
 ];

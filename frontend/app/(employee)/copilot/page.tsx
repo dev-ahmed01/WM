@@ -7,6 +7,7 @@ import { useRequireRole } from '@/lib/auth';
 import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceTranscriptPreview, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+import { PilotFeedback } from '@/components/chat/PilotFeedback';
 import { WorkflowRail } from '@/components/chat/WorkflowRail';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -47,6 +48,7 @@ function CopilotContent() {
   const [voiceSpeakingKey, setVoiceSpeakingKey] = useState<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceObjectUrlRef = useRef<string | null>(null);
+  const [pilotEnabled, setPilotEnabled] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -56,6 +58,19 @@ function CopilotContent() {
         : 'Tell me what you are working on. I’ll find the verified SOP, keep you on the current step, and explain any rule that applies.',
     },
   ]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    let active = true;
+    void apiClient<{ feedback_enabled: boolean }>('/pilot/config')
+      .then(result => { if (active) setPilotEnabled(result.feedback_enabled); })
+      .catch(() => { if (active) setPilotEnabled(false); });
+    return () => { active = false; };
+  }, [loading, user?.sub, user?.department_id]);
+
+  const latestPilotMessage = messages[messages.length - 1];
+  const feedbackMessage = latestPilotMessage?.sender === 'assistant' && latestPilotMessage.copilotData
+    ? latestPilotMessage : null;
 
   const speechSynthesis = useSpeechSynthesis();
 
@@ -345,6 +360,13 @@ function CopilotContent() {
               onSelectSop={handleSelectSop}
             />
           </main>
+          {pilotEnabled && feedbackMessage ? (
+            <PilotFeedback
+              key={feedbackMessage.id}
+              messageId={feedbackMessage.id}
+              surface={feedbackMessage.copilotData?.citations.some(c => c.source_type === 'reference') ? 'reference' : 'workflow'}
+            />
+          ) : null}
           <ChatComposer
             value={input}
             placeholder={answerMode === 'reference' ? 'Ask what an approved company document says…' : composerPlaceholder}
