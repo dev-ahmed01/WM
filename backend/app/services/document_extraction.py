@@ -14,6 +14,7 @@ from zipfile import BadZipFile, ZipFile
 
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 MAX_PREVIEW_CHARACTERS = 12000
+MAX_EXTRACTED_CHARACTERS = 1_000_000
 MAX_ARCHIVE_EXPANDED_BYTES = 120 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 3000
 MAX_PDF_PAGES = 200
@@ -186,12 +187,16 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
     )
 
 
-def preview_document(filename: str, raw: bytes) -> DocumentPreview:
-    """Read a bounded document in memory; return only a short administrator preview.
+@dataclass(frozen=True)
+class ExtractedDocument:
+    filename: str
+    file_type: str
+    content: str
+    warnings: list[str]
 
-    No external requests, persistent files, vector indexing, graph compilation or
-    publication occur here. Preview text must never be treated as approved guidance.
-    """
+
+def extract_document(filename: str, raw: bytes) -> ExtractedDocument:
+    """Bounded extraction with no persistence or trust elevation."""
     safe_name = Path(filename.replace("\\", "/")).name
     extension = Path(safe_name).suffix.lower()
     if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
@@ -213,11 +218,24 @@ def preview_document(filename: str, raw: bytes) -> DocumentPreview:
         raise DocumentExtractionError(
             "No readable text was extracted. Image-only documents require OCR before import."
         )
+    if len(content) > MAX_EXTRACTED_CHARACTERS:
+        raise DocumentExtractionError(
+            "Extracted document exceeds the 1,000,000-character safety limit."
+        )
+    return ExtractedDocument(
+        filename=safe_name, file_type=extension.lstrip("."),
+        content=content, warnings=warnings,
+    )
+
+
+def preview_document(filename: str, raw: bytes) -> DocumentPreview:
+    """Extract text for an administrator preview; never publish or index."""
+    extracted = extract_document(filename, raw)
     return DocumentPreview(
-        filename=safe_name,
-        file_type=extension.lstrip("."),
-        text_preview=content[:MAX_PREVIEW_CHARACTERS],
-        total_characters=len(content),
-        preview_truncated=len(content) > MAX_PREVIEW_CHARACTERS,
-        warnings=warnings,
+        filename=extracted.filename,
+        file_type=extracted.file_type,
+        text_preview=extracted.content[:MAX_PREVIEW_CHARACTERS],
+        total_characters=len(extracted.content),
+        preview_truncated=len(extracted.content) > MAX_PREVIEW_CHARACTERS,
+        warnings=extracted.warnings,
     )
