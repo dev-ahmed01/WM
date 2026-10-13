@@ -117,12 +117,12 @@ class OWDLoader:
                                       %s AS owner, %s AS priority, %s AS difficulty, %s AS estimated_duration, %s AS review_cycle, %s AS effective_date,
                                       %s AS workflow_objective, %s AS business_goal, %s AS entry_conditions, %s AS exit_conditions) AS src
                         ON target.id = src.id OR target.workflow_code = src.workflow_code
-                        WHEN MATCHED THEN UPDATE SET title = src.title, description = src.description, department_id = src.department_id, updated_at = CURRENT_TIMESTAMP(),
+                        WHEN MATCHED THEN UPDATE SET title = src.title, description = src.description, department_id = src.department_id, updated_at = CURRENT_TIMESTAMP,
                                                      owner = src.owner, priority = src.priority, difficulty = src.difficulty, estimated_duration = src.estimated_duration,
                                                      workflow_objective = src.workflow_objective, business_goal = src.business_goal
                         WHEN NOT MATCHED THEN INSERT (id, workflow_code, title, description, department_id, category, created_by, created_at, updated_at,
                                                      owner, priority, difficulty, estimated_duration, review_cycle, effective_date, workflow_objective, business_goal, entry_conditions, exit_conditions)
-                        VALUES (src.id, src.workflow_code, src.title, src.description, src.department_id, src.category, src.created_by, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(),
+                        VALUES (src.id, src.workflow_code, src.title, src.description, src.department_id, src.category, src.created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
                                 src.owner, src.priority, src.difficulty, src.estimated_duration, src.review_cycle, src.effective_date, src.workflow_objective, src.business_goal, src.entry_conditions, src.exit_conditions)
                         """,
                         (wf["id"], wf["workflow_code"], wf["title"], wf["description"], wf["department_id"], wf["category"], wf["created_by"],
@@ -137,9 +137,9 @@ class OWDLoader:
                         MERGE INTO KNOWLEDGE_STUDIO.workflow_versions AS target
                         USING (SELECT %s AS id, %s AS workflow_id, %s AS version_number, %s AS semantic_version, %s AS stage_file_uri, %s AS ast_hash, %s AS status) AS src
                         ON target.id = src.id
-                        WHEN MATCHED THEN UPDATE SET status = 'published', stage_file_uri = src.stage_file_uri, ast_hash = src.ast_hash, published_at = CURRENT_TIMESTAMP()
+                        WHEN MATCHED THEN UPDATE SET status = 'published', stage_file_uri = src.stage_file_uri, ast_hash = src.ast_hash, published_at = CURRENT_TIMESTAMP
                         WHEN NOT MATCHED THEN INSERT (id, workflow_id, version_number, semantic_version, stage_file_uri, ast_hash, status, created_at, published_at)
-                        VALUES (src.id, src.workflow_id, src.version_number, src.semantic_version, src.stage_file_uri, src.ast_hash, 'published', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
+                        VALUES (src.id, src.workflow_id, src.version_number, src.semantic_version, src.stage_file_uri, src.ast_hash, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         """,
                         (ver["id"], ver["workflow_id"], ver["version_number"], ver["semantic_version"], ver["stage_file_uri"], ver["ast_hash"], ver["status"]),
                     )
@@ -391,7 +391,7 @@ class OWDLoader:
                                           %s AS source_type, %s AS language_code, %s AS author, %s AS reviewer, %s AS approval_status,
                                           %s::jsonb AS tags, %s::jsonb AS labels, %s AS description) AS src
                             ON target.id = src.id
-                            WHEN MATCHED THEN UPDATE SET document_name = src.document_name, updated_at = CURRENT_TIMESTAMP()
+                            WHEN MATCHED THEN UPDATE SET document_name = src.document_name, updated_at = CURRENT_TIMESTAMP
                             WHEN NOT MATCHED THEN INSERT (id, workflow_id, workflow_version_id, document_name, original_filename, stage_uri, relative_path, directory, extension, mime_type, file_size_bytes, md5_hash, sha256_hash, compiler_version, parser_version, source_type, language_code, author, reviewer, approval_status, tags, labels, description)
                             VALUES (src.id, src.workflow_id, src.workflow_version_id, src.document_name, src.original_filename, src.stage_uri, src.relative_path, src.directory, src.extension, src.mime_type, src.file_size_bytes, src.md5_hash, src.sha256_hash, src.compiler_version, src.parser_version, src.source_type, src.language_code, src.author, src.reviewer, src.approval_status, src.tags, src.labels, src.description)
                             """,
