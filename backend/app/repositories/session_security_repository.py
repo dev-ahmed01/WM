@@ -107,8 +107,9 @@ class AuthThrottleRepository:
             address = str(ipaddress.ip_address(client_ip))
         except ValueError:
             address = "unresolved"
-        keys = [digest_key("ip|" + action + "|" + address),
-                digest_key("account|" + action + "|" + identifier.strip().casefold())]
+        keys = [digest_key("account|" + action + "|" + identifier.strip().casefold())]
+        if settings.AUTH_RATE_IP_BUCKET_ENABLED:
+            keys.append(digest_key("ip|" + action + "|" + address))
         decisions = []
         for key in keys:
             with get_postgres_connection() as conn:
