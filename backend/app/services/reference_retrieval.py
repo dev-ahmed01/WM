@@ -1,4 +1,4 @@
-"""Hybrid reference retrieval with Snowflake approval as the sole source of truth.
+"""Hybrid reference retrieval with PostgreSQL approval as the sole source of truth.
 
 No cached embedding or LLM response can authorize a document. Candidate IDs,
 department and APPROVED status are rechecked at every boundary. Semantic
@@ -140,7 +140,7 @@ class ReferenceRetrievalService:
         if not query.strip() or not department_id.strip():
             return []
         limit = max(1, min(int(limit), 20))
-        # Fetch the lexical shortlist and independent semantic pool from Snowflake,
+        # Fetch the lexical shortlist and independent semantic pool from PostgreSQL,
         # never from a persistent vector cache that might contain archived text.
         lexical, pool = await asyncio.gather(
             run_in_threadpool(
