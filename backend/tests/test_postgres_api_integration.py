@@ -78,7 +78,7 @@ def test_real_api_login_review_search_archive_and_revocation(monkeypatch):
             document_id = uploaded.json()["id"]
             with psycopg.connect(settings.DATABASE_URL) as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT stage_file_uri FROM knowledge_studio.reference_documents WHERE id=%s", (document_id,))
+                    cur.execute("SELECT stage_uri FROM knowledge_studio.reference_documents WHERE id=%s", (document_id,))
                     row = cur.fetchone()
                     assert row and row[0].startswith("pgobj:")
                     source_id = row[0].split(":", 1)[1]
@@ -132,8 +132,9 @@ def test_real_api_login_review_search_archive_and_revocation(monkeypatch):
                 if document_id:
                     cur.execute("DELETE FROM knowledge_studio.reference_chunks WHERE document_id=%s", (document_id,))
                     cur.execute("DELETE FROM knowledge_studio.reference_documents WHERE id=%s", (document_id,))
-                if source_id:
-                    cur.execute("DELETE FROM shared.source_objects WHERE id=%s", (source_id,))
+                # Always clean up scoped source bytes, even if an assertion
+                # failed before the test could read the uploaded object ID.
+                cur.execute("DELETE FROM shared.source_objects WHERE department_id=%s", (department,))
                 cur.execute("DELETE FROM security.user_roles WHERE user_id = ANY(%s)", (ids,))
                 cur.execute("DELETE FROM security.users WHERE id = ANY(%s)", (ids,))
                 cur.execute("DELETE FROM security.roles WHERE id = ANY(%s)", (roles,))
