@@ -12,9 +12,7 @@ import {
   History,
   LogOut,
   Menu,
-  PanelLeftClose,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { getUserClaims, type UserClaims } from '@/lib/auth';
@@ -75,13 +73,13 @@ function isActiveRoute(pathname: string, href: string) {
 
 function Brand() {
   return (
-    <Link href="/copilot" className="group flex items-center gap-3" aria-label="WorkMate home">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400 text-sm font-black tracking-tight text-emerald-950 shadow-[0_8px_24px_rgba(52,211,153,0.2)] transition-transform group-hover:-translate-y-0.5">
+    <Link href="/copilot" className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4" aria-label="WorkMate home">
+      <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#164a3b] text-sm font-bold tracking-tight text-white shadow-sm transition group-hover:bg-[#0d3328]">
         WM
       </span>
       <span>
-        <span className="block text-[15px] font-semibold tracking-tight text-white">WorkMate</span>
-        <span className="block text-[10px] font-semibold uppercase tracking-[0.17em] text-slate-500">Operations AI</span>
+        <span className="block text-base font-bold tracking-tight text-[#18392f]">WorkMate</span>
+        <span className="block text-[10px] font-medium uppercase tracking-[0.13em] text-slate-500">Operational intelligence</span>
       </span>
     </Link>
   );
@@ -94,16 +92,16 @@ function UserMenu({ user, onLogout, compact = false }: { user: UserClaims; onLog
         <button
           type="button"
           className={cn(
-            'flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] p-2.5 text-left transition hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400',
+            'flex w-full items-center gap-3 rounded-xl border border-border bg-white p-2.5 text-left transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
             compact && 'border-border bg-white hover:bg-muted',
           )}
         >
-          <span className={cn('grid h-9 w-9 flex-none place-items-center rounded-lg bg-emerald-400/15 text-xs font-bold text-emerald-300', compact && 'bg-emerald-100 text-emerald-800')}>
+          <span className={cn('grid h-9 w-9 flex-none place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-800', compact && 'bg-emerald-100 text-emerald-800')}>
             {user.sub.slice(0, 1).toUpperCase()}
           </span>
           <span className={cn('min-w-0 flex-1', compact && 'hidden sm:block')}>
-            <span className={cn('block truncate text-xs font-semibold text-slate-100', compact && 'text-foreground')}>{user.sub}</span>
-            <span className={cn('mt-0.5 block truncate text-[11px] capitalize text-slate-500', compact && 'text-muted-foreground')}>{user.role} · {user.department_id}</span>
+            <span className={cn('block truncate text-xs font-semibold text-foreground')}>{user.sub}</span>
+            <span className={cn('mt-0.5 block truncate text-[11px] capitalize text-muted-foreground')}>{user.role} · {user.department_id}</span>
           </span>
           <ChevronDown className={cn('h-4 w-4 flex-none text-slate-500', compact && 'hidden sm:block')} aria-hidden="true" />
         </button>
@@ -129,41 +127,51 @@ function UserMenu({ user, onLogout, compact = false }: { user: UserClaims; onLog
 function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: string; user: UserClaims | null; onNavigate?: () => void; onLogout: () => void }) {
   const role = user?.role || 'employee';
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const sections = [
+    { title: 'My workspace', items: visibleItems.filter((item) => item.href.startsWith('/copilot')) },
+    { title: 'Manage operations', items: visibleItems.filter((item) => !item.href.startsWith('/copilot')) },
+  ];
 
   return (
-    <div className="flex h-full flex-col bg-[#0b1713] px-3 py-4 text-slate-300">
-      <div className="px-2 pb-7 pt-1"><Brand /></div>
-      <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">Workspace</div>
-      <nav className="space-y-1" aria-label="Primary navigation">
-        {visibleItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActiveRoute(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'group flex items-center gap-3 rounded-xl px-3 py-2.5 transition',
-                active ? 'bg-white/[0.09] text-white shadow-sm' : 'text-slate-500 hover:bg-white/[0.045] hover:text-slate-200',
-              )}
-            >
-              <span className={cn('grid h-8 w-8 place-items-center rounded-lg border border-white/[0.06] bg-white/[0.03]', active && 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300')}>
-                <Icon className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] font-semibold">{item.label}</span>
-                <span className={cn('block truncate text-[10px] text-slate-600', active && 'text-slate-400')}>{item.description}</span>
-              </span>
-            </Link>
-          );
-        })}
+    <div className="flex h-full flex-col bg-[#f8faf8] px-3 py-5 text-foreground">
+      <div className="px-3 pb-8 pt-1"><Brand /></div>
+      <nav className="flex-1 space-y-7 overflow-y-auto px-1" aria-label="Primary navigation">
+        {sections.filter((section) => section.items.length > 0).map((section) => (
+          <div key={section.title}>
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActiveRoute(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'group flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 transition focus-visible:outline-offset-2',
+                      active
+                        ? 'border-emerald-200 bg-emerald-100/80 text-[#13513e]'
+                        : 'border-transparent text-slate-600 hover:border-border hover:bg-white hover:text-[#164a3b]',
+                    )}
+                  >
+                    <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-emerald-700' : 'text-slate-500')} aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold">{item.label}</span>
+                      <span className="block truncate text-[11px] text-slate-500">{item.description}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-      <div className="mt-auto space-y-3 pt-5">
-        <div className="mx-1 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.055] p-3">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-300"><Sparkles className="h-3.5 w-3.5" />Verified guidance</div>
-          <p className="mt-1.5 text-[10px] leading-4 text-slate-500">Answers stay grounded in your published operational knowledge.</p>
+      <div className="space-y-3 border-t border-border px-1 pt-4">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900"><ShieldCheck className="h-4 w-4" />Verified knowledge</div>
+          <p className="mt-1.5 text-[11px] leading-5 text-emerald-950/70">Operational actions require approved, published guidance.</p>
         </div>
         {user ? <UserMenu user={user} onLogout={onLogout} /> : null}
       </div>
@@ -195,7 +203,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-black/10 lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-border lg:block">
         <SidebarContent pathname={pathname} user={user} onLogout={handleLogout} />
       </aside>
 
@@ -203,7 +211,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <button className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />
           <aside className="relative h-full w-[min(19rem,88vw)] shadow-2xl">
-            <button type="button" className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-lg text-slate-500 hover:bg-white/10 hover:text-white" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
+            <button type="button" className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-emerald-100 hover:text-emerald-900" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
               <X className="h-5 w-5" />
             </button>
             <SidebarContent pathname={pathname} user={user} onNavigate={() => setMobileOpen(false)} onLogout={handleLogout} />
@@ -212,27 +220,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <div className="min-h-screen lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="hidden lg:grid h-8 w-8 place-items-center rounded-lg border bg-white text-muted-foreground">
-              <PanelLeftClose className="h-4 w-4" />
-            </div>
             <div>
               <p className="text-xs font-semibold text-foreground">{activeItem?.label || 'Operational workspace'}</p>
               <p className="hidden text-[10px] text-muted-foreground sm:block">{activeItem?.description || 'WorkMate verified operations'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-[11px] font-semibold text-muted-foreground sm:inline-flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />Systems online
+            <span className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-800 sm:inline-flex">
+              <ShieldCheck className="h-3.5 w-3.5" /> Evidence-first guidance
             </span>
             {user ? <div className="w-14 sm:w-56"><UserMenu user={user} onLogout={handleLogout} compact /></div> : <Button asChild size="sm"><Link href="/login">Sign in</Link></Button>}
           </div>
         </header>
-        <main>{children}</main>
+        <main className="min-w-0">{children}</main>
       </div>
     </div>
   );
