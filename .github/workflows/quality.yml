@@ -23,7 +23,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U workmate -d workmate"
           --health-interval 5s --health-timeout 5s --health-retries 10
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -56,10 +56,11 @@ jobs:
         run: |
           sudo apt-get install -y postgresql-client
           python scripts/verify_postgres_restore.py
-      - name: Verify document extraction and abuse cases
+      - name: Run entire backend unit/regression suite (all non-live test files)
         env:
           PYTHONPATH: backend
-        run: python -m pytest -q backend/tests/test_release_security.py backend/tests/test_main.py backend/tests/test_auth_rbac_middleware.py backend/tests/test_database.py backend/tests/test_owd_compiler_subsystem.py backend/tests/test_voice_api.py backend/tests/test_voice_quality.py backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_reference_hybrid.py backend/tests/test_reference_quality_smoke.py backend/tests/test_warehouse_acceptance.py backend/tests/test_staging_https_acceptance.py backend/tests/test_pilot_api.py backend/tests/test_pilot_release_gate.py backend/tests/test_private_ocr.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py backend/tests/test_auth_routes.py backend/tests/test_workflow_session_repository.py backend/tests/test_workflow_state.py backend/tests/test_intelligence_hub.py backend/tests/test_copilot_history.py
+        run: python -m pytest -q backend/tests -m "not live_integration"
+
       - name: Verify pilot launch is blocked without externally reviewed evidence
         run: |
           python - <<'PY'
