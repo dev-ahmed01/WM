@@ -29,7 +29,11 @@ def backup(dsn: str, recipient: str, directory: Path, retention_days: int) -> Pa
     if parsed.port:
         pg_env["PGPORT"] = str(parsed.port)
     query = parse_qs(parsed.query)
-    pg_env["PGSSLMODE"] = query.get("sslmode", ["require"])[0]
+    local_dev = (
+        parsed.hostname in {"localhost", "127.0.0.1"}
+        and os.environ.get("APP_ENV", "dev").lower() in {"dev", "test"}
+    )
+    pg_env["PGSSLMODE"] = query.get("sslmode", ["prefer" if local_dev else "require"])[0]
     if query.get("sslrootcert"):
         pg_env["PGSSLROOTCERT"] = query["sslrootcert"][0]
     if not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{40,120}", recipient):
