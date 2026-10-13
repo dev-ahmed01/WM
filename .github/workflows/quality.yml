@@ -19,14 +19,19 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: backend/requirements.txt
+      - name: Install private OCR engine and English/Hindi traineddata
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin fonts-dejavu-core
+          tesseract --list-langs
       - name: Install preview test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pytest-asyncio bcrypt PyYAML fastapi httpx pydantic-settings python-multipart 'python-jose[cryptography]' 'snowflake-connector-python>=3.7' 'pypdf>=5,<7' 'python-docx>=1.2,<2' 'openpyxl>=3.1.5,<4' 'python-pptx>=1.0.2,<2' 'beautifulsoup4>=4.12,<5' 'striprtf>=0.0.26,<1'
+          python -m pip install pytest pytest-asyncio bcrypt PyYAML fastapi httpx pydantic-settings python-multipart 'python-jose[cryptography]' 'snowflake-connector-python>=3.7' 'pypdf>=5,<7' 'python-docx>=1.2,<2' 'openpyxl>=3.1.5,<4' 'python-pptx>=1.0.2,<2' 'beautifulsoup4>=4.12,<5' 'striprtf>=0.0.26,<1' 'Pillow>=10.4,<12' 'pytesseract>=0.3.13,<1' 'pypdfium2>=4.30,<5'
       - name: Verify document extraction and abuse cases
         env:
           PYTHONPATH: backend
-        run: python -m pytest -q backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py
+        run: python -m pytest -q backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_private_ocr.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py
 
   frontend:
     runs-on: ubuntu-latest
