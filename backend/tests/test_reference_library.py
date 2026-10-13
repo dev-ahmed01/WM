@@ -121,10 +121,10 @@ def test_authentication_required():
 
 def test_search_department_comes_from_identity_not_query(monkeypatch):
     captured = {}
-    def search(q, department, *, limit):
+    async def search(q, department, *, limit):
         captured.update(query=q, department=department, limit=limit)
         return []
-    monkeypatch.setattr(ReferenceDocumentRepository, "search_approved", search)
+    monkeypatch.setattr("app.api.v1.reference_knowledge.ReferenceRetrievalService.search", search)
     response = client.get(
         "/api/v1/knowledge/references/search?q=damaged&department_id=secret",
         headers=auth(EMPLOYEE),
