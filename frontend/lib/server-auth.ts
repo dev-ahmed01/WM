@@ -6,6 +6,9 @@ export const REFRESH_COOKIE = 'wm_refresh';
 const BACKEND_URL = process.env.WORKMATE_INTERNAL_API_URL ?? 'http://127.0.0.1:8000/api/v1';
 
 export function backendUrl(path: string): string {
+  if (process.env.APP_ENV === 'production' && !process.env.WORKMATE_INTERNAL_API_URL) {
+    throw new Error('WORKMATE_INTERNAL_API_URL is required for production');
+  }
   // Relative routes only; disallow percent-decoded traversal and absolute URLs.
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('..') || path.includes('\\')) {
     throw new Error('Invalid backend route');
@@ -32,6 +35,7 @@ export function cookieOptions(maxAge: number) {
     httpOnly: true,
     // Only the disposable HTTP-loopback browser CI may turn off Secure.
     secure: process.env.NODE_ENV === 'production' && !(
+      process.env.APP_ENV !== 'production' &&
       process.env.WORKMATE_BROWSER_SMOKE === '1' &&
       /^http:\/\/(127\.0\.0\.1|localhost):8000\/api\/v1$/.test(BACKEND_URL)
     ),
