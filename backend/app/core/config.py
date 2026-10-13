@@ -128,6 +128,10 @@ class Settings(BaseSettings):
     PILOT_ALLOWED_DEPARTMENTS: str = ""
     PILOT_FEEDBACK_MAX_PER_USER_PER_DAY: int = Field(default=30, ge=1, le=200)
 
+    # Optional operator identity for the legacy OWD CLI. Configure a real
+    # PostgreSQL user ID when bulk-loading published workflows.
+    OWD_CLI_USER_ID: str = ""
+
     # Internal Webhook & Service Security
     INTERNAL_WEBHOOK_SECRET: str = Field(min_length=16)
 

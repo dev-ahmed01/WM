@@ -19,6 +19,7 @@ USERS = (
     ("e2e_admin", "e2e_admin@workmate.test", "e2e_ops", "e2e_role_admin"),
     ("e2e_employee", "e2e_employee@workmate.test", "e2e_ops", "e2e_role_employee"),
     ("e2e_other", "e2e_other@workmate.test", "e2e_other", "e2e_role_employee"),
+    ("e2e_manager", "e2e_manager@workmate.test", "e2e_ops", "e2e_role_manager"),
 )
 
 
@@ -41,7 +42,7 @@ def seed() -> None:
                        VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING""",
                     (id_, code, code),
                 )
-            for role_id, name in (("e2e_role_admin", "admin"), ("e2e_role_employee", "employee")):
+            for role_id, name in (("e2e_role_admin", "admin"), ("e2e_role_employee", "employee"), ("e2e_role_manager", "manager")):
                 cur.execute(
                     """INSERT INTO security.roles (id,name,permission_set)
                        VALUES (%s,%s,'{}'::jsonb) ON CONFLICT (id) DO NOTHING""",

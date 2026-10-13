@@ -18,7 +18,10 @@ def test_ingestion_is_markdown_only_and_transactional():
     route = Path("backend/app/api/v1/knowledge_studio.py").read_text(encoding="utf-8")
     loader = Path("backend/app/compiler/loader.py").read_text(encoding="utf-8")
 
-    assert 'ALLOWED_EXTENSIONS = {".md"}' in ingestion
+    assert 'ALLOWED_EXTENSIONS = frozenset({".md"})' in ingestion
+    assert "INSERT INTO shared.source_objects" in ingestion
+    assert "department_id" in ingestion
+    assert "Snowflake PUT/REMOVE" in ingestion
     assert 'raw_bytes.decode("utf-8-sig")' in route
     assert "get_upload_context(" in route
     assert 'cur.execute(f"LIST {snowflake_path}")' not in ingestion
