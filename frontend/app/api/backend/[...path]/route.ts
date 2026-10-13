@@ -8,8 +8,13 @@ export const runtime = 'nodejs';
 
 async function handler(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   if (!checkCsrf(request)) return jsonError(403, 'CSRF_DENIED', 'Invalid request origin.');
-  const token = request.cookies.get(ACCESS_COOKIE)?.value;
-  if (!token) return jsonError(401, 'AUTH_INVALID', 'Sign in required.');
+  let token = request.cookies.get(ACCESS_COOKIE)?.value;
+  let refreshed: { access: string; refresh?: string } | null = null;
+  if (!token) {
+    refreshed = await exchangeRefresh(request);
+    if (!refreshed) return jsonError(401, 'AUTH_INVALID', 'Sign in required.');
+    token = refreshed.access;
+  }
   const { path } = await context.params;
   if (!path.length || path.some(segment => !/^[a-zA-Z0-9_\-.]+$/.test(segment) || segment === '..')) {
     return jsonError(400, 'INVALID_ROUTE', 'Unsupported API path.');
@@ -40,8 +45,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   }
   try {
     let response = await send(token);
-    let refreshed: { access: string; refresh?: string } | null = null;
-    if (response.status === 401) {
+    if (response.status === 401 && !refreshed) {
       refreshed = await exchangeRefresh(request);
       if (refreshed) response = await send(refreshed.access);
     }
