@@ -49,6 +49,13 @@ jobs:
           python scripts/migrate_postgres.py
           python scripts/migrate_postgres.py
           python -m pytest -q backend/tests/test_postgres_integration.py backend/tests/test_postgres_api_integration.py
+      - name: Verify PostgreSQL backup and restored source bytes
+        env:
+          DATABASE_URL: postgresql://workmate:workmate_ci_password@localhost:5432/workmate
+          WORKMATE_BACKUP_SMOKE: "1"
+        run: |
+          sudo apt-get install -y postgresql-client
+          python scripts/verify_postgres_restore.py
       - name: Verify document extraction and abuse cases
         env:
           PYTHONPATH: backend
