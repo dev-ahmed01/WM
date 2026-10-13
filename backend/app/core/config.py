@@ -139,15 +139,15 @@ class Settings(BaseSettings):
             raise ValueError("OCR_LANGUAGES may contain only eng and hin.")
         if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
-        if self.APP_ENV.strip().lower() in {"prod", "production"}:
+        if self.APP_ENV.strip().lower() in {"staging", "prod", "production"}:
             if not self.AUTH_REVALIDATE_DB:
-                raise ValueError("Production requires AUTH_REVALIDATE_DB=true")
+                raise ValueError("Staging/production requires AUTH_REVALIDATE_DB=true")
             missing_controls = [key for key in (
                 "AUTH_SESSION_STORE_ENABLED", "AUTH_RATE_LIMIT_ENABLED",
                 "POSTGRES_RLS_REFERENCES"
             ) if not getattr(self, key)]
             if missing_controls:
-                raise ValueError("Production requires security controls: " + ", ".join(missing_controls))
+                raise ValueError("Staging/production requires security controls: " + ", ".join(missing_controls))
 
             protected_values = {
                 "DATABASE_URL": self.DATABASE_URL,
