@@ -90,3 +90,76 @@ def test_postgres_schema_auth_source_storage_and_reference_approval():
                 cur.execute("DELETE FROM security.users WHERE id = %s", (user,))
                 cur.execute("DELETE FROM security.roles WHERE id = %s", (role,))
                 cur.execute("DELETE FROM security.departments WHERE id = %s", (dept,))
+
+
+@pytest.mark.live_integration
+def test_postgres_compiler_conversation_and_voice_lifecycle():
+    """A real compiled SOP, chat message and voice row must commit on PG16."""
+    from app.compiler.parser import OWDParser
+    from app.compiler.validator import OWDValidator
+    from app.compiler.compiler import OWDCompiler
+    from app.compiler.loader import OWDLoader
+    from app.repositories.conversation_repository import ConversationRepository
+    from app.repositories.voice_repository import VoiceRepository
+    from app.repositories.knowledge_repository import KnowledgeRepository
+
+    dept = "flow_" + uuid.uuid4().hex[:10]
+    user = "usr_" + uuid.uuid4().hex[:10]
+    code = "SOPPG" + uuid.uuid4().hex[:9].upper()
+    dsn = os.environ["DATABASE_URL"]
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO security.departments (id,code,name) VALUES (%s,%s,%s)",
+                        (dept,dept.upper(),"Integration Warehouse"))
+            cur.execute(
+                "INSERT INTO security.users (id,email,hashed_password,department_id) VALUES (%s,%s,%s,%s)",
+                (user,f"{user}@example.test",hash_password("test-password-not-for-users"),dept),
+            )
+    markdown = f"""# {code}: Goods Inspection
+
+::state[STATE_START]{{type="ATOMIC_STEP" is_initial=true}}
+## Inspect received cartons
+Inspect the security seal before unloading the cartons.
+- [ ] Inspect seal ::step[STEP_SEAL]
+::transition{{to="STATE_END" condition="ALWAYS"}}
+
+::state[STATE_END]{{type="END" is_terminal=true}}
+## Goods inspected
+Verified receiving checks finished.
+"""
+    document = OWDParser.parse(
+        markdown_text=markdown, workflow_code=code,
+        title="Goods Inspection", department_id=dept,
+    )
+    assert OWDValidator.validate(document).is_valid
+    stage_uri = IngestionService.stage_file(
+        markdown.encode(), "goods.md", f"{code}/v1",
+        department_id=dept,
+    )
+    compiled = OWDCompiler.compile(
+        document, stage_file_uri=stage_uri, source_filename="goods.md", user_id=user
+    )
+    loaded = OWDLoader.load(compiled)
+    assert loaded.success
+    assert KnowledgeRepository.get_published_version(loaded.workflow_id) is not None
+    conversation_id = ConversationRepository.get_or_create_session(user, dept)
+    message_id = ConversationRepository.persist_message(
+        conversation_id, sender="ai", content="Inspect the security seal.",
+        retrieved_state_ids=[], citations=[], confidence_score=0.95
+    )
+    assert ConversationRepository.belongs_to_user(conversation_id, user)
+    voice_id = VoiceRepository.persist_interaction(
+        conversation_id=conversation_id,
+        response_message_id=message_id,
+        user_id=user,
+        original_language="hi", translated_language="en",
+        original_transcript="सील की जांच", translated_transcript="Check the seal",
+        response_text="Inspect the security seal.",
+        transcription_confidence=0.88, transcription_ms=100,
+        translation_ms=20, synthesis_ms=0, audio_id="audio_live_smoke",
+        success=True,
+    )
+    assert voice_id.startswith("voice_")
+    assert VoiceRepository.audio_belongs_to_user("audio_live_smoke", user)
+    assert not VoiceRepository.audio_belongs_to_user("audio_live_smoke", "other_user")
+    assert VoiceRepository.get_synthesis_source(message_id, user)["language"] == "hi"
