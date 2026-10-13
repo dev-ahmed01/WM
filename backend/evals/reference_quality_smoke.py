@@ -1,7 +1,7 @@
 """Offline, deterministic reference QA smoke benchmark.
 
 The included labels are synthetic and must NOT be treated as a production
-accuracy measurement. The benchmark intentionally does not call Snowflake or
+accuracy measurement. The benchmark intentionally does not call PostgreSQL or
 Ollama. It is a regression gate for permissions, abstention, citation integrity
 and token-based retrieval on a fixed set of operational questions.
 """
@@ -67,7 +67,7 @@ def evaluate(cases: list[dict[str, Any]], sources: list[dict[str, Any]]) -> dict
         "citation_span_integrity": round((citation_checks - wrong_citations) / citation_checks, 3) if citation_checks else None,
         "offline_p95_latency_ms": round(p95, 2),
         "failures": errors,
-        "disclaimer": "Synthetic offline fixture: not a live semantic, Snowflake, Hindi voice, or factual correctness evaluation.",
+        "disclaimer": "Synthetic offline fixture: not a live semantic, PostgreSQL, Hindi voice, or factual correctness evaluation.",
     }
 
 
