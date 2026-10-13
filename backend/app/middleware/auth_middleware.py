@@ -9,6 +9,11 @@ returning verified user claims or raising ApiErrorPayload HTTP 401 exceptions.
 from typing import Dict, Any, Optional
 from fastapi import Depends, Request, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.concurrency import run_in_threadpool
+from app.core.config import settings
+from app.core.security import normalize_role
+from app.repositories.user_repository import UserRepository
+
 
 from app.core.security import decode_token
 from app.exceptions import TokenExpiredError, TokenInvalidError
@@ -79,6 +84,31 @@ async def get_current_user(
             message="An access token is required for this endpoint.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if settings.AUTH_REVALIDATE_DB:
+        # Signed JWTs alone are stale after an employee is disabled, moved to a
+        # different department, or stripped of an elevated role.
+        try:
+            current = await run_in_threadpool(UserRepository.get_user_by_id, str(claims.get("sub") or ""))
+        except Exception as exc:
+            # Fail closed; no temporary self-attested fallback on DB outage.
+            raise _build_auth_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                error_code="AUTH_VERIFICATION_UNAVAILABLE",
+                message="Account verification is unavailable. Please retry later.",
+            ) from exc
+        if (
+            not current
+            or current.get("id") != claims.get("sub")
+            or str(current.get("department_id")) != str(claims.get("department_id"))
+            or normalize_role(str(current.get("role", ""))) != normalize_role(str(claims.get("role", "")))
+        ):
+            raise _build_auth_error(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                error_code="AUTH_STALE",
+                message="Account permissions have changed. Sign in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     request.state.user = claims
     request.state.user_id = claims.get("sub", "ANONYMOUS")
