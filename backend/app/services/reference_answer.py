@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from app.models.copilot import Citation, ValidatedResponse
 from app.repositories.reference_document_repository import ReferenceDocumentRepository
 from app.services.validation import CANONICAL_FALLBACK
+from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score
 
 # These are conversational fillers, not evidence-bearing terms.
 _STOPWORDS = frozenset({
@@ -82,13 +83,16 @@ class ReferenceAnswerService:
                     )
                 )
                 overlap = (exact + 0.35 * fuzzy) / len(terms)
-                if exact < 1 or overlap < 0.40:
+                # Curated warehouse synonyms can bridge 'broken box' and
+                # 'damaged carton', but never rely on embeddings alone as proof.
+                normalized_coverage = lexical_score(query, passage)
+                if (exact < 1 and normalized_coverage < 0.60) or max(overlap, normalized_coverage) < 0.40:
                     continue
                 passage_start = content.find(passage)
                 if passage_start < 0:
                     continue
                 # Coverage is an actual observed proportion, not a model guess.
-                relevance = round(min(1.0, overlap), 3)
+                relevance = round(min(1.0, max(overlap, normalized_coverage)), 3)
                 candidates.append(_Passage(source, passage, passage_start, relevance))
         candidates.sort(key=lambda p: (-p.relevance, len(p.quote), str(p.source["chunk_id"])))
         return candidates
@@ -147,7 +151,5 @@ class ReferenceAnswerService:
     @classmethod
     async def answer(cls, query: str, department_id: str) -> ValidatedResponse:
         # Database code is synchronous: keep ASGI event loop responsive.
-        results = await run_in_threadpool(
-            ReferenceDocumentRepository.search_approved, query, department_id, limit=20,
-        )
+        results = await ReferenceRetrievalService.search(query, department_id, limit=20)
         return cls.validate_reference_answer(query, results, department_id)
