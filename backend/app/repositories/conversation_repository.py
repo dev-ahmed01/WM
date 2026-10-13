@@ -124,8 +124,8 @@ class ConversationRepository:
             INSERT INTO WORKMATE_COPILOT.conversation_messages (
                 id, conversation_id, sender, message_text, intent,
                 retrieved_state_ids, citations, confidence_score, escalated, created_at
-            ) SELECT %s, %s, %s, %s, %s, TO_ARRAY(PARSE_JSON(%s)),
-                     PARSE_JSON(%s), %s, %s, %s
+            ) SELECT %s, %s, %s, %s, %s, %s::jsonb,
+                     %s::jsonb, %s, %s, %s
         """
         try:
             with get_snowflake_connection() as conn:
