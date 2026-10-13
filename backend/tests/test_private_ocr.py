@@ -87,7 +87,7 @@ def test_pdf_mixed_page_content_keeps_page_anchors(monkeypatch):
 
 
 def test_pdf_scan_limit_blocks_truncation_without_publishing(monkeypatch):
-    monkeypatch.setattr("app.services.document_extraction.settings.OCR_MAX_PAGES", 1)
+    monkeypatch.setattr("app.core.config.settings.OCR_MAX_PAGES", 1)
     monkeypatch.setattr("app.services.private_ocr.ocr_pdf_page", lambda *args: "Read this scan carefully")
     with pytest.raises(DocumentExtractionError, match="more than 1 pages"):
         extract_document("many.pdf", _pdf_pages(2))
