@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
     OWD_CLI_USER_ID: str = "usr_admin001"
 
+    # Local/private OCR of scanned operational references. No external API calls.
+    OCR_ENABLED: bool = True
+    OCR_LANGUAGES: str = "eng+hin"
+    OCR_PDF_DPI: int = Field(default=150, ge=100, le=200)
+    OCR_MAX_PAGES: int = Field(default=12, ge=1, le=30)
+    OCR_MAX_IMAGE_PIXELS: int = Field(default=16_000_000, ge=1_000_000, le=30_000_000)
+    OCR_TIMEOUT_SECONDS: int = Field(default=20, ge=3, le=60)
+
     # Copilot retrieval and generation. Production defaults to published only.
     COPILOT_RETRIEVAL_LIMIT: int = 5
     COPILOT_ALLOWED_KNOWLEDGE_STATUSES: str = "published"
@@ -114,6 +122,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_security(self) -> Self:
+        # Prevent language code injection into the local OCR subprocess.
+        requested = self.OCR_LANGUAGES.split("+")
+        if len(requested) != len(set(requested)) or not set(requested) or not set(requested) <= {"eng", "hin"}:
+            raise ValueError("OCR_LANGUAGES may contain only eng and hin.")
         if "*" in {origin.strip() for origin in self.FRONTEND_ORIGIN.split(",")}:
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
         if self.APP_ENV.strip().lower() in {"prod", "production"}:
