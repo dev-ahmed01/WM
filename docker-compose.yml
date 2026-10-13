@@ -22,6 +22,9 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     container_name: workmate_frontend
+    environment:
+      WORKMATE_INTERNAL_API_URL: http://backend:8000/api/v1
+      APP_ENV: dev
     ports:
       - "3000:3000"
     depends_on:
