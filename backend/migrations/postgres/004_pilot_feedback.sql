@@ -16,3 +16,18 @@ CREATE TABLE IF NOT EXISTS shared.pilot_feedback (
 );
 CREATE INDEX IF NOT EXISTS ix_pilot_feedback_department_time
   ON shared.pilot_feedback(department_id, created_at DESC);
+
+-- Runtime login must establish transaction-local tenant context.
+ALTER TABLE shared.pilot_feedback ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname='shared'
+      AND tablename='pilot_feedback' AND policyname='wm_pilot_department_scope'
+  ) THEN
+    CREATE POLICY wm_pilot_department_scope ON shared.pilot_feedback
+      FOR ALL TO PUBLIC
+      USING (department_id = NULLIF(current_setting('workmate.department_id', true), ''))
+      WITH CHECK (department_id = NULLIF(current_setting('workmate.department_id', true), ''));
+  END IF;
+END $$;
