@@ -27,8 +27,19 @@ def sign_in(browser, email):
     expect(page.get_by_role("heading", name="Welcome back")).to_be_visible()
     page.get_by_placeholder("name@workmate.ai").fill(email)
     page.get_by_placeholder("Enter your password").fill(PASSWORD)
-    page.get_by_role("button", name="Sign in").click()
-    page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/copilot", timeout=30000)
+    with page.expect_response(lambda resp: "/api/session/login" in resp.url, timeout=15000) as auth:
+        page.get_by_role("button", name="Sign in").click()
+    login_response = auth.value
+    if login_response.status != 200:
+        raise AssertionError(f"Login proxy status {login_response.status}: {login_response.text()[:350]}")
+    try:
+        page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/copilot", timeout=12000)
+    except Exception as exc:
+        cookie_names = [(item['name'], item['httpOnly'], item['secure']) for item in page.context.cookies([BASE])]
+        profile_status = page.evaluate("async () => (await fetch('/api/session/me')).status")
+        raise AssertionError(
+            f"Login session not accepted: current={page.url} cookies={cookie_names}, me_status={profile_status}"
+        ) from exc
     return page
 
 
