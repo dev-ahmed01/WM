@@ -22,18 +22,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
-    # Snowflake persistence and source-stage connection settings
-    SNOWFLAKE_ACCOUNT: str = Field(min_length=1)
-    SNOWFLAKE_USER: str = Field(min_length=1)
-    SNOWFLAKE_PASSWORD: str = Field(min_length=1)
-    SNOWFLAKE_WAREHOUSE: str = "COMPUTE_WH"
-    SNOWFLAKE_DATABASE: str = "WORKMATE_AI"
-    SNOWFLAKE_SCHEMA: str = "KNOWLEDGE_STUDIO"
-    SNOWFLAKE_ROLE: str = ""  # Optional: Snowflake role to activate on connection (e.g. SYSADMIN)
-    SNOWFLAKE_POOL_SIZE: int = 4
-    SNOWFLAKE_POOL_ACQUIRE_TIMEOUT_SECONDS: float = 5.0
-    SNOWFLAKE_STAGE_NAME: str = "RAW_OWD_STAGE"
-    OWD_CLI_USER_ID: str = "usr_admin001"
+    # PostgreSQL is the only runtime database. Set DATABASE_URL in production.
+    DATABASE_URL: str = "postgresql://workmate:workmate_dev_only@localhost:5432/workmate"
+    POSTGRES_POOL_SIZE: int = Field(default=6, ge=1, le=30)
+    POSTGRES_POOL_TIMEOUT_SECONDS: float = Field(default=5.0, ge=1.0, le=30.0)
+    SOURCE_OBJECT_MAX_BYTES: int = 25 * 1024 * 1024
 
     # Local/private OCR of scanned operational references. No external API calls.
     OCR_ENABLED: bool = True
@@ -137,9 +130,7 @@ class Settings(BaseSettings):
             raise ValueError("FRONTEND_ORIGIN must contain explicit origins when credentials are enabled")
         if self.APP_ENV.strip().lower() in {"prod", "production"}:
             protected_values = {
-                "SNOWFLAKE_ACCOUNT": self.SNOWFLAKE_ACCOUNT,
-                "SNOWFLAKE_USER": self.SNOWFLAKE_USER,
-                "SNOWFLAKE_PASSWORD": self.SNOWFLAKE_PASSWORD,
+                "DATABASE_URL": self.DATABASE_URL,
                 "JWT_SECRET": self.JWT_SECRET,
                 "INTERNAL_WEBHOOK_SECRET": self.INTERNAL_WEBHOOK_SECRET,
             }
@@ -149,6 +140,8 @@ class Settings(BaseSettings):
                 for name, value in protected_values.items()
                 if not value or any(marker in value.casefold() for marker in markers)
             ]
+            if "workmate_dev_only" in self.DATABASE_URL or "localhost" in self.DATABASE_URL:
+                invalid.append("DATABASE_URL")
             if invalid:
                 raise ValueError(
                     "Production configuration contains missing or placeholder secrets: "
