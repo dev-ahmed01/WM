@@ -127,10 +127,10 @@ export function ChatComposer({
             : listening
             ? 'Listening… speak naturally. Your recording sends automatically after you pause.'
             : voiceProcessing
-              ? 'Recording received. Preparing the transcript and verified answer locally…'
+              ? 'Recording received. Preparing an editable transcript; nothing will be sent until you confirm.'
               : transcriptPreview
                 ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-                : answerMode === 'reference' ? 'Answers quote approved department documents. Switch to SOP guidance to use voice or complete steps.' : 'Speak in English, Hindi, or a mix. Auto detect stays enabled across recordings.')}
+                : answerMode === 'reference' ? 'Answers quote approved department documents. Switch to SOP guidance to use voice or complete steps.' : 'Speak in English, Hindi, or a mix. Review and edit the transcript before pressing Send.')}
         </div>
       </div>
     </footer>
