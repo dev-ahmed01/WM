@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -31,6 +32,10 @@ from app.services.reference_answer import ReferenceAnswerService
 from app.services.reference_retrieval import ReferenceRetrievalService
 
 LANGUAGES = frozenset({"en", "hi", "hinglish"})
+SCENARIOS = frozenset({
+    "general", "routine", "missing_evidence", "unsafe_instruction",
+    "cross_department", "draft", "archived", "conflicting_revision",
+})
 _CITATION_ANCHOR = re.compile(r"excerpt \d+, chars (\d+)–(\d+)$")
 
 
@@ -54,6 +59,8 @@ def validate_manifest(rows: Any) -> list[dict[str, Any]]:
         ids.add(identifier)
         if language not in LANGUAGES:
             raise ValueError("Language must be en, hi or hinglish")
+        if row.get("scenario", "general") not in SCENARIOS:
+            raise ValueError("Unknown warehouse evaluation scenario")
         if not isinstance(query, str) or not 2 <= len(query.strip()) <= 300:
             raise ValueError("Question must contain 2-300 characters")
         if not isinstance(dept, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", dept):
@@ -99,12 +106,15 @@ def aggregate(results: list[dict[str, Any]], provenance: str) -> dict[str, Any]:
             "latency_p95_ms": _p95([r["latency_ms"] for r in items]),
         }
     groups = defaultdict(list)
+    scenarios = defaultdict(list)
     for result in results:
         groups[result["language"]].append(result)
+        scenarios[result.get("scenario", "general")].append(result)
     return {
         "provenance": provenance,
         "overall": summary(results),
         "by_language": {lang: summary(groups[lang]) for lang in sorted(groups)},
+        "by_scenario": {name: summary(scenarios[name]) for name in sorted(scenarios)},
         "privacy": "Metrics only; raw questions, approved document text and answers are never included.",
         "limitations": "Verified spans/labels measure extractive support, not independent factual truth or warehouse process safety.",
     }
@@ -160,6 +170,7 @@ async def evaluate_live(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )))
         results.append({
             "language": case["language"],
+            "scenario": case.get("scenario", "general"),
             "expected": bool(expected),
             "top1": bool(expected and ranked and ranked[0]["document_id"] == expected),
             "recall5": bool(expected and any(c["document_id"] == expected for c in ranked[:5])),
@@ -177,10 +188,17 @@ async def evaluate_live(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def run(args: argparse.Namespace) -> dict[str, Any]:
     if os.environ.get("WORKMATE_EVAL_LIVE") != "1":
         raise RuntimeError("Explicit WORKMATE_EVAL_LIVE=1 required for database evaluation")
-    rows = validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8")))
+    private_bytes = args.manifest.read_bytes()
+    rows = validate_manifest(json.loads(private_bytes))
     if args.min_cases and len(rows) < args.min_cases:
         raise ValueError("Manifest smaller than user-specified acceptance cohort")
-    return asyncio.run(evaluate_live(rows))
+    result = asyncio.run(evaluate_live(rows))
+    result["manifest_sha256"] = hashlib.sha256(private_bytes).hexdigest()
+    result["reference_semantic_enabled"] = bool(
+        settings.LOCAL_AI_ENABLED and settings.REFERENCE_HYBRID_ENABLED
+    )
+    result["release_revision"] = os.environ.get("WORKMATE_EVAL_RELEASE_SHA", "not_declared")[:40]
+    return result
 
 
 if __name__ == "__main__":
