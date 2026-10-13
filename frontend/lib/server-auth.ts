@@ -70,7 +70,10 @@ export async function exchangeRefresh(request: NextRequest) {
     });
     if (!response.ok) return null;
     const data = await response.json();
-    return typeof data.access_token === 'string' ? data.access_token : null;
+    return typeof data.access_token === 'string'
+      ? { access: data.access_token,
+          refresh: typeof data.refresh_token === 'string' ? data.refresh_token : undefined }
+      : null;
   } catch {
     return null;
   }
