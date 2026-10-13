@@ -22,7 +22,7 @@ WorkMate AI turns organizational SOPs and policies into state-aware operational 
 | `backend/tests` | Backend unit and orchestration regression tests |
 | `frontend/app` | Next.js pages and route groups |
 | `frontend/components` | Reusable UI, chat, dashboard, and upload components |
-| `analytics/migrations` | Historical PostgreSQL migrations (not executed by the PostgreSQL runtime) |
+| `analytics/migrations` | Legacy Snowflake migration archive; new schema lives in `backend/migrations/postgres` |
 | `automation` | Optional n8n notification workflow definitions |
 | `ai-services` | Executable grounding evaluations |
 | `scripts` | Schema deployment, OWD loading, and verification CLIs |
@@ -105,14 +105,19 @@ The frontend is available at <http://localhost:3000>.
 
 ## Database setup and test users
 
-Deploy the Snowflake schema with the deployment CLI, then seed local test identities with the single canonical seed script:
+PostgreSQL 16 is provisioned by Docker Compose. Migrations are applied during backend startup. For a manual setup with `DATABASE_URL` set:
 
 ```bash
-PYTHONPATH=.:backend python scripts/migrate_postgres.py
-PYTHONPATH=.:backend python backend/scripts/seed_test_users.py
+python scripts/migrate_postgres.py
 ```
 
-These commands access Snowflake using `backend/.env`. Review the SQL migrations and role grants before running them outside a development account.
+Create the first administrator using **explicit environment variables**, never a fixed development password: `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_DEPARTMENT_ID` and `BOOTSTRAP_DEPARTMENT_NAME`.
+
+```bash
+PYTHONPATH=backend python scripts/bootstrap_postgres.py
+```
+
+See [PostgreSQL cutover](docs/postgres_cutover.md) for detailed setup, data-retention limitations, and security gates.
 
 ## Validation
 
@@ -126,9 +131,7 @@ npm run build
 ```
 
 See [`docs/local_ai_runtime.md`](docs/local_ai_runtime.md) for provider, index, grounding, model,
-health, hardware, and fallback behavior. Use the
-[`Snowflake runtime runbook`](docs/snowflake_runtime_runbook.md) for database/stage and live
-same-/cross-department validation.
+health, hardware, and fallback behavior. Use the [PostgreSQL cutover guide](docs/postgres_cutover.md) for database setup and live authorization verification.
 
 See [`docs/multilingual_voice.md`](docs/multilingual_voice.md) for Faster-Whisper, Ollama
 translation, Piper voices, language configuration, protected audio delivery, and voice analytics.
