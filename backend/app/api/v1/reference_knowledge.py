@@ -11,6 +11,7 @@ from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.reference_document_repository import (
     ReferenceDocumentRepository, new_reference_id,
 )
+from app.services.reference_retrieval import ReferenceRetrievalService
 from app.services.document_extraction import (
     DocumentExtractionError, MAX_DOCUMENT_BYTES, extract_document,
 )
@@ -102,7 +103,7 @@ async def search_references(
     if not department_id:
         raise _problem(403, "DEPARTMENT_UNAVAILABLE", "No department is assigned to this user.")
     try:
-        sources = ReferenceDocumentRepository.search_approved(q, department_id, limit=limit)
+        sources = await ReferenceRetrievalService.search(q, department_id, limit=limit)
         return {"sources": sources, "query": q, "department_id": department_id}
     except Exception as exc:
         logger.exception("Scoped reference search failed")

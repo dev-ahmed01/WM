@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     COPILOT_MIN_CONFIDENCE_THRESHOLD: float = 0.70
     COPILOT_HISTORY_LIMIT: int = 6
 
+    # Reference search: a bounded, live-approval candidate pool rather than a
+    # persistent in-memory vector index (archival must revoke access immediately).
+    REFERENCE_HYBRID_ENABLED: bool = True
+    REFERENCE_POOL_LIMIT: int = Field(default=80, ge=1, le=150)
+    REFERENCE_EMBED_MAX_CANDIDATES: int = Field(default=32, ge=1, le=64)
+    REFERENCE_SEMANTIC_TIMEOUT_SECONDS: float = Field(default=5.0, ge=0.5, le=20.0)
+
     # Free/self-hosted Ollama runtime. Snowflake is candidate storage only.
     LOCAL_AI_ENABLED: bool = True
     LOCAL_AI_BASE_URL: str = "http://ollama:11434"

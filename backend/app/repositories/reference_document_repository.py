@@ -189,6 +189,44 @@ class ReferenceDocumentRepository:
                 } for row in cur.fetchall()]
 
     @staticmethod
+    def list_approved_candidates(department_id: str, *, limit: int = 80) -> list[dict[str, Any]]:
+        """Bounded, department-filtered semantic candidate pool.
+
+        No vector index or cache may silently retain an archived source. Querying
+        Snowflake on each request guarantees current approval status; the bounded
+        pool is a recall limitation, not a claim of exhaustive semantic search.
+        """
+        if not department_id:
+            return []
+        limit = max(1, min(int(limit), 150))
+        with get_snowflake_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT d.id, d.title, d.department_id, c.id, c.content,
+                              c.ordinal_index, c.start_offset, c.end_offset, d.status
+                       FROM KNOWLEDGE_STUDIO.reference_chunks c
+                       JOIN KNOWLEDGE_STUDIO.reference_documents d ON d.id = c.document_id
+                       WHERE d.department_id = %s AND c.department_id = %s
+                         AND d.status = 'APPROVED'
+                       ORDER BY d.updated_at DESC, c.id
+                       LIMIT %s""",
+                    (department_id, department_id, limit),
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "document_id": str(row[0]), "document_title": str(row[1]),
+                "department_id": str(row[2]), "chunk_id": str(row[3]),
+                "excerpt": str(row[4])[:1400], "chunk_index": int(row[5]),
+                "start_offset": int(row[6]), "end_offset": int(row[7]),
+                "match_score": 0.0, "status": str(row[8]),
+            }
+            for row in rows
+            if row[0] and row[3] and str(row[2]) == department_id
+            and str(row[8]).upper() == "APPROVED"
+        ]
+
+    @staticmethod
     def search_approved(query: str, department_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         """Lexical recall only, with status and department scoped in Snowflake SQL."""
         tokens = list(dict.fromkeys(re.findall(r"[^\W_]{2,}", query.casefold(), flags=re.UNICODE)))[:6]

@@ -11,11 +11,10 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Mapping, Sequence
 
-from starlette.concurrency import run_in_threadpool
 
 from app.models.copilot import Citation, ValidatedResponse
-from app.repositories.reference_document_repository import ReferenceDocumentRepository
 from app.services.validation import CANONICAL_FALLBACK
+from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score, tokens, script_affinity
 
 # These are conversational fillers, not evidence-bearing terms.
 _STOPWORDS = frozenset({
@@ -29,10 +28,9 @@ _STOPWORDS = frozenset({
 
 
 def _terms(text: str) -> tuple[str, ...]:
-    words = re.findall(r"[^\W_]+", text.casefold(), flags=re.UNICODE)
-    return tuple(dict.fromkeys(
-        word for word in words if len(word) >= 2 and word not in _STOPWORDS
-    ))
+    # Shared tokenization retains Hindi combining marks for both retrieval
+    # ranking and the final evidence support threshold.
+    return tokens(text)
 
 
 @dataclass(frozen=True)
@@ -82,15 +80,18 @@ class ReferenceAnswerService:
                     )
                 )
                 overlap = (exact + 0.35 * fuzzy) / len(terms)
-                if exact < 1 or overlap < 0.40:
+                # Curated warehouse synonyms can bridge 'broken box' and
+                # 'damaged carton', but never rely on embeddings alone as proof.
+                normalized_coverage = lexical_score(query, passage)
+                if (exact < 1 and normalized_coverage < 0.60) or max(overlap, normalized_coverage) < 0.40:
                     continue
                 passage_start = content.find(passage)
                 if passage_start < 0:
                     continue
                 # Coverage is an actual observed proportion, not a model guess.
-                relevance = round(min(1.0, overlap), 3)
+                relevance = round(min(1.0, max(overlap, normalized_coverage)), 3)
                 candidates.append(_Passage(source, passage, passage_start, relevance))
-        candidates.sort(key=lambda p: (-p.relevance, len(p.quote), str(p.source["chunk_id"])))
+        candidates.sort(key=lambda p: (-p.relevance, -script_affinity(query, p.quote), len(p.quote), str(p.source["chunk_id"])))
         return candidates
 
     @classmethod
@@ -147,7 +148,5 @@ class ReferenceAnswerService:
     @classmethod
     async def answer(cls, query: str, department_id: str) -> ValidatedResponse:
         # Database code is synchronous: keep ASGI event loop responsive.
-        results = await run_in_threadpool(
-            ReferenceDocumentRepository.search_approved, query, department_id, limit=20,
-        )
+        results = await ReferenceRetrievalService.search(query, department_id, limit=20)
         return cls.validate_reference_answer(query, results, department_id)
