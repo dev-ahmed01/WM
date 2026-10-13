@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 
 from app.models.copilot import Citation, ValidatedResponse
 from app.services.validation import CANONICAL_FALLBACK
-from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score, tokens
+from app.services.reference_retrieval import ReferenceRetrievalService, lexical_score, tokens, script_affinity
 
 # These are conversational fillers, not evidence-bearing terms.
 _STOPWORDS = frozenset({
@@ -91,7 +91,7 @@ class ReferenceAnswerService:
                 # Coverage is an actual observed proportion, not a model guess.
                 relevance = round(min(1.0, max(overlap, normalized_coverage)), 3)
                 candidates.append(_Passage(source, passage, passage_start, relevance))
-        candidates.sort(key=lambda p: (-p.relevance, len(p.quote), str(p.source["chunk_id"])))
+        candidates.sort(key=lambda p: (-p.relevance, -script_affinity(query, p.quote), len(p.quote), str(p.source["chunk_id"])))
         return candidates
 
     @classmethod
