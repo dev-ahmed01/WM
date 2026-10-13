@@ -132,7 +132,7 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
             for index, page in enumerate(reader.pages):
                 selected = (page.extract_text() or "").strip()
                 # Count actual alphanumeric glyphs, not labels such as [Page 1].
-                if len(re.findall(r"[^\\W_]", selected, flags=re.UNICODE)) < 25:
+                if len(re.findall(r"[^\W_]", selected, flags=re.UNICODE)) < 25:
                     ocr_count += 1
                     if ocr_count > settings.OCR_MAX_PAGES:
                         raise DocumentExtractionError(
@@ -145,8 +145,8 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
                     selected = scanned or selected
                     if not scanned:
                         warnings.append(f"Page {index + 1} remained unreadable after OCR; verify the original.")
-                parts.append(f"[Page {index + 1}]\\n{selected}")
-            content = "\\n\\n".join(parts)
+                parts.append(f"[Page {index + 1}]\n{selected}")
+            content = "\n\n".join(parts)
             if ocr_count:
                 warnings.insert(
                     0, f"Private English/Hindi OCR processed {ocr_count} page(s). "
@@ -154,7 +154,7 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
                 )
             # Do not treat generated page labels as successfully extracted text.
             if not any(
-                len(re.findall(r"[^\\W_]", part.partition("\\n")[2], flags=re.UNICODE)) >= 1
+                len(re.findall(r"[^\W_]", part.partition("\n")[2], flags=re.UNICODE)) >= 1
                 for part in parts
             ):
                 raise DocumentExtractionError("No readable PDF text found, even after OCR.")
