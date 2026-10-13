@@ -92,11 +92,12 @@ async function performExchange(refresh: string): Promise<RotatedSession | null> 
 
 export async function exchangeRefresh(request: NextRequest): Promise<RotatedSession | null> {
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
-  if (!refresh) return null;
+  if (!refresh || refresh.length > 4096) return null;
   const key = createHash('sha256').update(refresh).digest('hex');
   const existing = refreshFlights.get(key);
   if (existing) return existing;
   const task = performExchange(refresh);
+  if (refreshFlights.size >= 256) return task; // Bound per-process token cache.
   refreshFlights.set(key, task);
   void task.finally(() => {
     // Grace solely for simultaneous same-process requests with the same
