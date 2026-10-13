@@ -491,7 +491,8 @@ async def permanently_delete_knowledge_item(
     stage_cleanup_warning = None
     try:
         stage_files_deleted = IngestionService.remove_staged_files(
-            result.get("stage_file_uris", [])
+            result.get("stage_file_uris", []),
+            department_id=str(item["department_id"]),
         )
     except WorkMateException as exc:
         stage_cleanup_warning = exc.message

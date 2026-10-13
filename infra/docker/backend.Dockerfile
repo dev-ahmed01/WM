@@ -49,6 +49,8 @@ RUN mkdir -p ${PIPER_VOICE_DIR} /app/data/voice/audio /app/data/voice/whisper &&
 COPY backend/app ./app
 COPY backend/migrations /app/backend/migrations
 COPY scripts/migrate_postgres.py /app/scripts/migrate_postgres.py
+COPY scripts/grant_pg_runtime.py /app/scripts/grant_pg_runtime.py
+COPY scripts/verify_runtime_database.py /app/scripts/verify_runtime_database.py
 
 EXPOSE 8000
 

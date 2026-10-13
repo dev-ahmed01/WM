@@ -124,6 +124,8 @@ class ReferenceDocumentRepository:
             with conn.cursor() as cur:
                 try:
                     cur.execute("BEGIN")
+                    if settings.POSTGRES_RLS_REFERENCES:
+                        cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
                     cur.execute(
                         """INSERT INTO KNOWLEDGE_STUDIO.reference_documents
                         (id, department_id, title, original_filename, file_extension, mime_type,
@@ -193,6 +195,8 @@ class ReferenceDocumentRepository:
             with conn.cursor() as cur:
                 cur.execute("BEGIN")
                 try:
+                    if settings.POSTGRES_RLS_REFERENCES:
+                        cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
                     cur.execute(
                         """UPDATE KNOWLEDGE_STUDIO.reference_documents
                         SET status = %s, reviewed_by = %s,

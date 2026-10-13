@@ -69,12 +69,17 @@ class IngestionService:
         object_id = uuid4().hex
         with get_postgres_connection() as conn:
             with conn.cursor() as cur:
+                if settings.POSTGRES_RLS_REFERENCES:
+                    cur.execute("BEGIN")
+                    cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
                 cur.execute(
                     """INSERT INTO shared.source_objects
                        (id, department_id, filename, sha256_hash, content)
                        VALUES (%s, %s, %s, %s, %s)""",
                     (object_id, department_id, safe_name, hashlib.sha256(raw_bytes).hexdigest(), raw_bytes),
                 )
+                if settings.POSTGRES_RLS_REFERENCES:
+                    cur.execute("COMMIT")
         return f"pgobj:{object_id}"
 
     @staticmethod
@@ -91,7 +96,7 @@ class IngestionService:
     stage_file_in_snowflake = stage_file  # Deprecated name, PostgreSQL-only implementation.
 
     @staticmethod
-    def remove_staged_files(stage_file_uris: list[str]) -> int:
+    def remove_staged_files(stage_file_uris: list[str], *, department_id: Optional[str] = None) -> int:
         ids: list[str] = []
         for uri in stage_file_uris:
             match = _OBJECT_URI.fullmatch(uri)
@@ -100,7 +105,20 @@ class IngestionService:
             ids.append(match.group(1))
         if not ids:
             return 0
+        if settings.POSTGRES_RLS_REFERENCES and not department_id:
+            raise WorkMateException(message="Department scope required to delete source objects.")
         with get_postgres_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM shared.source_objects WHERE id = ANY(%s)", (list(dict.fromkeys(ids)),))
-                return cur.rowcount
+                if settings.POSTGRES_RLS_REFERENCES:
+                    cur.execute("BEGIN")
+                    cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
+                cur.execute(
+                    "DELETE FROM shared.source_objects WHERE id = ANY(%s)"
+                    + (" AND department_id = %s" if department_id else ""),
+                    (list(dict.fromkeys(ids)), department_id) if department_id
+                    else (list(dict.fromkeys(ids)),),
+                )
+                count = cur.rowcount
+                if settings.POSTGRES_RLS_REFERENCES:
+                    cur.execute("COMMIT")
+                return count
