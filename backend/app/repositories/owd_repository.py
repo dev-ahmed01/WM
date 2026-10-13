@@ -294,7 +294,7 @@ class OWDRepository:
         query = """
             INSERT INTO INTELLIGENCE_HUB.workflow_analytics_events (
                 id, session_id, workflow_version_id, state_id, step_id, event_type, duration_ms, event_payload, created_at
-            ) SELECT %s, %s, %s, %s, %s, %s, %s, %s::jsonb, CURRENT_TIMESTAMP()
+            ) SELECT %s, %s, %s, %s, %s, %s, %s, %s::jsonb, CURRENT_TIMESTAMP
         """
         try:
             with get_snowflake_connection() as conn:
