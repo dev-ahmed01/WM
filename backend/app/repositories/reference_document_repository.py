@@ -170,6 +170,25 @@ class ReferenceDocumentRepository:
                 return bool(count)
 
     @staticmethod
+    def read_chunks(document_id: str, department_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Administrators review source content before approving; no source Stage GET required."""
+        with get_snowflake_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT c.id, c.ordinal_index, c.start_offset, c.end_offset, c.content
+                    FROM KNOWLEDGE_STUDIO.reference_chunks c
+                    JOIN KNOWLEDGE_STUDIO.reference_documents d ON c.document_id = d.id
+                    WHERE c.document_id = %s AND c.department_id = %s AND d.department_id = %s
+                    ORDER BY c.ordinal_index LIMIT %s""",
+                    (document_id, department_id, department_id, limit),
+                )
+                return [{
+                    "id": str(row[0]), "chunk_index": int(row[1]),
+                    "start_offset": int(row[2]), "end_offset": int(row[3]),
+                    "content": str(row[4]),
+                } for row in cur.fetchall()]
+
+    @staticmethod
     def search_approved(query: str, department_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         """Lexical recall only, with status and department scoped in Snowflake SQL."""
         tokens = list(dict.fromkeys(re.findall(r"[^\W_]{2,}", query.casefold(), flags=re.UNICODE)))[:6]
