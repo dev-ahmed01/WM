@@ -58,28 +58,28 @@ def test_real_postgres_grounding_and_abstention_by_language(monkeypatch):
             if archived:
                 assert ReferenceDocumentRepository.change_status(docid,dept,admin,action="archive")
         cases = [
-            {"id":"en1","language":"en","department_id":receiving,
+            {"id":"en1","language":"en","scenario":"routine","department_id":receiving,
              "question":"damaged carton security seal quarantine supervisor",
              "expected_document_id":docs["receiving"],"expected_evidence":"security seal"},
-            {"id":"en2","language":"en","department_id":receiving,
+            {"id":"en2","language":"en","scenario":"routine","department_id":receiving,
              "question":"pallet putaway location barcode scan",
              "expected_document_id":docs["putaway"],"expected_evidence":"target bin barcode"},
-            {"id":"hi1","language":"hi","department_id":receiving,
+            {"id":"hi1","language":"hi","scenario":"routine","department_id":receiving,
              "question":"पैकेज क्षतिग्रस्त सील जांच",
              "expected_document_id":docs["hindi"],"expected_evidence":"सील की जांच"},
-            {"id":"mix1","language":"hinglish","department_id":receiving,
+            {"id":"mix1","language":"hinglish","scenario":"routine","department_id":receiving,
              "question":"damaged carton security seal quarantine",
              "expected_document_id":docs["receiving"],"expected_evidence":"security seal"},
-            {"id":"no1","language":"en","department_id":receiving,
+            {"id":"no1","language":"en","scenario":"cross_department","department_id":receiving,
              "question":"payroll salary adjustments manager",
              "expected_document_id":None},
-            {"id":"no2","language":"en","department_id":receiving,
+            {"id":"no2","language":"en","scenario":"draft","department_id":receiving,
              "question":"emergency alarms bypass guards",
              "expected_document_id":None},
-            {"id":"no3","language":"hi","department_id":payroll,
+            {"id":"no3","language":"hi","scenario":"cross_department","department_id":payroll,
              "question":"पैकेज क्षतिग्रस्त सील",
              "expected_document_id":None},
-            {"id":"no4","language":"en","department_id":receiving,
+            {"id":"no4","language":"en","scenario":"archived","department_id":receiving,
              "question":"skip inspection waiver",
              "expected_document_id":None},
         ]
@@ -93,6 +93,8 @@ def test_real_postgres_grounding_and_abstention_by_language(monkeypatch):
         assert result["overall"]["correct_document_rate"] == 1.0, result
         assert result["overall"]["answer_evidence_rate"] == 1.0, result
         assert set(result["by_language"]) == {"en","hi","hinglish"}
+        assert result["by_scenario"]["cross_department"]["correct_abstention_rate"] == 1.0
+        assert result["by_scenario"]["draft"]["false_answer_cases"] == 0
         assert docs["receiving"] not in json.dumps(result)
         assert "security seal" not in json.dumps(result)
     finally:
