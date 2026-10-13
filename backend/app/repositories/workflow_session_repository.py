@@ -98,7 +98,7 @@ class WorkflowSessionRepository:
             INSERT INTO WORKMATE_COPILOT.workflow_sessions (
                 id, conversation_id, workflow_version_id, current_state_id,
                 user_id, status, session_context, started_at, updated_at
-            ) SELECT %s, %s, %s, %s, %s, 'active', PARSE_JSON(%s), %s, %s
+            ) SELECT %s, %s, %s, %s, %s, 'active', %s::jsonb, %s, %s
         """
         try:
             with get_snowflake_connection() as conn:
@@ -147,7 +147,7 @@ class WorkflowSessionRepository:
                             SET previous_state_id = IFF(%s <> current_state_id, current_state_id, previous_state_id),
                                 current_state_id = %s,
                                 status = %s,
-                                session_context = PARSE_JSON(%s),
+                                session_context = %s::jsonb,
                                 updated_at = %s,
                                 completed_at = %s
                             WHERE id = %s
@@ -176,7 +176,7 @@ class WorkflowSessionRepository:
                                 """
                                 INSERT INTO WORKMATE_COPILOT.workflow_step_executions
                                     (id, session_id, step_id, status, input_payload, executed_at)
-                                SELECT %s, %s, %s, 'PASSED', PARSE_JSON(%s), %s
+                                SELECT %s, %s, %s, 'PASSED', %s::jsonb, %s
                                 """,
                                 (execution_id, session_id, step_id, json.dumps(session_context), now),
                             )
@@ -202,7 +202,7 @@ class WorkflowSessionRepository:
         query = """
             UPDATE WORKMATE_COPILOT.workflow_sessions
             SET status = %s,
-                session_context = PARSE_JSON(%s),
+                session_context = %s::jsonb,
                 updated_at = %s,
                 completed_at = COALESCE(%s, completed_at)
             WHERE id = %s AND status = %s
