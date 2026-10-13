@@ -99,7 +99,7 @@ def main():
             admin.get_by_role("button", name=DOCUMENT_NAME).click()
             expect(admin.get_by_role("heading", name=DOCUMENT_NAME)).to_be_visible(timeout=20000)
             admin.once("dialog", lambda d: d.accept())
-            admin.get_by_role("button", name="Archive").click()
+            admin.get_by_role("button", name="Archive document").click()
             expect(admin.get_by_text("ARCHIVED", exact=True)).to_be_visible(timeout=30000)
             search_sources(employee, expected=False)
             print("BROWSER PASSED: login, real draft, approval, scoped search, archive, role forbidden.")
