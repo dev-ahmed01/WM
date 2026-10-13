@@ -48,7 +48,7 @@ jobs:
         run: |
           python scripts/migrate_postgres.py
           python scripts/migrate_postgres.py
-          python -m pytest -q backend/tests/test_postgres_integration.py backend/tests/test_postgres_api_integration.py backend/tests/test_phase10_postgres_security.py backend/tests/test_warehouse_acceptance_postgres.py
+          python -m pytest -q backend/tests/test_postgres_integration.py backend/tests/test_postgres_api_integration.py backend/tests/test_phase10_postgres_security.py backend/tests/test_warehouse_acceptance_postgres.py backend/tests/test_pilot_postgres.py
       - name: Verify PostgreSQL backup and restored source bytes
         env:
           DATABASE_URL: postgresql://workmate:workmate_ci_password@localhost:5432/workmate
@@ -59,7 +59,7 @@ jobs:
       - name: Verify document extraction and abuse cases
         env:
           PYTHONPATH: backend
-        run: python -m pytest -q backend/tests/test_release_security.py backend/tests/test_main.py backend/tests/test_auth_rbac_middleware.py backend/tests/test_database.py backend/tests/test_owd_compiler_subsystem.py backend/tests/test_voice_api.py backend/tests/test_voice_quality.py backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_reference_hybrid.py backend/tests/test_reference_quality_smoke.py backend/tests/test_warehouse_acceptance.py backend/tests/test_staging_https_acceptance.py backend/tests/test_private_ocr.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py backend/tests/test_auth_routes.py backend/tests/test_workflow_session_repository.py backend/tests/test_workflow_state.py backend/tests/test_intelligence_hub.py backend/tests/test_copilot_history.py
+        run: python -m pytest -q backend/tests/test_release_security.py backend/tests/test_main.py backend/tests/test_auth_rbac_middleware.py backend/tests/test_database.py backend/tests/test_owd_compiler_subsystem.py backend/tests/test_voice_api.py backend/tests/test_voice_quality.py backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_reference_hybrid.py backend/tests/test_reference_quality_smoke.py backend/tests/test_warehouse_acceptance.py backend/tests/test_staging_https_acceptance.py backend/tests/test_pilot_api.py backend/tests/test_pilot_release_gate.py backend/tests/test_private_ocr.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py backend/tests/test_auth_routes.py backend/tests/test_workflow_session_repository.py backend/tests/test_workflow_state.py backend/tests/test_intelligence_hub.py backend/tests/test_copilot_history.py
       - name: Publish offline synthetic QA metrics
         env:
           PYTHONPATH: backend
