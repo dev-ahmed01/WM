@@ -14,6 +14,7 @@ class PilotFeedbackRepository:
             with conn.cursor() as cur:
                 cur.execute("BEGIN")
                 try:
+                    cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
                     # Serialize this user's attempts across API replicas; avoid
                     # a concurrent submit bypassing the daily cohort limit.
                     cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (reporter_id,))
@@ -39,7 +40,10 @@ class PilotFeedbackRepository:
     def summary(department_id: str, days: int = 14) -> dict:
         with get_postgres_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute("BEGIN")
+                try:
+                    cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department_id,))
+                    cur.execute(
                     """SELECT surface,verdict,issue,count(*)
                        FROM shared.pilot_feedback
                        WHERE department_id=%s
@@ -48,11 +52,15 @@ class PilotFeedbackRepository:
                        ORDER BY surface,verdict,issue""",
                     (department_id, days),
                 )
-                counts = [
-                    {"surface": str(row[0]), "verdict": str(row[1]),
-                     "issue": str(row[2]), "count": int(row[3])}
-                    for row in cur.fetchall()
-                ]
+                    counts = [
+                        {"surface": str(row[0]), "verdict": str(row[1]),
+                         "issue": str(row[2]), "count": int(row[3])}
+                        for row in cur.fetchall()
+                    ]
+                    cur.execute("COMMIT")
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
         total = sum(item["count"] for item in counts)
         needs_review = sum(item["count"] for item in counts if item["verdict"] == "needs_review")
         return {
