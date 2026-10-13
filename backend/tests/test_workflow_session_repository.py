@@ -116,3 +116,55 @@ def test_progress_rolls_back_when_optimistic_lock_loses(monkeypatch):
     statements = [call.args[0].strip() for call in cursor.execute.call_args_list]
     assert not any("INSERT INTO WORKMATE_COPILOT.workflow_step_executions" in sql for sql in statements)
     assert statements[-1] == "ROLLBACK"
+
+
+def test_progress_rollback_when_audit_write_fails(monkeypatch):
+    cursor = MagicMock()
+    cursor.rowcount = 1
+    statements = []
+
+    def execute(sql, params=None):
+        statement = sql.strip()
+        statements.append(statement)
+        if "INSERT INTO shared.audit_logs" in statement:
+            raise RuntimeError("audit store unavailable")
+
+    cursor.execute.side_effect = execute
+    monkeypatch.setattr(
+        "app.repositories.workflow_session_repository.get_snowflake_connection",
+        connection_factory(cursor),
+    )
+    with pytest.raises(DatabaseException):
+        WorkflowSessionRepository.apply_progress(
+            "sess_1", "state_1", datetime.now(timezone.utc), {},
+            step_id="step_1", next_state_id="state_2",
+        )
+    assert statements[0] == "BEGIN"
+    assert any("INSERT INTO WORKMATE_COPILOT.workflow_step_executions" in x for x in statements)
+    assert statements[-1] == "ROLLBACK"
+    assert "COMMIT" not in statements
+
+
+def test_status_change_rollback_when_audit_write_fails(monkeypatch):
+    cursor = MagicMock()
+    cursor.rowcount = 1
+    statements = []
+
+    def execute(sql, params=None):
+        statement = sql.strip()
+        statements.append(statement)
+        if "INSERT INTO shared.audit_logs" in statement:
+            raise RuntimeError("audit store unavailable")
+
+    cursor.execute.side_effect = execute
+    monkeypatch.setattr(
+        "app.repositories.workflow_session_repository.get_snowflake_connection",
+        connection_factory(cursor),
+    )
+    with pytest.raises(DatabaseException):
+        WorkflowSessionRepository.update_status(
+            "sess_1", "active", "paused", {},
+        )
+    assert statements[0] == "BEGIN"
+    assert statements[-1] == "ROLLBACK"
+    assert "COMMIT" not in statements
