@@ -7,6 +7,8 @@ metadata edits, and soft-delete. Protected by admin RBAC.
 import logging
 import hashlib
 from typing import Optional, Dict, Any, List
+from starlette.concurrency import run_in_threadpool
+from app.services.private_ocr import ocr_capability
 from fastapi import (
     APIRouter,
     Depends,
@@ -51,6 +53,12 @@ ingestion_logger = logging.getLogger("ingestion_jobs")
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Studio"])
 
 
+@router.get("/ocr-status", dependencies=[Depends(require_role("admin"))])
+async def get_ocr_status() -> Dict[str, Any]:
+    """Report whether local eng/hin OCR is provisioned without sharing a document."""
+    return await run_in_threadpool(ocr_capability)
+
+
 @router.post(
     "/preview",
     dependencies=[Depends(require_role("admin"))],
@@ -59,7 +67,7 @@ async def preview_knowledge_file(file: UploadFile = File(...)) -> Dict[str, Any]
     """Extract text for administrator review; do not stage, compile, or publish."""
     raw = await file.read(MAX_DOCUMENT_BYTES + 1)
     try:
-        preview = preview_document(file.filename or "", raw)
+        preview = await run_in_threadpool(preview_document, file.filename or "", raw)
     except DocumentExtractionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

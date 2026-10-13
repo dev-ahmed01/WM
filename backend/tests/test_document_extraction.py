@@ -74,18 +74,18 @@ def test_pptx_reads_slide_text():
     assert "Pallet inspection" in result.text_preview
 
 
-def test_pdf_blank_page_flags_ocr_review():
+def test_blank_scanned_pdf_never_becomes_searchable_without_text(monkeypatch):
     from pypdf import PdfWriter
     writer = PdfWriter()
     writer.add_blank_page(width=200, height=200)
     buffer = io.BytesIO()
     writer.write(buffer)
-    result = preview_document("scanned.pdf", buffer.getvalue())
-    assert result.warnings
-    assert "OCR" in result.warnings[0]
+    monkeypatch.setattr("app.services.private_ocr.ocr_pdf_page", lambda *_: "")
+    with pytest.raises(DocumentExtractionError, match="No readable PDF text"):
+        preview_document("scanned.pdf", buffer.getvalue())
 
 
-@pytest.mark.parametrize("filename", ["unsafe.exe", "archive.zip", "old.doc", "picture.png"])
+@pytest.mark.parametrize("filename", ["unsafe.exe", "archive.zip", "old.doc"])
 def test_unsupported_type_fails_closed(filename):
     with pytest.raises(DocumentExtractionError, match="Unsupported format"):
         preview_document(filename, b"not a supported document")

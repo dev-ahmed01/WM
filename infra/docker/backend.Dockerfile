@@ -30,6 +30,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-hin \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .

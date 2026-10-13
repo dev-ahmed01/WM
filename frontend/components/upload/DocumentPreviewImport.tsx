@@ -15,7 +15,7 @@ type DocumentPreview = {
   publication_status: 'not_published';
 };
 
-const ACCEPTED_FORMATS = '.md,.txt,.csv,.tsv,.json,.html,.htm,.pdf,.docx,.xlsx,.pptx,.rtf';
+const ACCEPTED_FORMATS = '.md,.txt,.csv,.tsv,.json,.html,.htm,.pdf,.docx,.xlsx,.pptx,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.webp';
 
 export function DocumentPreviewImport() {
   const [preview, setPreview] = useState<DocumentPreview | null>(null);
@@ -28,9 +28,13 @@ export function DocumentPreviewImport() {
   const [departmentId, setDepartmentId] = useState('');
   const [departments, setDepartments] = useState<Array<{id: string; name: string}>>([]);
   const [saving, setSaving] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<{enabled: boolean; ready: boolean; languages: string[]; reason: string} | null>(null);
   const [saved, setSaved] = useState<{id: string; status: string} | null>(null);
 
   useEffect(() => {
+    apiClient<{enabled: boolean; ready: boolean; languages: string[]; reason: string}>('/knowledge/ocr-status')
+      .then(setOcrStatus)
+      .catch(() => setOcrStatus({ enabled: false, ready: false, languages: [], reason: 'unavailable' }));
     apiClient<Array<{id: string; name: string}>>('/knowledge/departments')
       .then((result) => {
         setDepartments(result);
@@ -128,13 +132,13 @@ export function DocumentPreviewImport() {
             <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-700">
               <UploadCloud className="h-6 w-6" aria-hidden="true" />
             </span>
-            <span className="mt-4 text-sm font-semibold">{isWorking ? 'Reading your document…' : dragging ? 'Release to inspect document' : 'Choose or drop a document'}</span>
-            <span className="mt-2 text-xs leading-5 text-muted-foreground">PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML, RTF · up to 25 MB</span>
+            <span className="mt-4 text-sm font-semibold">{isWorking ? 'Extracting your document…' : dragging ? 'Release to inspect document' : 'Choose or drop a document'}</span>
+            <span className="mt-2 text-xs leading-5 text-muted-foreground">PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML, RTF, PNG, JPG, TIFF, WEBP · up to 25 MB</span>
           </label>
         </div>
         <div className="flex items-start gap-2 border-t border-border bg-muted/20 px-5 py-3 text-xs leading-5 text-muted-foreground sm:px-7">
           <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" aria-hidden="true" />
-          Content stays in this review step. Scanned images and image-only PDFs require OCR before they can be reliably imported.
+          {ocrStatus?.ready ? 'Private OCR ready (English + Hindi). Scanned pages are read locally and always require human review.' : 'Selectable-text documents work normally. Scans and images require local English/Hindi OCR; the OCR engine is not ready on this deployment.'} OCR output remains a draft until administrator approval.
         </div>
       </section>
 
@@ -183,7 +187,7 @@ export function DocumentPreviewImport() {
           ) : null}
         </section>
       ) : fileName && isWorking ? (
-        <p aria-live="polite" className="text-sm text-muted-foreground">Extracting readable text from {fileName}…</p>
+        <p aria-live="polite" className="text-sm text-muted-foreground">Reading {fileName} locally… Scanned files may take longer due to OCR.</p>
       ) : null}
     </div>
   );

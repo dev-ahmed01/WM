@@ -24,6 +24,7 @@ MAX_WORKBOOK_CELLS = 20000
 SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({
     ".md", ".txt", ".csv", ".tsv", ".json", ".html", ".htm",
     ".pdf", ".docx", ".xlsx", ".pptx", ".rtf",
+    ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp",
 })
 OFFICE_EXTENSIONS = frozenset({".docx", ".xlsx", ".pptx"})
 
@@ -78,6 +79,15 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
     if extension in OFFICE_EXTENSIONS:
         _check_archive(raw)
 
+    if extension in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}:
+        from app.services.private_ocr import OcrError, ocr_raster
+        try:
+            text = ocr_raster(raw, extension)
+        except OcrError as exc:
+            raise DocumentExtractionError(str(exc)) from exc
+        warnings.append("Extracted with local English/Hindi OCR. Review spelling and all numbers before approval.")
+        return text, warnings
+
     if extension in {".txt", ".md"}:
         return _text_bytes(raw), warnings
 
@@ -105,7 +115,10 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
         return rtf_to_text(_text_bytes(raw)), warnings
 
     if extension == ".pdf":
+        import re
         from pypdf import PdfReader
+        from app.core.config import settings
+        from app.services.private_ocr import OcrError, ocr_pdf_page
         try:
             reader = PdfReader(io.BytesIO(raw), strict=False)
             if reader.is_encrypted:
@@ -114,16 +127,41 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
                 raise DocumentExtractionError(
                     f"PDF exceeds the {MAX_PDF_PAGES}-page preview safety limit."
                 )
-            content = "\n\n".join(
-                f"[Page {index}]\n{page.extract_text() or ''}"
-                for index, page in enumerate(reader.pages, start=1)
-            )
+            parts: list[str] = []
+            ocr_count = 0
+            for index, page in enumerate(reader.pages):
+                selected = (page.extract_text() or "").strip()
+                # Count actual alphanumeric glyphs, not labels such as [Page 1].
+                if len(re.findall(r"[^\W_]", selected, flags=re.UNICODE)) < 25:
+                    ocr_count += 1
+                    if ocr_count > settings.OCR_MAX_PAGES:
+                        raise DocumentExtractionError(
+                            f"PDF needs OCR on more than {settings.OCR_MAX_PAGES} pages. Split it into smaller scans."
+                        )
+                    try:
+                        scanned = ocr_pdf_page(raw, index)
+                    except OcrError as exc:
+                        raise DocumentExtractionError(str(exc)) from exc
+                    selected = scanned or selected
+                    if not scanned:
+                        warnings.append(f"Page {index + 1} remained unreadable after OCR; verify the original.")
+                parts.append(f"[Page {index + 1}]\n{selected}")
+            content = "\n\n".join(parts)
+            if ocr_count:
+                warnings.insert(
+                    0, f"Private English/Hindi OCR processed {ocr_count} page(s). "
+                       "Review names, amounts, tables and procedural steps before approval."
+                )
+            # Do not treat generated page labels as successfully extracted text.
+            if not any(
+                len(re.findall(r"[^\W_]", part.partition("\n")[2], flags=re.UNICODE)) >= 1
+                for part in parts
+            ):
+                raise DocumentExtractionError("No readable PDF text found, even after OCR.")
         except DocumentExtractionError:
             raise
         except Exception as exc:
             raise DocumentExtractionError("This PDF could not be read.") from exc
-        if len(content.strip()) < 40:
-            warnings.append("Little or no selectable text found; scanned pages need OCR review.")
         return content, warnings
 
     if extension == ".docx":
@@ -183,7 +221,7 @@ def _extract_text(filename: str, raw: bytes) -> tuple[str, list[str]]:
             raise DocumentExtractionError("This presentation could not be read.") from exc
 
     raise DocumentExtractionError(
-        "Unsupported format. Use PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML or RTF."
+        "Unsupported format. Use PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML, RTF or common images."
     )
 
 
@@ -201,7 +239,7 @@ def extract_document(filename: str, raw: bytes) -> ExtractedDocument:
     extension = Path(safe_name).suffix.lower()
     if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
         raise DocumentExtractionError(
-            "Unsupported format. Use PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML or RTF."
+            "Unsupported format. Use PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, TSV, JSON, HTML, RTF or common images."
         )
     if not raw:
         raise DocumentExtractionError("The document is empty.")
@@ -216,7 +254,7 @@ def extract_document(filename: str, raw: bytes) -> ExtractedDocument:
     content = content.strip()
     if not content:
         raise DocumentExtractionError(
-            "No readable text was extracted. Image-only documents require OCR before import."
+            "No readable text was extracted. Improve scan quality or verify OCR language availability."
         )
     if len(content) > MAX_EXTRACTED_CHARACTERS:
         raise DocumentExtractionError(

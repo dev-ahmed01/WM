@@ -66,7 +66,11 @@ administrator `approve` makes them available to department-scoped read-only
 with document title and character offsets; it never initiates, completes, or advances
 an OWD workflow. The default `mode="workflow"` continues the existing SOP
 orchestration and response validation. The reference mode is currently extractive
-and text-only; semantic generation and voice-mode routing are not enabled. Scanned PDFs/images are not OCR-supported yet.
+and text-only; semantic generation and voice-mode routing are not enabled.
+Private English/Hindi OCR supports PNG/JPEG/TIFF/WEBP images and low-text PDF
+pages in the reference intake path via local Tesseract and PDFium, with explicit
+page/pixel/process limits and admin review warnings. OCR does not authorize
+an executable OWD SOP; unsupported scans fail closed if OCR is unavailable.
 
 The compiler is deterministic. The grammar is implemented under
 `backend/app/compiler/parsers/`; `OWDParser` builds a unified AST, `OWDValidator` enforces the
@@ -129,7 +133,7 @@ Before release:
 
 ## Explicitly out of scope
 
-- OCR, image-only PDF processing, automatic document-to-workflow conversion, unsupervised LLM paraphrasing of reference material, and reference-mode voice transcription. Approved excerpts are available in dedicated search and in explicitly read-only Copilot reference mode.
+- Full layout-aware table/form reconstruction, older binary DOC/XLS/PPT, automatic document-to-workflow conversion, unsupervised LLM paraphrasing of reference material, and reference-mode voice transcription. Approved excerpts are available in dedicated search and in explicitly read-only Copilot reference mode.
 - Managed Snowflake AI/search services.
 - A second database, vector store, or ingestion pipeline.
 - Jira or other ticketing integration unless separately authorized.
