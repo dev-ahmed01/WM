@@ -100,13 +100,14 @@ def main():
             assert forbidden_status == 403
 
             # CSRF: foreign Origin never allowed to mutate even with valid cookie.
-            csrf_status = employee.evaluate("""async () => {
-                const response = await fetch('/api/session/logout', {
-                    method: 'POST', headers: { 'Origin': 'https://attacker.example' }
-                });
-                return response.status;
-            }""")
-            assert csrf_status == 403
+            # A browser cannot override the forbidden Origin header in fetch.
+            # The context request shares the session cookie and can simulate a
+            # hostile cross-site form request with an explicit foreign Origin.
+            csrf_attempt = employee.request.post(
+                f"{BASE}/api/session/logout",
+                headers={"Origin": "https://attacker.example"},
+            )
+            assert csrf_attempt.status == 403
 
             admin.goto(f"{BASE}/knowledge-studio/references")
             expect(admin.get_by_role("heading", name="Reference library")).to_be_visible()
