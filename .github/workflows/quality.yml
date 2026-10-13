@@ -32,6 +32,11 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -m pytest -q backend/tests/test_document_extraction.py backend/tests/test_reference_library.py backend/tests/test_reference_answer.py backend/tests/test_reference_hybrid.py backend/tests/test_reference_quality_smoke.py backend/tests/test_private_ocr.py backend/tests/test_copilot_retrieval_validation.py backend/tests/test_grounding_validation.py
+      - name: Publish offline synthetic QA metrics
+        env:
+          PYTHONPATH: backend
+        run: python backend/evals/reference_quality_smoke.py
+
 
   frontend:
     runs-on: ubuntu-latest
