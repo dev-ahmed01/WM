@@ -144,7 +144,7 @@ class WorkflowSessionRepository:
                         cur.execute(
                             """
                             UPDATE WORKMATE_COPILOT.workflow_sessions
-                            SET previous_state_id = IFF(%s <> current_state_id, current_state_id, previous_state_id),
+                            SET previous_state_id = CASE WHEN %s <> current_state_id THEN current_state_id ELSE previous_state_id END,
                                 current_state_id = %s,
                                 status = %s,
                                 session_context = %s::jsonb,
