@@ -197,7 +197,7 @@ class ReferenceDocumentRepository:
         clauses = " OR ".join(["c.content ILIKE %s"] * len(tokens))
         sql = f"""
             SELECT d.id, d.title, d.department_id, c.id, c.content, c.ordinal_index,
-                   c.start_offset, c.end_offset
+                   c.start_offset, c.end_offset, d.status
             FROM KNOWLEDGE_STUDIO.reference_chunks c
             JOIN KNOWLEDGE_STUDIO.reference_documents d ON c.document_id = d.id
             WHERE d.department_id = %s AND c.department_id = %s
@@ -213,7 +213,7 @@ class ReferenceDocumentRepository:
                 rows = cur.fetchall()
         scored = []
         for row in rows:
-            if str(row[2]) != department_id:
+            if str(row[2]) != department_id or str(row[8]).upper() != "APPROVED":
                 continue  # defence-in-depth against bad cache/mocked-provider boundaries
             content = str(row[4])
             score = sum(1 for token in tokens if token in content.casefold()) / len(tokens)
@@ -223,5 +223,6 @@ class ReferenceDocumentRepository:
                 "excerpt": content[:1400], "chunk_index": int(row[5]),
                 "start_offset": int(row[6]), "end_offset": int(row[7]),
                 "match_score": round(score, 3),
+                "status": str(row[8]),
             })
         return sorted(scored, key=lambda row: (-row["match_score"], row["document_title"], row["chunk_index"]))[:limit]
