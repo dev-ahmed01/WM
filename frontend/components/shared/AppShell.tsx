@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { getUserClaims, type UserClaims } from '@/lib/auth';
+import { loadUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -203,17 +203,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setUser(getUserClaims());
+    let cancelled = false;
+    void loadUserClaims().then(profile => { if (!cancelled) setUser(profile); });
     setMobileOpen(false);
+    return () => { cancelled = true; };
   }, [pathname]);
 
   if (pathname === '/login' || pathname.startsWith('/login/')) return <>{children}</>;
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
-    setUser(null);
-    router.push('/login');
+    void fetch('/api/session/logout', {
+      method: 'POST', credentials: 'same-origin',
+    }).finally(() => {
+      clearCachedUser();
+      setUser(null);
+      router.replace('/login');
+    });
   };
 
   const activeItem = NAV_ITEMS.find((item) => isActiveRoute(pathname, item.href));
