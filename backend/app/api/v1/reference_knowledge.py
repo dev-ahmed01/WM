@@ -123,6 +123,24 @@ async def get_reference(
     return row
 
 
+@router.get("/{document_id}/content", dependencies=[Depends(require_role("admin"))])
+async def get_reference_content(
+    document_id: str,
+    department_id: str = Query(..., min_length=1, max_length=64),
+) -> dict:
+    try:
+        doc = ReferenceDocumentRepository.get_document(document_id, department_id)
+        if doc is None:
+            raise _problem(404, "REFERENCE_NOT_FOUND", "No document exists in that department.")
+        chunks = ReferenceDocumentRepository.read_chunks(document_id, department_id)
+        return {"document": doc, "chunks": chunks, "preview_truncated": len(chunks) < doc["chunk_count"]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Reference content lookup failed")
+        raise _problem(502, "REFERENCE_BACKEND_UNAVAILABLE", "Could not load source content.") from exc
+
+
 @router.post("/{document_id}/approve", dependencies=[Depends(require_role("admin"))])
 async def approve_reference(
     document_id: str,
