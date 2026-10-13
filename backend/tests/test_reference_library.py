@@ -188,7 +188,9 @@ def test_review_requires_correct_status_and_scoped_id(monkeypatch):
     assert not ReferenceDocumentRepository.change_status(
         "doc1", "receiving", "admin_01", action="approve",
     )
-    sql, params = cursor.statements[0]
+    assert cursor.statements[0][0] == "BEGIN"
+    sql, params = next((sql, params) for sql, params in cursor.statements
+                       if "UPDATE KNOWLEDGE_STUDIO.reference_documents" in sql)
     assert "status = %s" in sql and "department_id = %s" in sql
     assert params == ("APPROVED", "admin_01", "doc1", "receiving", "DRAFT")
     assert cursor.statements[-1][0] == "COMMIT"
