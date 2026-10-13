@@ -1,0 +1,102 @@
+# Staging profile: bring your own managed PostgreSQL and HTTPS hostname.
+# Explicit one-shot schema-owner migrations precede a non-owner runtime backend.
+# No subscription or cloud resources are provisioned by this file.
+name: workmate-staging
+services:
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend.Dockerfile
+    restart: "no"
+    environment:
+      APP_ENV: staging
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Missing migration-only PostgreSQL URL}
+      DATABASE_URL: ${DATABASE_URL:?Missing runtime PostgreSQL URL}
+    command: ["python", "scripts/migrate_postgres.py"]
+    networks: [internal]
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      DATABASE_URL: ${DATABASE_URL:?Missing runtime PostgreSQL URL}
+      JWT_SECRET: ${JWT_SECRET:?Missing JWT secret}
+      INTERNAL_WEBHOOK_SECRET: ${INTERNAL_WEBHOOK_SECRET:?Missing webhook secret}
+      FRONTEND_ORIGIN: https://${STAGING_DOMAIN:?Missing HTTPS hostname}
+      AUTH_REVALIDATE_DB: "true"
+      AUTH_SESSION_STORE_ENABLED: "true"
+      AUTH_RATE_LIMIT_ENABLED: "true"
+      AUTH_RATE_IP_BUCKET_ENABLED: "false"
+      POSTGRES_RLS_REFERENCES: "true"
+      LOCAL_AI_ENABLED: "false"
+      VOICE_ENABLED: "false"
+      VOICE_PREWARM_MODELS: "false"
+      POSTGRES_POOL_SIZE: "4"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    expose: ["8000"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ""
+    restart: unless-stopped
+    environment:
+      APP_ENV: staging
+      WORKMATE_INTERNAL_API_URL: http://backend:8000/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose: ["3000"]
+    networks: [internal]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+
+  ingress:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      STAGING_DOMAIN: ${STAGING_DOMAIN:?Missing HTTPS hostname}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+    networks: [internal, public]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true
+  public: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
