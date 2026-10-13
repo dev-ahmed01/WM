@@ -428,7 +428,7 @@ class OWDLoader:
                                           %s AS sentence_count, %s AS paragraph_count, %s AS complexity_score, %s AS risk_score, %s AS summary,
                                           %s::jsonb AS keywords, %s::jsonb AS entities, %s AS language_detected, %s AS embedding_model,
                                           %s AS embedding_version, %s AS chunk_count, %s AS average_chunk_size, %s AS embedding_status,
-                                          %s AS evaluation_score, %s AS confidence_score) AS src
+                                          %s::double precision AS evaluation_score, %s::double precision AS confidence_score) AS src
                             ON target.id = src.id
                             WHEN MATCHED THEN UPDATE SET summary = src.summary, embedding_status = src.embedding_status
                             WHEN NOT MATCHED THEN INSERT (id, document_id, workflow_version_id, reading_time_minutes, word_count, sentence_count, paragraph_count, complexity_score, risk_score, summary, keywords, entities, language_detected, embedding_model, embedding_version, chunk_count, average_chunk_size, embedding_status, evaluation_score, confidence_score)
