@@ -253,6 +253,13 @@ def main():
             outsider.wait_for_url("**/workspace", timeout=12000)
             manager.goto(f"{BASE}/handover/review")
             expect(manager.get_by_role("heading", name="Shift handover queue")).to_be_visible()
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/handover/" + handover_id + "/claim")
+                and r.request.method == "POST", timeout=20000,
+            ) as claim_reply:
+                manager.get_by_role("button", name="Take ownership").click()
+            assert claim_reply.value.status == 200, claim_reply.value.text()
+            assert claim_reply.value.json()["assigned_to_user_id"]
             manager.get_by_label("Reviewer note (required)").fill(
                 "Keep the damaged cartons separated until reviewed.")
             with manager.expect_response(
