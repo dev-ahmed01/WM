@@ -88,6 +88,32 @@ async def list_assignees(
     return {"items":people}
 
 
+class WorkAssignment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assigned_to: str = Field(min_length=1,max_length=64)
+
+
+@router.post("/{item_id}/assign")
+async def assign_item(
+    item_id: str,
+    payload: WorkAssignment,
+    user: dict = Depends(require_role("admin","manager"))
+) -> dict:
+    department,actor,_ = context(user)
+    try:
+        item = await run_in_threadpool(
+            WorkItemRepository.assign,department,actor,item_id,payload.assigned_to
+        )
+    except Exception as exc:
+        raise HTTPException(503,detail={"error_code":"WORK_ASSIGNMENT_UNAVAILABLE"}) from exc
+    if not item:
+        raise HTTPException(409,detail={
+            "error_code":"WORK_ASSIGNMENT_REJECTED",
+            "message":"Work must be queued or ready, and the assignee active in your department.",
+        })
+    return item
+
+
 @router.get("/{item_id}")
 async def get_work_item(
     item_id: str,
