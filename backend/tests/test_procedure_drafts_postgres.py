@@ -36,6 +36,10 @@ def test_private_source_backed_procedure_draft_revision_and_review():
         assert b"record" in raw.lower()
         with pytest.raises(DraftNotFound):
             ProcedureDraftRepository.get(foreign,draft_id)
+        file_name,file_bytes=ProcedureDraftRepository.source(department,draft_id)
+        assert file_name=="receiving.txt" and file_bytes==raw
+        with pytest.raises(DraftNotFound):
+            ProcedureDraftRepository.source(foreign,draft_id)
         assert len(ProcedureDraftRepository.list(department))==1
         assert ProcedureDraftRepository.list(foreign)==[]
         with pytest.raises(DraftConflict):
