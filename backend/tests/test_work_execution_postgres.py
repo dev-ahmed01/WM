@@ -1,6 +1,8 @@
 """Actual disposable PostgreSQL acceptance: compiled SOP, evidence and task state."""
 from __future__ import annotations
 import base64
+import io
+from PIL import Image
 from uuid import uuid4
 import psycopg
 import pytest
@@ -119,8 +121,10 @@ def test_sop_binding_step_attestation_evidence_decision_and_tenant_rls():
             with conn.cursor() as cur:
                 cur.execute("SELECT count(*) FROM workmate_copilot.workflow_step_executions WHERE session_id=%s",(session,))
                 assert cur.fetchone()==(1,), "Rejected evidence must leave no extra step record"
+        photo=io.BytesIO()
+        Image.new("RGB",(3,3),(80,150,120)).save(photo,format="JPEG")
         jpeg=[{"spec_id":spec,"filename":"inspection.jpg",
-               "content_base64":base64.b64encode(b"\xff\xd8\xffsynthetic-carton-bytes").decode()}]
+               "content_base64":base64.b64encode(photo.getvalue()).decode()}]
         step2=WorkExecutionRepository.progress(department,worker,task_id,second,False,"Carton checked",None,jpeg)
         assert step2["completed_steps"]==2 and step2["step"] is None
         assert step2["decision_options"][0]["option_code"]=="ACCEPT"
