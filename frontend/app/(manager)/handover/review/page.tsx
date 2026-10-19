@@ -20,6 +20,7 @@ type Handover = {
   severity: 'normal' | 'high' | 'critical';
   snapshot_state: { workflow_status?: string | null; step_title?: string | null };
   status: 'submitted' | 'acknowledged' | 'follow_up_requested';
+  assigned_to_user_id: string | null;
   reviewed_by: string | null;
   review_note: string | null;
   created_at: string;
@@ -35,7 +36,22 @@ function ReviewCard({ item, userId, onReviewed }: {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
   const pending = item.status === 'submitted';
-  const canReview = pending && item.created_by !== userId;
+  const canClaim = pending && item.created_by !== userId && !item.assigned_to_user_id;
+  const canReview = pending && item.created_by !== userId && (!item.assigned_to_user_id || item.assigned_to_user_id === userId);
+
+  async function claim() {
+    if (!canClaim || working) return;
+    setWorking(true);
+    setError('');
+    try {
+      const updated = await apiClient<Handover>('/handover/' + encodeURIComponent(item.id) + '/claim', { method: 'POST' });
+      onReviewed(updated);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'This handover is already claimed or unavailable.');
+    } finally {
+      setWorking(false);
+    }
+  }
 
   async function decide(decision: 'acknowledged' | 'follow_up_requested') {
     if (!canReview || note.trim().length < 8) return;
@@ -75,6 +91,8 @@ function ReviewCard({ item, userId, onReviewed }: {
         <div><p className="wm-label">Requested next action</p><p className="whitespace-pre-wrap break-words text-sm leading-7">{item.next_action}</p></div>
         {item.notes ? <div><p className="wm-label">Operator context</p><p className="whitespace-pre-wrap break-words text-xs leading-6 text-muted-foreground">{item.notes}</p></div> : null}
         <p className="text-[11px] text-muted-foreground">Linked session: <span className="font-mono">{item.conversation_id}</span> · The owner’s conversation is not shared with reviewers.</p>
+        {item.assigned_to_user_id ? <p className="text-xs text-muted-foreground">Review owner: <strong className="text-foreground">{item.assigned_to_user_id}</strong></p> : null}
+        {canClaim ? <button type="button" disabled={working} onClick={() => void claim()} className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">Take ownership</button> : null}
         {canReview ? (
           <div className="border-t border-border pt-4">
             <label className="wm-label" htmlFor={'review-' + item.id}>Reviewer note (required)</label>
@@ -91,7 +109,7 @@ function ReviewCard({ item, userId, onReviewed }: {
           </div>
         ) : item.status !== 'submitted' ? (
           <div className="border-t border-border pt-4 text-xs leading-6 text-muted-foreground">Reviewed by {item.reviewed_by} · {item.review_note}</div>
-        ) : <p className="text-xs text-muted-foreground">Your own handover must be reviewed by another manager or administrator.</p>}
+        ) : <p className="text-xs text-muted-foreground">{item.created_by === userId ? "Your own handover requires another manager." : "This handover belongs to another reviewer."}</p>}
       </div>
     </article>
   );
@@ -122,7 +140,10 @@ export default function HandoverReviewPage() {
   }, [loading, user?.sub, user?.department_id, fetchQueue]);
   const waiting = useMemo(() => items.filter(item => item.status === 'submitted'), [items]);
   const urgent = waiting.filter(item => item.severity !== 'normal').length;
-  const visible = showAll ? items : waiting;
+  const visible = (showAll ? items : waiting).slice().sort((a,b) => {
+    const score = (item: Handover) => item.severity === 'critical' ? 3 : item.severity === 'high' ? 2 : 1;
+    return score(b) - score(a) || Date.parse(a.created_at) - Date.parse(b.created_at);
+  });
   if (loading) return <LoadingState label="Opening handover review" />;
   return (
     <div className="wm-page max-w-6xl space-y-7 pb-12">
