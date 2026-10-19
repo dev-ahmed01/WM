@@ -221,3 +221,25 @@ class ProcedureDraftRepository:
                 except Exception:
                     cur.execute("ROLLBACK")
                     raise
+
+    @staticmethod
+    def source(department,draft_id):
+        """Return the original document, never from an unscoped object identifier."""
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _start(cur,department)
+                try:
+                    cur.execute("""
+                      SELECT d.source_filename,o.content
+                      FROM knowledge_studio.procedure_drafts d
+                      JOIN shared.source_objects o ON o.id=d.source_object_id
+                      WHERE d.id=%s AND d.department_id=%s AND o.department_id=%s
+                    """,(draft_id,department,department))
+                    found=cur.fetchone()
+                    cur.execute("COMMIT")
+                    if not found:
+                        raise DraftNotFound()
+                    return found[0],bytes(found[1])
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
