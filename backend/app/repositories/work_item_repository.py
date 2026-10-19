@@ -36,8 +36,11 @@ class WorkItemRepository:
                     cur.execute("SELECT set_config('workmate.department_id',%s,true)",(department,))
                     # Caller-supplied assignee must be an active user in this department.
                     if assigned_to:
-                        cur.execute("""SELECT 1 FROM security.users
-                                       WHERE id=%s AND department_id=%s AND status='active'""",
+                        cur.execute("""SELECT 1 FROM security.users u
+                                       JOIN security.user_roles ur ON ur.user_id=u.id
+                                       JOIN security.roles r ON r.id=ur.role_id
+                                       WHERE u.id=%s AND u.department_id=%s
+                                         AND u.status='active' AND LOWER(r.name)='employee'""",
                                     (assigned_to,department))
                         if not cur.fetchone():
                             cur.execute("ROLLBACK")
