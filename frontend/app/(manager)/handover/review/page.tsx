@@ -74,7 +74,7 @@ function ReviewCard({ item, userId, onReviewed }: {
         {item.severity !== 'normal' ? <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>High-priority handover. An acknowledgment records receipt only; it does not authorize unsafe work or resolve the exception.</span></div> : null}
         <div><p className="wm-label">Requested next action</p><p className="whitespace-pre-wrap break-words text-sm leading-7">{item.next_action}</p></div>
         {item.notes ? <div><p className="wm-label">Operator context</p><p className="whitespace-pre-wrap break-words text-xs leading-6 text-muted-foreground">{item.notes}</p></div> : null}
-        <Link href={'/copilot?session=' + encodeURIComponent(item.conversation_id)} className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:underline">Open associated session <ArrowRight className="h-3.5 w-3.5" /></Link>
+        <p className="text-[11px] text-muted-foreground">Linked session: <span className="font-mono">{item.conversation_id}</span> · The owner’s conversation is not shared with reviewers.</p>
         {canReview ? (
           <div className="border-t border-border pt-4">
             <label className="wm-label" htmlFor={'review-' + item.id}>Reviewer note (required)</label>
