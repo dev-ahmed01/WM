@@ -11,6 +11,10 @@ from app.repositories.workflow_session_repository import WorkflowSessionReposito
 
 
 def connection_factory(cursor):
+    # By default, legacy session tests have no task-bound work item.
+    # Real DB integration tests separately exercise denial for bound sessions.
+    if isinstance(cursor.fetchone.return_value, MagicMock):
+        cursor.fetchone.return_value = None
     @contextmanager
     def factory():
         connection = MagicMock()
