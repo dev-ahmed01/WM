@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bot, ChevronDown, CircleAlert, ClipboardCopy, Download, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
 import { formatEvidenceNote, downloadEvidenceNote } from '@/lib/evidence-note';
 import type { CopilotResponse, SopSuggestion } from '@/lib/api-client';
@@ -25,12 +25,24 @@ interface ChatThreadProps {
 
 export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessageKey, speechSupported }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [copyResult, setCopyResult] = useState<{ id: string; message: string } | null>(null);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [messages, busy]);
+
+  async function copyResponseEvidence(message: ChatMessage) {
+    if (!message.copilotData) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(formatEvidenceNote(message.content, message.copilotData));
+      setCopyResult({ id: message.id, message: 'Copied with citations' });
+    } catch {
+      setCopyResult({ id: message.id, message: 'Clipboard blocked — download the evidence note instead' });
+    }
+  }
 
   return (
     <div ref={scrollContainerRef} className="h-full min-h-0 overflow-y-auto" role="log" aria-live="polite" aria-busy={busy}>
@@ -120,8 +132,9 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                           {Math.round(data.confidence_score * 100)}% {data.citations?.some((citation) => citation.source_type === 'reference') ? 'evidence match' : 'confidence'}
                         </Badge>
                         {data.requires_escalation ? <Badge variant="danger"><CircleAlert className="h-3 w-3" />Escalated</Badge> : null}
-                        <button type="button" onClick={() => { void navigator.clipboard?.writeText(formatEvidenceNote(message.content, data)); }} title="Copy answer with its recorded evidence" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><ClipboardCopy className="h-3.5 w-3.5" />Copy evidence</button>
+                        <button type="button" onClick={() => void copyResponseEvidence(message)} title="Copy answer with its recorded evidence" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><ClipboardCopy className="h-3.5 w-3.5" />Copy evidence</button>
                         <button type="button" onClick={() => downloadEvidenceNote(message.content, data)} title="Download a local text note of the response and citations" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><Download className="h-3.5 w-3.5" />Evidence note</button>
+                        {copyResult?.id === message.id ? <span role="status" className="text-[11px] text-emerald-700">{copyResult.message}</span> : null}
                       </>
                     ) : null}
                     {speechSupported ? (
