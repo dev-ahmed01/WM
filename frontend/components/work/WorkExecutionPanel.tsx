@@ -36,7 +36,7 @@ async function encodeFile(file: File): Promise<string> {
 const eventLabel: Record<string, string> = {
   created: 'Assignment created', bound: 'Published SOP linked',
   started: 'Execution started', step_recorded: 'Step evidence recorded',
-  decision_recorded: 'Decision selected', paused: 'Execution paused',
+  decision_recorded: 'Decision selected', state_advanced: 'State entered', paused: 'Execution paused',
   resumed: 'Execution resumed', blocked: 'Work blocked', completed: 'SOP completed',
 };
 
@@ -273,6 +273,15 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                     Record decision <ArrowRight className="h-4 w-4" />
                   </button>
                 </div> : null}
+              </div>
+            ) : null}
+            {!step && position.decision_options.length === 0 ? (
+              <div className="rounded-[1.3rem] border border-[#dbe5dc] bg-[#f4f8f4] p-5">
+                <h3 className="text-lg font-semibold">{position.state?.title || 'Procedure checkpoint'}</h3>
+                {position.state?.description ? <p className="mt-2 text-xs leading-6 text-[#657b6d]">{position.state.description}</p> : null}
+                <p className="mt-2 text-xs leading-6 text-[#728579]">No atomic step or decision is required in this published state. Continue only after checking the listed procedure context.</p>
+                {isAssignee ? <button type="button" disabled={working} onClick={() => void commit('continue')}
+                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-xs font-semibold text-white disabled:opacity-50">Continue approved procedure <ArrowRight className="h-4 w-4" /></button> : null}
               </div>
             ) : null}
             {isAssignee ? <div className="space-y-3 border-t border-[#edf1ed] pt-5">
