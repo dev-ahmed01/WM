@@ -86,6 +86,26 @@ async def list_handovers(
     return {"items": rows, "reviewer": reviewer, "department_id": dept}
 
 
+@router.post("/{handover_id}/claim")
+async def claim_handover(
+    handover_id: str,
+    user: dict = Depends(require_role("admin", "manager")),
+) -> dict:
+    dept, actor = str(user.get("department_id") or ""), str(user.get("sub") or "")
+    if not dept or not actor:
+        raise HTTPException(401, detail={"error_code": "HANDOVER_AUTH_REQUIRED"})
+    try:
+        record = await run_in_threadpool(HandoverRepository.claim, dept, actor, handover_id)
+    except Exception as exc:
+        raise HTTPException(503, detail={"error_code": "HANDOVER_CLAIM_UNAVAILABLE"}) from exc
+    if not record:
+        raise HTTPException(409, detail={
+            "error_code": "HANDOVER_CLAIM_REJECTED",
+            "message": "This handover is not available for you to claim.",
+        })
+    return record
+
+
 @router.post("/{handover_id}/review")
 async def review_handover(
     handover_id: str,
