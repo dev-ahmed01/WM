@@ -198,6 +198,20 @@ def main():
             assert admin.get_by_role("checkbox").count()==2
             for checkbox in admin.get_by_role("checkbox").all():
                 checkbox.check()
+            # Phase 3B: configure an actual conditional outcome branch and
+            # a photo-evidence requirement using the visual editor.
+            admin.get_by_label("Required supporting evidence").count()
+            admin.locator('select[id^="evidence-"]').nth(1).select_option("PHOTO_JPEG")
+            admin.get_by_text("Require final outcome selection").click()
+            admin.get_by_role("button",name="Save revision").click()
+            expect(admin.get_by_text("Changes saved.",exact=False)).to_be_visible(timeout=15000)
+            # Changed proof obligations invalidate previous review attestations.
+            assert admin.get_by_role("checkbox").count()>=4
+            for box in admin.locator('input[type="checkbox"]').all():
+                if box.is_visible() and not box.is_checked() and box.get_attribute("id") is None:
+                    # Only review the step checkboxes, not the publish confirmation.
+                    if box.locator("xpath=..").inner_text().find("Checked against original source")>=0:
+                        box.check()
             admin.get_by_role("button",name="Save revision").click()
             expect(admin.get_by_text("Changes saved.",exact=False)).to_be_visible(timeout=15000)
             with admin.expect_response(
@@ -205,11 +219,30 @@ def main():
                 and response.request.method=="POST",timeout=20000
             ) as reviewed:
                 admin.get_by_role("button",name="Mark draft reviewed").click()
-            assert reviewed.value.status==200, reviewed.value.text()
-            assert reviewed.value.json()["status"]=="reviewed"
+            assert reviewed.value.status==200
             admin.screenshot(path="/tmp/workmate-phase3-procedure-editor.png",full_page=True)
+            admin.get_by_role("button",name="Validate compiled workflow").click()
+            expect(admin.get_by_text("Compiler validation passed")).to_be_visible(timeout=15000)
+            assert admin.get_by_text("2 worker steps",exact=False).is_visible()
+            admin.get_by_text("I confirm this reviewed workflow",exact=False).click()
+            with admin.expect_response(
+                lambda r: r.url.endswith("/api/backend/procedure/drafts/"+imported_id+"/publish")
+                and r.request.method=="POST", timeout=30000
+            ) as publication:
+                admin.get_by_role("button",name="Publish reviewed workflow").click()
+            assert publication.value.status==200,publication.value.text()
+            published_version=publication.value.json()["version_id"]
+            expect(admin.get_by_text("Published version:",exact=False)).to_be_visible(timeout=15000)
+            admin.screenshot(path="/tmp/workmate-phase3b-published-workflow.png",full_page=True)
             status=admin.request.get(f"{BASE}/api/backend/procedure/drafts/{imported_id}")
-            assert status.status==200 and status.json()["status"]=="reviewed"
+            assert status.status==200 and status.json()["status"]=="published"
+            duplicate=admin.request.post(
+                f"{BASE}/api/backend/procedure/drafts/{imported_id}/publish",
+                data={"expected_revision":reviewed.value.json()["revision"],
+                      "approval":"PUBLISH_REVIEWED_SOP"}
+            )
+            assert duplicate.status in (409,422)
+
 
             # Force short-lived access-cookie expiry while retaining the
             # refresh cookie: the server must rotate the refresh chain.
