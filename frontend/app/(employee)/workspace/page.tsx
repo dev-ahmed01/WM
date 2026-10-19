@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle, ArrowRight, ArrowUpRight, Boxes, CheckCircle2, Clock3,
+  AlertCircle, ArrowRight, ArrowUpRight, Boxes, Clock3,
   ClipboardList, FileSearch2, Headphones, Layers3, PackageCheck, RefreshCw,
   SearchCheck, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { useRequireRole } from '@/lib/auth';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { guidanceUrl, workTypeLabel, type WorkItem, type WorkQueueResponse } from '@/lib/work-items';
+import { workTypeLabel, type WorkItem, type WorkQueueResponse } from '@/lib/work-items';
 
 type Filter = 'all' | 'high' | 'receiving';
 
