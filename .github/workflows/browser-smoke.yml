@@ -116,7 +116,9 @@ jobs:
         if: always()
         with:
           name: workmate-evaluation-ui-screens
-          path: /tmp/workmate-eval-*.png
+          path: |
+            /tmp/workmate-eval-*.png
+            /tmp/workmate-phase1-*.png
           if-no-files-found: warn
           retention-days: 3
 
