@@ -231,7 +231,8 @@ def main():
             employee.screenshot(path="/tmp/workmate-phase1-worker-assigned.png", full_page=True)
             employee.goto(f"{BASE}/work/{work_id}")
             expect(employee.get_by_role("heading", name="Inspect inbound pallet under received goods SOP")).to_be_visible()
-            expect(employee.get_by_text("Phase 2 · no evidence captured yet")).to_be_visible()
+            expect(employee.get_by_role("heading", name="Work procedure")).to_be_visible()
+            expect(employee.get_by_text("No published procedure linked")).to_be_visible()
             assert outsider.request.get(f"{BASE}/api/backend/work/items/{work_id}").status == 404
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
