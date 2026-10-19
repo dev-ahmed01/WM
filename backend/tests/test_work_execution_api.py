@@ -41,7 +41,7 @@ def test_worker_cannot_spoof_department_status_or_step_transition():
         assert client.post("/api/v1/work/execution/wrk_1/step",headers=auth(),
                            json={**proof,**spoof}).status_code==422
     assert client.post("/api/v1/work/execution/wrk_1/step",headers=auth(),
-                       json={**proof,"number":float("inf")}).status_code==422
+                       json={**proof,"number":"Infinity"}).status_code==422
 
 
 def test_explicit_observation_is_forwarded_only_to_safeguarded_repository():
