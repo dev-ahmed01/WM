@@ -10,9 +10,11 @@ import re
 from uuid import uuid4
 
 from app.core.database import get_postgres_connection
+from app.services.procedure_plan import ProcedurePlanError, check_plan
 
 COLUMNS = ("id,department_id,created_by,source_sha256,source_filename,"
-           "source_type,title,source_excerpt,steps,warnings,status,revision,"
+           "source_type,title,source_excerpt,steps,warnings,decision,status,revision,"
+           "published_version_id,"
            "reviewed_by,reviewed_at,created_at,updated_at")
 LINE_ITEM = re.compile(r"^\s*(?:(?:step|stage)\s*\d+\s*[:.)-]\s*|\d{1,3}[.)]\s+|[-*]\s+)(.{8,700})$",re.I)
 
@@ -159,7 +161,7 @@ class ProcedureDraftRepository:
                     raise
 
     @staticmethod
-    def update(department,actor,draft_id,revision,title,steps):
+    def update(department,actor,draft_id,revision,title,steps,decision=None):
         if not (5<=len(title.strip())<=180) or len(steps)>50:
             raise DraftConflict("Title or step limit exceeded.")
         if any(not isinstance(s,dict) or not (10<=len(str(s.get("instruction","")).strip())<=700)
@@ -172,18 +174,38 @@ class ProcedureDraftRepository:
             with conn.cursor() as cur:
                 _start(cur,department)
                 try:
-                    cur.execute("""SELECT revision FROM knowledge_studio.procedure_drafts
+                    cur.execute("""SELECT revision,status,decision,steps FROM knowledge_studio.procedure_drafts
                         WHERE id=%s AND department_id=%s FOR UPDATE""",(draft_id,department))
                     row=cur.fetchone()
                     if not row:
                         raise DraftNotFound()
-                    if row[0]!=revision:
-                        raise DraftConflict("This draft changed since you opened it. Refresh before saving.")
+                    if row[0]!=revision or row[1]=="published":
+                        raise DraftConflict("The draft was published or changed. Refresh before saving.")
+                    new_decision = decision if decision is not None else row[2]
+                    try:
+                        # Validate the authoring fields even for unreviewed drafts.
+                        planned = [{**step,"reviewed":True} for step in steps]
+                        check_plan(planned,new_decision)
+                    except ProcedurePlanError as exc:
+                        raise DraftConflict(str(exc)) from exc
+                    prior={st["id"]:st for st in row[3]}
+                    normalized=[]
+                    for step in steps:
+                        old=prior.get(step["id"])
+                        # A changed instruction, proof, or output invalidates prior attestation.
+                        mutated=not old or any(
+                            step.get(key,default)!=old.get(key,default)
+                            for key,default in (("instruction",""),("output_type","CONFIRMATION"),
+                                                ("evidence_type","NONE"))
+                        )
+                        normalized.append({**step,"reviewed":False if mutated else bool(step.get("reviewed",False))})
                     cur.execute("""UPDATE knowledge_studio.procedure_drafts
-                        SET title=%s,steps=%s::jsonb,status='draft',revision=revision+1,
+                        SET title=%s,steps=%s::jsonb,decision=%s::jsonb,
+                            status='draft',revision=revision+1,
                             reviewed_by=NULL,reviewed_at=NULL,updated_at=CURRENT_TIMESTAMP
                         WHERE id=%s AND department_id=%s
-                        RETURNING """+COLUMNS,(title.strip(),json.dumps(steps),draft_id,department))
+                        RETURNING """+COLUMNS,(title.strip(),json.dumps(normalized),
+                                               json.dumps(new_decision),draft_id,department))
                     result=_dict(cur)
                     _event(cur,draft_id,department,actor,"edited",result["revision"])
                     cur.execute("COMMIT")
@@ -198,17 +220,19 @@ class ProcedureDraftRepository:
             with conn.cursor() as cur:
                 _start(cur,department)
                 try:
-                    cur.execute("""SELECT steps,revision,status
+                    cur.execute("""SELECT steps,revision,status,decision
                         FROM knowledge_studio.procedure_drafts
                         WHERE id=%s AND department_id=%s FOR UPDATE""",(draft_id,department))
                     row=cur.fetchone()
                     if not row:
                         raise DraftNotFound()
-                    steps,current,status=row
+                    steps,current,status,decision=row
                     if current!=revision or status!="draft":
                         raise DraftConflict("The draft version changed or was already reviewed.")
-                    if not steps or any(s.get("reviewed") is not True for s in steps):
-                        raise DraftConflict("Review each source-backed step before approving this draft.")
+                    try:
+                        check_plan(steps,decision)
+                    except ProcedurePlanError as exc:
+                        raise DraftConflict(str(exc)) from exc
                     cur.execute("""UPDATE knowledge_studio.procedure_drafts
                         SET status='reviewed',revision=revision+1,reviewed_by=%s,
                             reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
