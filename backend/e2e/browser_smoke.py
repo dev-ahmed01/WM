@@ -186,8 +186,11 @@ def main():
                 and response.request.method == "POST",timeout=20000
             ) as imported:
                 admin.get_by_role("button",name="Create editable procedure draft").click()
-            assert imported.value.status==201, imported.value.text()
-            imported_id=imported.value.json()["id"]
+            assert imported.value.status==201
+            # Next.js navigates immediately after import: read its draft ID from
+            # the resulting URL instead of an already-released response body.
+            admin.wait_for_url("**/procedure-studio/drafts/drft_*",timeout=15000)
+            imported_id=admin.url.rsplit("/",1)[-1]
             expect(admin.get_by_role("heading",name="Procedure editor")).to_be_visible(timeout=15000)
             assert admin.get_by_role("checkbox").count()==2
             for checkbox in admin.get_by_role("checkbox").all():
