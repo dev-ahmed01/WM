@@ -76,6 +76,18 @@ async def list_work_items(
     return {"items":items,"scope":"department" if can_manage else "assigned"}
 
 
+@router.get("/assignees")
+async def list_assignees(
+    user: dict = Depends(require_role("manager","admin"))
+) -> dict:
+    department,_,_=context(user)
+    try:
+        people = await run_in_threadpool(WorkItemRepository.assignees,department)
+    except Exception as exc:
+        raise HTTPException(503,detail={"error_code":"WORK_ASSIGNEES_UNAVAILABLE"}) from exc
+    return {"items":people}
+
+
 @router.get("/{item_id}")
 async def get_work_item(
     item_id: str,
