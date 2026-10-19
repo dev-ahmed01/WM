@@ -140,7 +140,7 @@ export default function ProcedureDraftEditor() {
       </section>
       <aside className="space-y-4">
         <div className="overflow-hidden rounded-[1.5rem] border border-[#d9e3dc] bg-white">
-          <div className="flex items-center gap-2 border-b border-[#e8eee9] p-5"><FileText className="h-5 w-5 text-emerald-700"/><h2 className="text-base font-semibold">Original source excerpt</h2></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8eee9] p-5"><div className="flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-700"/><h2 className="text-base font-semibold">Original source excerpt</h2></div><a href={"/api/backend/procedure/drafts/"+encodeURIComponent(draft.id)+"/source"} download className="inline-flex min-h-9 items-center rounded-lg border border-[#d6e5d9] px-3 text-[11px] font-bold text-emerald-800 hover:bg-[#f3f8f3]">Download original</a></div>
           <div className="max-h-[600px] overflow-y-auto px-5 py-4"><pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-7 text-[#53665a]">{draft.source_excerpt}</pre></div>
           <p className="border-t border-[#edf1eb] px-5 py-3 text-[11px] text-[#859184]">Shows the first 8,000 extracted characters. For long documents, verify the original file beyond this excerpt.</p>
         </div>
