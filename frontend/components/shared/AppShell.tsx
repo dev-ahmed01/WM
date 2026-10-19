@@ -8,7 +8,7 @@ import {
   ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut,
   Menu, Search, ShieldCheck, X,
 } from 'lucide-react';
-import { loadUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
+import { loadUserClaims, getUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { LoadingState } from '@/components/shared/LoadingState';
 
 interface NavItem {
   label: string;
@@ -156,17 +157,25 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<UserClaims | null>(null);
+  // Do not render an employee sidebar or Sign in action while an admin/manager
+  // session is still loading. Keep cached identity visible between modules.
+  const [user, setUser] = useState<UserClaims | null>(() => getUserClaims());
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void loadUserClaims().then(profile => { if (!cancelled) setUser(profile); });
+    if (pathname === '/login' || pathname.startsWith('/login/')) return;
+    void loadUserClaims().then(profile => {
+      if (cancelled) return;
+      setUser(profile);
+      if (!profile) router.replace('/login');
+    });
     setMobileOpen(false);
     return () => { cancelled = true; };
-  }, [pathname]);
+  }, [pathname, router]);
 
   if (pathname === '/login' || pathname.startsWith('/login/')) return <>{children}</>;
+  if (!user) return <div className="min-h-screen grid place-items-center bg-[#f8faf8]"><LoadingState label="Opening workspace" /></div>;
 
   const handleLogout = () => {
     void fetch('/api/session/logout', {
