@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS workmate_copilot.shift_handover_events (
 CREATE INDEX IF NOT EXISTS ix_handover_events_handover
     ON workmate_copilot.shift_handover_events (handover_id,created_at);
 
+-- The constrained reader gets only tenant-filtered handover select privileges.
+-- Role-scoped access is still narrower at the FastAPI endpoint (owner / reviewer).
+GRANT USAGE ON SCHEMA workmate_copilot TO workmate_scoped_reader;
+GRANT SELECT ON workmate_copilot.shift_handovers,
+                workmate_copilot.shift_handover_events TO workmate_scoped_reader;
+
 -- The app scopes every query AND the non-owner staging runtime is protected by RLS.
 ALTER TABLE workmate_copilot.shift_handovers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workmate_copilot.shift_handover_events ENABLE ROW LEVEL SECURITY;
