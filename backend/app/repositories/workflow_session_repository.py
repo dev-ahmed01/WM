@@ -139,6 +139,14 @@ class WorkflowSessionRepository:
                 with conn.cursor() as cur:
                     cur.execute("BEGIN")
                     try:
+                        cur.execute(
+                            "SELECT 1 FROM workmate_copilot.work_items WHERE execution_session_id=%s",
+                            (session_id,),
+                        )
+                        if cur.fetchone():
+                            raise DatabaseException(
+                                message="Task execution requires its atomic evidence gate."
+                            )
                         target_state_id = next_state_id or expected_state_id
                         completed_at = now if new_status == "completed" else None
                         cur.execute(
@@ -221,6 +229,14 @@ class WorkflowSessionRepository:
                 with conn.cursor() as cur:
                     cur.execute("BEGIN")
                     try:
+                        cur.execute(
+                            "SELECT 1 FROM workmate_copilot.work_items WHERE execution_session_id=%s",
+                            (session_id,),
+                        )
+                        if cur.fetchone():
+                            raise DatabaseException(
+                                message="Task session status changes require the work API."
+                            )
                         cur.execute(
                             query,
                             (new_status, json.dumps(session_context), now,
