@@ -119,6 +119,7 @@ jobs:
           path: |
             /tmp/workmate-eval-*.png
             /tmp/workmate-phase1-*.png
+            /tmp/workmate-phase2-*.png
           if-no-files-found: warn
           retention-days: 3
 
