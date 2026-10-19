@@ -150,7 +150,7 @@ export default function ControlRoom() {
             <h3 className="text-sm font-semibold">Management tools</h3>
             {[
               {label:'Review handovers',href:'/handover/review'},
-              {label:'Procedure studio',href:'/procedure-studio'},
+              ...(user?.role === 'admin' ? [{label:'Procedure studio',href:'/procedure-studio'}] : []),
               {label:'Operational insights',href:'/intelligence-hub'},
             ].map(item => <Link href={item.href} key={item.href} className="flex min-h-12 items-center justify-between border-b border-[#edf1ec] text-xs font-semibold text-[#496452] last:border-0 hover:text-emerald-800">{item.label}<ArrowRight className="h-4 w-4" /></Link>)}
           </div>
