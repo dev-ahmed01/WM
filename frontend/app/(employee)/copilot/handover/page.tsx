@@ -7,7 +7,18 @@ import { useRequireRole } from '@/lib/auth';
 import { apiClient, type CopilotConversationDetail, type CopilotHistoryResponse, type CopilotSessionSummary } from '@/lib/api-client';
 import { LoadingState } from '@/components/shared/LoadingState';
 
-const HANDOVER_STATES = ['Pending next shift', 'Blocked — needs supervisor', 'For information', 'Ready for follow-up'] as const;
+const HANDOVER_STATES = [
+  { value: 'pending_next_shift', label: 'Pending next shift' },
+  { value: 'blocked_supervisor', label: 'Blocked — needs supervisor' },
+  { value: 'information', label: 'For information' },
+  { value: 'follow_up', label: 'Ready for follow-up' },
+] as const;
+const EXCEPTION_TYPES = [
+  { value: 'none', label: 'No exception' }, { value: 'damage', label: 'Damaged goods' },
+  { value: 'quantity_mismatch', label: 'Quantity mismatch' },
+  { value: 'missing_document', label: 'Missing document' },
+  { value: 'safety_concern', label: 'Safety concern' }, { value: 'other', label: 'Other issue' },
+] as const;
 
 function handoverText(args: {
   session: CopilotSessionSummary;
@@ -26,7 +37,7 @@ function handoverText(args: {
     'Prepared by: ' + args.author,
     'Department: ' + args.department,
     'Recipient / next shift: ' + (args.recipient.trim() || 'Not specified'),
-    'Handover status (employee assessment): ' + args.disposition,
+    'Handover status (employee assessment): ' + (HANDOVER_STATES.find(item => item.value === args.disposition)?.label || args.disposition),
     '',
     'LINKED WORK SESSION',
     'Session title: ' + (args.session.title || 'Operational conversation'),
@@ -60,10 +71,15 @@ export default function ShiftHandoverPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
   const [recipient, setRecipient] = useState('');
-  const [disposition, setDisposition] = useState<string>(HANDOVER_STATES[0]);
+  const [disposition, setDisposition] = useState<string>(HANDOVER_STATES[0].value);
+  const [exceptionType, setExceptionType] = useState<string>('none');
+  const [severity, setSeverity] = useState<'normal' | 'high' | 'critical'>('normal');
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState('');
   const [nextAction, setNextAction] = useState('');
   const [notes, setNotes] = useState('');
   const [notice, setNotice] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (loading || !user) return;
@@ -84,6 +100,8 @@ export default function ShiftHandoverPage() {
     if (!selectedId) return;
     let active = true;
     setDetail(null);
+    setSavedId('');
+    setSaveError('');
     setDetailLoading(true);
     setNotice('');
     setError('');
@@ -105,6 +123,33 @@ export default function ShiftHandoverPage() {
     department: user?.department_id || 'Current department',
     recipient, disposition, nextAction, notes,
   });
+  const validSave = canExport && !saving && recipient.trim().length >= 2 &&
+    nextAction.trim().length >= 5 && !(severity === 'critical' && exceptionType === 'none') &&
+    !(exceptionType === 'safety_concern' && disposition === 'information');
+
+  const saveForReview = async () => {
+    if (!validSave) return;
+    setSaving(true);
+    setSaveError('');
+    setSavedId('');
+    try {
+      const saved = await apiClient<{ id: string }>('/handover', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversation_id: selectedId, recipient_label: recipient.trim(),
+          disposition, exception_type: exceptionType, severity,
+          next_action: nextAction.trim(), notes: notes.trim(),
+        }),
+      });
+      setSavedId(saved.id);
+      setNotice('Handover submitted to the department review queue. Workflow state is unchanged.');
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : 'Unable to save handover.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const copy = async () => {
     if (!canExport) return;
     try {
@@ -165,16 +210,36 @@ export default function ShiftHandoverPage() {
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <div><label htmlFor="handover-recipient" className="wm-label">Next shift / recipient</label><input id="handover-recipient" maxLength={100} className="wm-input" value={recipient} onChange={event => setRecipient(event.target.value)} placeholder="e.g. Morning warehouse lead" /></div>
-            <div><label htmlFor="handover-state" className="wm-label">Your assessment</label><select id="handover-state" value={disposition} onChange={event => setDisposition(event.target.value)} className="wm-input">{HANDOVER_STATES.map(state => <option key={state} value={state}>{state}</option>)}</select></div>
+            <div><label htmlFor="handover-state" className="wm-label">Your assessment</label><select id="handover-state" value={disposition} onChange={event => setDisposition(event.target.value)} className="wm-input">{HANDOVER_STATES.map(state => <option key={state.value} value={state.value}>{state.label}</option>)}</select></div>
           </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div><label className="wm-label" htmlFor="handover-exception">Exception category</label>
+              <select className="wm-input" id="handover-exception" value={exceptionType} onChange={event => setExceptionType(event.target.value)}>{EXCEPTION_TYPES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+            </div>
+            <div><label className="wm-label" htmlFor="handover-severity">Attention needed</label>
+              <select className="wm-input" id="handover-severity" value={severity} onChange={event => setSeverity(event.target.value as typeof severity)}>
+                <option value="normal">Normal</option><option value="high">High priority</option><option value="critical">Critical — supervisor required</option>
+              </select>
+            </div>
+          </div>
+          {severity === 'critical' || exceptionType === 'safety_concern' ? (
+            <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-950">
+              <strong>Escalation attention.</strong> This record is for human review. Do not continue an unsafe operation or treat the handover as permission to bypass the published procedure.
+            </div>
+          ) : null}
           <div className="mt-4"><label htmlFor="handover-next" className="wm-label">What needs to happen next?</label><textarea id="handover-next" className="wm-input min-h-28 resize-y leading-6" rows={3} maxLength={1500} value={nextAction} onChange={event => setNextAction(event.target.value)} placeholder="Describe the next check, decision, or supervisor follow-up…" /></div>
           <div className="mt-4"><label htmlFor="handover-notes" className="wm-label">Additional context (optional)</label><textarea id="handover-notes" className="wm-input min-h-28 resize-y leading-6" rows={3} maxLength={1500} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Record outstanding issues and observations in your own words…" /></div>
+          {saveError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-800">{saveError}</p> : null}
+          {savedId ? <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">Submitted · {savedId} · awaiting review. <Link className="font-semibold underline" href="/handover/review">Open review queue</Link></p> : null}
           <div className="mt-5 flex flex-wrap gap-2">
+            <button type="button" disabled={!validSave || Boolean(savedId)} onClick={() => void saveForReview()} className="inline-flex items-center gap-2 rounded-xl bg-[#165a45] px-5 py-3 text-xs font-semibold text-white hover:bg-[#0c3a2a] disabled:opacity-50">
+              <ClipboardCheck className="h-4 w-4" />{saving ? 'Submitting…' : savedId ? 'Submitted' : 'Submit for review'}
+            </button>
             <button type="button" disabled={!canExport} onClick={() => void copy()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"><ClipboardCopy className="h-4 w-4" />Copy handover</button>
             <button type="button" disabled={!canExport} onClick={download} className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-xs font-semibold hover:bg-muted disabled:opacity-50"><Download className="h-4 w-4" />Download .txt</button>
           </div>
           {notice ? <p role="status" className="mt-3 text-xs text-emerald-800">{notice}</p> : null}
-          <p className="mt-4 text-[11px] leading-5 text-muted-foreground">This export remains in your browser until you choose to copy or download it. WorkMate does not send it, mark the task complete, or create an official record.</p>
+          <p className="mt-4 text-[11px] leading-5 text-muted-foreground">Copy/download stays local. **Submit for review** writes a scoped handover and audit event to PostgreSQL for manager review. It does not contact the recipient, complete a workflow, or approve a safety decision.</p>
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-24">
