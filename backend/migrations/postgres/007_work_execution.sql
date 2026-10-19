@@ -21,6 +21,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_work_item_execution
 ALTER TABLE workmate_copilot.work_item_events
   ADD COLUMN IF NOT EXISTS event_payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE workmate_copilot.work_item_events
+  ADD COLUMN IF NOT EXISTS event_seq BIGINT GENERATED ALWAYS AS IDENTITY;
+ALTER TABLE workmate_copilot.work_item_events
   DROP CONSTRAINT IF EXISTS work_item_events_action_check;
 ALTER TABLE workmate_copilot.work_item_events
   ADD CONSTRAINT work_item_events_action_check CHECK (
