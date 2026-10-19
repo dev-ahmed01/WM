@@ -114,6 +114,7 @@ def main():
         manager = None
         try:
             admin = sign_in(browser, "e2e_admin@workmate.test")
+            admin.screenshot(path="/tmp/workmate-phase1-procedure-studio.png", full_page=True)
             # Force short-lived access-cookie expiry while retaining the
             # refresh cookie: the server must rotate the refresh chain.
             old_cookies = {c["name"]: c["value"] for c in admin.context.cookies([BASE])}
@@ -174,6 +175,7 @@ def main():
             employee.goto(f"{BASE}/workspace")
             expect(employee.get_by_role("heading", name="Today's work")).to_be_visible()
             expect(employee.get_by_role("link", name=re.compile("Inspect inbound pallet"))).to_be_visible(timeout=15000)
+            employee.screenshot(path="/tmp/workmate-phase1-worker-assigned.png", full_page=True)
             employee.goto(f"{BASE}/work/{work_id}")
             expect(employee.get_by_role("heading", name="Inspect inbound pallet under received goods SOP")).to_be_visible()
             expect(employee.get_by_text("Phase 2 · no evidence captured yet")).to_be_visible()
