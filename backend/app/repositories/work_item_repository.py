@@ -99,3 +99,26 @@ class WorkItemRepository:
                 except Exception:
                     cur.execute("ROLLBACK")
                     raise
+
+    @staticmethod
+    def assignees(department: str) -> list[dict]:
+        """Only active employees in the requesting manager's department."""
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("BEGIN")
+                try:
+                    cur.execute("SELECT set_config('workmate.department_id',%s,true)",(department,))
+                    cur.execute("""
+                      SELECT DISTINCT u.id, COALESCE(NULLIF(u.full_name,''),u.id) AS label
+                      FROM security.users u
+                      JOIN security.user_roles ur ON ur.user_id=u.id
+                      JOIN security.roles r ON r.id=ur.role_id
+                      WHERE u.department_id=%s AND u.status='active' AND LOWER(r.name)='employee'
+                      ORDER BY label LIMIT 100
+                    """,(department,))
+                    values=[{"id":str(row[0]),"label":str(row[1])} for row in cur.fetchall()]
+                    cur.execute("COMMIT")
+                    return values
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
