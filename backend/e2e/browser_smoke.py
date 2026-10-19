@@ -234,6 +234,34 @@ def main():
             assert "Verify damaged cartons before the next shift." in handover_body
             assert approved_answer["conversation_id"] in handover_body
             assert "not an approved policy" in handover_body.lower()
+            employee.get_by_label("Next shift / recipient").fill("Night shift lead")
+            employee.locator("#handover-exception").select_option("damage")
+            employee.locator("#handover-severity").select_option("high")
+            with employee.expect_response(lambda r: r.url.endswith("/api/backend/handover")
+                                          and r.request.method == "POST", timeout=20000) as saved:
+                employee.get_by_role("button", name="Submit for review").click()
+            assert saved.value.status == 201, saved.value.text()
+            handover_id = saved.value.json()["id"]
+            assert handover_id.startswith("hov_")
+            # Only a manager from this department can review; employee and
+            # foreign-department browsers cannot use reviewer permissions.
+            assert employee.request.post(
+                f"{BASE}/api/backend/handover/{handover_id}/review",
+                data={"decision":"acknowledged","review_note":"Reviewed by employee"}
+            ).status == 403
+            outsider.goto(f"{BASE}/handover/review")
+            outsider.wait_for_url("**/workspace", timeout=12000)
+            manager.goto(f"{BASE}/handover/review")
+            expect(manager.get_by_role("heading", name="Shift handover queue")).to_be_visible()
+            manager.get_by_label("Reviewer note (required)").fill(
+                "Keep the damaged cartons separated until reviewed.")
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/handover/" + handover_id + "/review")
+                and r.request.method == "POST", timeout=20000,
+            ) as reviewed:
+                manager.get_by_role("button", name="Request follow-up").click()
+            assert reviewed.value.status == 200, reviewed.value.text()
+            assert reviewed.value.json()["status"] == "follow_up_requested"
             outsider_answer = ask_reference(
                 outsider, "security seal damaged cartons quarantine goods supervisor",
             )
