@@ -192,7 +192,7 @@ def _position(cur, work):
     if not session_id:
         return {"work_id":work["id"],"status":work["status"],
                 "workflow_version_id":work["workflow_version_id"],"session_id":None,
-                "state":None,"step":None,"decision_options":[],"completed_steps":0,"total_steps":0}
+                "state":None,"step":None,"decision_options":[],"safety_gates":[],"completed_steps":0,"total_steps":0}
     cur.execute("""
       SELECT current_state_id,status FROM workmate_copilot.workflow_sessions
       WHERE id=%s
@@ -201,6 +201,14 @@ def _position(cur, work):
     if not active:
         raise ExecutionConflict("Linked execution session is unavailable.")
     state = _graph_state(cur, work["workflow_version_id"], active["current_state_id"])
+    cur.execute("""
+      SELECT rule_code,enforcement_level,error_message
+      FROM knowledge_studio.workflow_rules
+      WHERE state_id=%s AND enforcement_level IN
+        ('HARD_STOP','SUPERVISOR_OVERRIDE','WARNING_CONFIRM')
+      ORDER BY id
+    """,(state["id"],))
+    gates=_records(cur)
     step = _pending_step(cur, session_id, state["id"])
     if step:
         step["evidence_specs"] = _specs(cur, step["id"])
@@ -219,6 +227,7 @@ def _position(cur, work):
             "workflow_version_id":work["workflow_version_id"],
             "session_id":session_id,"state":state,"step":step,
             "decision_options":_options(cur,state["id"]) if not step else [],
+            "safety_gates":gates,
             "completed_steps":done,"total_steps":total}
 
 
