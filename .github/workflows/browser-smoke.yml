@@ -112,6 +112,14 @@ jobs:
       - name: Browser login to archive lifecycle against actual PostgreSQL
         run: python backend/e2e/browser_smoke.py
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workmate-evaluation-ui-screens
+          path: /tmp/workmate-eval-*.png
+          if-no-files-found: warn
+          retention-days: 3
+
       - name: Diagnostics on failure
         if: failure()
         run: |
