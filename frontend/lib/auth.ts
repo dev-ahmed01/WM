@@ -40,8 +40,8 @@ export function clearCachedUser() {
 }
 
 export function getRoleRedirectPath(role?: string): string {
-  if (role === 'admin') return '/knowledge-studio';
-  if (role === 'manager') return '/intelligence-hub';
+  if (role === 'admin') return '/procedure-studio';
+  if (role === 'manager') return '/control-room';
   return '/workspace';
 }
 
