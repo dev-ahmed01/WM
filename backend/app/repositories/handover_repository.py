@@ -15,7 +15,7 @@ class HandoverRepository:
     COLUMNS = (
         "id,department_id,conversation_id,created_by,recipient_label,"
         "disposition,exception_type,severity,next_action,notes,"
-        "snapshot_state,status,reviewed_by,reviewed_at,review_note,created_at,updated_at"
+        "snapshot_state,status,assigned_to_user_id,assigned_at,reviewed_by,reviewed_at,review_note,created_at,updated_at"
     )
 
     @staticmethod
@@ -25,7 +25,7 @@ class HandoverRepository:
             return None
         keys = [col.name.lower() for col in cur.description]
         record = dict(zip(keys, row))
-        for key in ("created_at", "updated_at", "reviewed_at"):
+        for key in ("created_at", "updated_at", "reviewed_at", "assigned_at"):
             if record.get(key):
                 record[key] = record[key].isoformat()
         return record
@@ -100,11 +100,42 @@ class HandoverRepository:
                     columns = [c.name.lower() for c in cur.description]
                     items = [dict(zip(columns, row)) for row in cur.fetchall()]
                     for record in items:
-                        for key in ("created_at", "updated_at", "reviewed_at"):
+                        for key in ("created_at", "updated_at", "reviewed_at", "assigned_at"):
                             if record.get(key):
                                 record[key] = record[key].isoformat()
                     cur.execute("COMMIT")
                     return items
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
+
+    @staticmethod
+    def claim(department: str, reviewer: str, handover_id: str) -> dict | None:
+        """Atomically claim an unassigned handover within the reviewer's department."""
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("BEGIN")
+                try:
+                    cur.execute("SELECT set_config('workmate.department_id',%s,true)", (department,))
+                    cur.execute("""
+                        UPDATE workmate_copilot.shift_handovers
+                        SET assigned_to_user_id=%s,assigned_at=CURRENT_TIMESTAMP,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=%s AND department_id=%s AND status='submitted'
+                          AND assigned_to_user_id IS NULL AND created_by<>%s
+                        RETURNING """ + HandoverRepository.COLUMNS,
+                        (reviewer, handover_id, department, reviewer))
+                    claimed = HandoverRepository._record(cur)
+                    if not claimed:
+                        cur.execute("ROLLBACK")
+                        return None
+                    cur.execute("""
+                        INSERT INTO workmate_copilot.shift_handover_events
+                        (id,handover_id,department_id,actor_user_id,action)
+                        VALUES (%s,%s,%s,%s,'claimed')
+                    """, (uuid.uuid4().hex, handover_id, department, reviewer))
+                    cur.execute("COMMIT")
+                    return claimed
                 except Exception:
                     cur.execute("ROLLBACK")
                     raise
@@ -122,11 +153,12 @@ class HandoverRepository:
                     cur.execute("""
                         UPDATE workmate_copilot.shift_handovers
                         SET status=%s,reviewed_by=%s,reviewed_at=CURRENT_TIMESTAMP,
+                            assigned_to_user_id=%s,assigned_at=COALESCE(assigned_at,CURRENT_TIMESTAMP),
                             review_note=%s,updated_at=CURRENT_TIMESTAMP
                         WHERE id=%s AND department_id=%s AND status='submitted'
-                          AND created_by<>%s
+                          AND created_by<>%s AND (assigned_to_user_id IS NULL OR assigned_to_user_id=%s)
                         RETURNING """ + HandoverRepository.COLUMNS,
-                        (decision, reviewer, note, handover_id, department, reviewer))
+                        (decision, reviewer, reviewer, note, handover_id, department, reviewer, reviewer))
                     updated = HandoverRepository._record(cur)
                     if not updated:
                         cur.execute("ROLLBACK")
