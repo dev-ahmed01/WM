@@ -172,7 +172,7 @@ export default function OperationsWorkspace() {
         </section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.85fr)]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.85fr)]">
         <section className="wm-panel overflow-hidden" aria-labelledby="continuity-title">
           <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
             <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><History className="h-4 w-4" /></span><div><h2 id="continuity-title" className="text-sm font-semibold">Pick up where you left off</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Recent conversations, from your account</p></div></div>
