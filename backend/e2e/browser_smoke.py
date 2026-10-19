@@ -433,12 +433,12 @@ def main():
             ) as evidence:
                 employee.get_by_role("button",name="Record checkpoint").click()
             assert evidence.value.status==200,evidence.value.text()
-            employee.screenshot(path="/tmp/workmate-phase2-decision.png",full_page=True)
+            employee.locator('section[aria-labelledby="work-execution-title"]').screenshot(path="/tmp/workmate-phase2-decision.png")
             expect(employee.get_by_role("heading",name="Condition assessment")).to_be_visible()
             employee.get_by_text("Accept and finish").click()
             employee.get_by_role("button",name="Record decision").click()
             expect(employee.get_by_text("Published workflow completed")).to_be_visible()
-            employee.screenshot(path="/tmp/workmate-phase2-completed.png",full_page=True)
+            employee.locator('section[aria-labelledby="work-execution-title"]').screenshot(path="/tmp/workmate-phase2-completed.png")
             summary=employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()
             assert summary["status"]=="completed" and summary["completed_steps"]==2
             assert outsider.request.get(
