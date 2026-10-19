@@ -262,8 +262,9 @@ OWNER_TOKEN = create_access_token("usr_owner", "employee", "dept_ops")
 OTHER_TOKEN = create_access_token("usr_other", "employee", "dept_ops")
 
 
+@patch("app.api.v1.copilot_session._task_bound", return_value=False)
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_employee_cannot_read_another_users_session(mock_get):
+def test_employee_cannot_read_another_users_session(mock_get, _task_guard):
     mock_get.return_value = session_row()
     response = client.get(
         "/api/v1/copilot/session/sess_1",
@@ -274,7 +275,7 @@ def test_employee_cannot_read_another_users_session(mock_get):
 
 @patch("app.api.v1.copilot_session.WorkflowStateService.pause_session")
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_owner_can_pause_session(mock_get, mock_pause):
+def test_owner_can_pause_session(mock_get, _task_guard, mock_pause):
     mock_get.return_value = session_row()
     mock_pause.return_value = WorkflowSession(**session_row(status="paused"))
     response = client.post(
@@ -287,7 +288,7 @@ def test_owner_can_pause_session(mock_get, mock_pause):
 
 @patch("app.api.v1.copilot_session.WorkflowStateService.mark_step_complete")
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_owner_advance_completes_real_step_explicitly(mock_get, mock_advance):
+def test_owner_advance_completes_real_step_explicitly(mock_get, _task_guard, mock_advance):
     mock_get.return_value = session_row()
     mock_advance.return_value = WorkflowSession(**session_row())
     with patch(
