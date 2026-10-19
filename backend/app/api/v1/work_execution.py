@@ -117,6 +117,13 @@ async def record_decision(work_id:str,payload:DecisionProof,
     return await _call(WorkExecutionRepository.decide,dept,actor,work_id,payload.decision_option)
 
 
+@router.post("/{work_id}/continue")
+async def continue_state(work_id:str,
+                         user:dict=Depends(require_role("admin","manager","employee"))):
+    dept,actor,_=_who(user)
+    return await _call(WorkExecutionRepository.continue_state,dept,actor,work_id)
+
+
 @router.post("/{work_id}/pause")
 async def pause(work_id:str,user:dict=Depends(require_role("admin","manager","employee"))):
     dept,actor,_=_who(user)
