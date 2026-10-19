@@ -77,9 +77,12 @@ def test_sop_binding_step_attestation_evidence_decision_and_tenant_rls():
     try:
         task=WorkItemRepository.create(
             department,manager,"Inspect inbound shipment for approved procedure",
-            "receiving","high","Keep seal evidence.","INB-"+k,worker)
+            "receiving","high","Keep seal evidence.","INB-"+k,None)
         assert task["status"]=="queued"
         task_id=task["id"]
+        assert WorkItemRepository.assign(department,manager,task_id,outsider) is None
+        assigned=WorkItemRepository.assign(department,manager,task_id,worker)
+        assert assigned and assigned["assigned_to"]==worker
         assert any(p["workflow_version_id"]==version
                    for p in WorkExecutionRepository.procedures(department))
         with pytest.raises(ExecutionConflict):
@@ -128,6 +131,19 @@ def test_sop_binding_step_attestation_evidence_decision_and_tenant_rls():
         step2=WorkExecutionRepository.progress(department,worker,task_id,second,False,"Carton checked",None,jpeg)
         assert step2["completed_steps"]==2 and step2["step"] is None
         assert step2["decision_options"][0]["option_code"]=="ACCEPT"
+        # Safety-gated OWD states never accept worker-only completion.
+        with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""INSERT INTO knowledge_studio.workflow_rules
+                    (id,state_id,rule_type,rule_code,condition_logic,enforcement_level,error_message)
+                    VALUES(%s,%s,'SAFETY_GUARDRAIL','QA_HOLD',
+                           'Supervisor must review','HARD_STOP',
+                           'Supervisor validation required')""",("rule_"+k,decision))
+        with pytest.raises(ExecutionConflict):
+            WorkExecutionRepository.decide(department,worker,task_id,"ACCEPT")
+        with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM knowledge_studio.workflow_rules WHERE state_id=%s",(decision,))
         with pytest.raises(ExecutionConflict):
             WorkExecutionRepository.decide(department,worker,task_id,"UNKNOWN")
         done=WorkExecutionRepository.decide(department,worker,task_id,"ACCEPT")
@@ -140,7 +156,7 @@ def test_sop_binding_step_attestation_evidence_decision_and_tenant_rls():
             WorkflowSessionRepository.update_status(session,"active","paused",{})
         log=WorkExecutionRepository.timeline(department,worker,False,task_id)
         assert [e["action"] for e in log]==[
-            "created","bound","started","paused","resumed",
+            "created","assigned","bound","started","paused","resumed",
             "step_recorded","step_recorded","decision_recorded","completed"]
         with psycopg.connect(settings.DATABASE_URL) as conn:
             with conn.cursor() as cur:
@@ -181,6 +197,7 @@ def test_sop_binding_step_attestation_evidence_decision_and_tenant_rls():
                 cur.execute("DELETE FROM workmate_copilot.conversations WHERE user_id=%s",(worker,))
                 if source_ids:
                     cur.execute("DELETE FROM shared.source_objects WHERE id=ANY(%s)",(source_ids,))
+                cur.execute("DELETE FROM knowledge_studio.workflow_rules WHERE state_id=%s",(decision,))
                 cur.execute("DELETE FROM knowledge_studio.workflow_decision_options WHERE state_id=%s",(decision,))
                 cur.execute("DELETE FROM knowledge_studio.workflow_transitions WHERE from_state_id=ANY(%s)",([state,decision],))
                 cur.execute("DELETE FROM knowledge_studio.workflow_evidence_specs WHERE step_id=%s",(second,))
