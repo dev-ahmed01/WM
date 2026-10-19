@@ -531,6 +531,59 @@ class WorkExecutionRepository:
                     raise
 
     @staticmethod
+    def continue_state(department,actor,work_id):
+        """Explicit progression through a published state with zero steps/decisions."""
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _start(cur,department)
+                try:
+                    work=_lock_work(cur,department,actor,work_id)
+                    if work["status"]!="active":
+                        raise ExecutionConflict("Only active work may continue.")
+                    _require_published_version(cur,work)
+                    cur.execute("""
+                      SELECT current_state_id FROM workmate_copilot.workflow_sessions
+                      WHERE id=%s AND status='active' AND user_id=%s FOR UPDATE
+                    """,(work["execution_session_id"],actor))
+                    sess=_fetch(cur)
+                    if not sess:
+                        raise ExecutionConflict("Active workflow session not available.")
+                    state=_graph_state(cur,work["workflow_version_id"],sess["current_state_id"])
+                    _guard_rules(cur,state["id"])
+                    if _pending_step(cur,work["execution_session_id"],state["id"]):
+                        raise ExecutionConflict("Complete the mandatory step first.")
+                    if _options(cur,state["id"]):
+                        raise ExecutionConflict("Choose an approved decision path first.")
+                    if state["is_terminal"]:
+                        cur.execute("""
+                          UPDATE workmate_copilot.workflow_sessions
+                          SET status='completed',completed_at=CURRENT_TIMESTAMP,
+                              updated_at=CURRENT_TIMESTAMP
+                          WHERE id=%s AND status='active'
+                        """,(work["execution_session_id"],))
+                        status="completed"
+                    else:
+                        status=_advance(cur,work["execution_session_id"],
+                                        work["workflow_version_id"],state["id"])
+                    if status=="completed":
+                        cur.execute("""
+                          UPDATE workmate_copilot.work_items
+                          SET status='completed',completed_at=CURRENT_TIMESTAMP,
+                              updated_at=CURRENT_TIMESTAMP WHERE id=%s
+                        """,(work_id,))
+                        work["status"]="completed"
+                    _event(cur,work_id,department,actor,"state_advanced",{"state_id":state["id"]})
+                    if status=="completed":
+                        _event(cur,work_id,department,actor,"completed",
+                               {"session_id":work["execution_session_id"]})
+                    position=_position(cur,work)
+                    cur.execute("COMMIT")
+                    return position
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
+
+    @staticmethod
     def change_status(department,actor,work_id,operation,reason=""):
         with get_postgres_connection() as conn:
             with conn.cursor() as cur:
