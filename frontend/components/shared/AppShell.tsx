@@ -4,20 +4,9 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  BarChart3,
-  BookOpenText,
-  Bot,
-  Building2,
-  ChevronDown,
-  History,
-  Search,
-  Library,
-  LayoutDashboard,
-  ClipboardCheck,
-  LogOut,
-  Menu,
-  ShieldCheck,
-  X,
+  Activity, BarChart3, BookOpenText, Bot, Building2, ChevronDown,
+  ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut,
+  Menu, Search, ShieldCheck, X,
 } from 'lucide-react';
 import { loadUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -40,76 +29,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    label: 'Operations desk',
-    description: 'Start work and resume tasks',
-    href: '/workspace',
-    icon: LayoutDashboard,
-    roles: ['admin', 'manager', 'employee'],
-  },
-  {
-    label: 'Copilot',
-    description: 'Live SOP guidance',
-    href: '/copilot',
-    icon: Bot,
-    roles: ['admin', 'manager', 'employee'],
-  },
-  {
-    label: 'Source search',
-    description: 'Approved reference excerpts',
-    href: '/copilot/sources',
-    icon: Search,
-    roles: ['admin', 'manager', 'employee'],
-  },
-  {
-    label: 'Session history',
-    description: 'Resume past work',
-    href: '/copilot/history',
-    icon: History,
-    roles: ['admin', 'manager', 'employee'],
-  },
-  {
-    label: 'Shift handover',
-    description: 'Prepare next-shift context',
-    href: '/copilot/handover',
-    icon: ClipboardCheck,
-    roles: ['admin', 'manager', 'employee'],
-  },
-  {
-    label: 'Knowledge studio',
-    description: 'Manage verified SOPs',
-    href: '/knowledge-studio',
-    icon: BookOpenText,
-    roles: ['admin'],
-  },
-  {
-    label: 'Reference library',
-    description: 'Review document drafts',
-    href: '/knowledge-studio/references',
-    icon: Library,
-    roles: ['admin'],
-  },
-  {
-    label: 'Intelligence hub',
-    description: 'Operational insights',
-    href: '/intelligence-hub',
-    icon: BarChart3,
-    roles: ['manager', 'admin'],
-  },
-  {
-    label: 'Handover review',
-    description: 'Review department exceptions',
-    href: '/handover/review',
-    icon: ClipboardCheck,
-    roles: ['admin', 'manager'],
-  },
-  {
-    label: 'Pilot review',
-    description: 'Anonymized department feedback',
-    href: '/pilot',
-    icon: ClipboardCheck,
-    roles: ['manager', 'admin'],
-  },
+  { label: 'My work', description: 'Your assigned queue', href: '/workspace', icon: ClipboardList, roles: ['admin','manager','employee'] },
+  { label: 'Control room', description: 'Department overview', href: '/control-room', icon: LayoutDashboard, roles: ['admin','manager'] },
+  { label: 'SOP guidance', description: 'Contextual AI assistance', href: '/copilot', icon: Bot, roles: ['admin','manager','employee'] },
+  { label: 'Shift handover', description: 'Transfer open context', href: '/copilot/handover', icon: ClipboardCheck, roles: ['admin','manager','employee'] },
+  { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
+  { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
+  { label: 'Procedure Studio', description: 'Manage governed SOPs', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
+  { label: 'Exception review', description: 'Department handovers', href: '/handover/review', icon: ClipboardCheck, roles: ['admin','manager'] },
+  { label: 'Intelligence', description: 'Actual operational metrics', href: '/intelligence-hub', icon: BarChart3, roles: ['admin','manager'] },
+  { label: 'Pilot evaluation', description: 'Private quality signals', href: '/pilot', icon: Activity, roles: ['admin','manager'] },
 ];
 
 function isActiveRoute(pathname: string, href: string) {
@@ -121,12 +50,12 @@ function isActiveRoute(pathname: string, href: string) {
 function Brand() {
   return (
     <Link href="/workspace" className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4" aria-label="WorkMate home">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#164a3b] text-sm font-bold tracking-tight text-white shadow-sm transition group-hover:bg-[#0d3328]">
+      <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9edcf] text-sm font-extrabold tracking-tight text-[#0d3725] shadow-sm transition group-hover:bg-white">
         WM
       </span>
       <span>
-        <span className="block text-base font-bold tracking-tight text-[#18392f]">WorkMate</span>
-        <span className="block text-[10px] font-medium uppercase tracking-[0.13em] text-slate-500">Operational intelligence</span>
+        <span className="block text-base font-bold tracking-tight text-white">WorkMate</span>
+        <span className="block text-[10px] font-medium uppercase tracking-[0.13em] text-[#8cb39c]">Frontline execution</span>
       </span>
     </Link>
   );
@@ -175,17 +104,18 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const role = user?.role || 'employee';
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
   const sections = [
-    { title: 'My workspace', items: visibleItems.filter((item) => item.href.startsWith('/copilot') || item.href === '/workspace') },
-    { title: 'Manage operations', items: visibleItems.filter((item) => !item.href.startsWith('/copilot') && item.href !== '/workspace') },
+    { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/copilot','/copilot/handover'].includes(item.href)) },
+    { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/procedure-studio'].includes(item.href)) },
+    { title: 'Supervise', items: visibleItems.filter(item => ['/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
   ];
 
   return (
-    <div className="flex h-full flex-col bg-[#f8faf8] px-3 py-5 text-foreground">
+    <div className="flex h-full flex-col bg-[#102b23] px-3 py-5 text-white">
       <div className="px-3 pb-8 pt-1"><Brand /></div>
       <nav className="flex-1 space-y-7 overflow-y-auto px-1" aria-label="Primary navigation">
         {sections.filter((section) => section.items.length > 0).map((section) => (
           <div key={section.title}>
-            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#77a18a]">{section.title}</p>
             <div className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
@@ -199,14 +129,14 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
                     className={cn(
                       'group flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 transition focus-visible:outline-offset-2',
                       active
-                        ? 'border-emerald-200 bg-emerald-100/80 text-[#13513e]'
-                        : 'border-transparent text-slate-600 hover:border-border hover:bg-white hover:text-[#164a3b]',
+                        ? 'border-[#7bd4a4]/20 bg-[#28533c] text-white'
+                        : 'border-transparent text-[#b4c7b9] hover:border-[#4c765b] hover:bg-[#1b4130] hover:text-white',
                     )}
                   >
-                    <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-emerald-700' : 'text-slate-500')} aria-hidden="true" />
+                    <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-[#b7efd1]' : 'text-[#83a591]')} aria-hidden="true" />
                     <span className="min-w-0">
                       <span className="block text-[13px] font-semibold">{item.label}</span>
-                      <span className="block truncate text-[11px] text-slate-500">{item.description}</span>
+                      <span className="block truncate text-[11px] text-[#87a592]">{item.description}</span>
                     </span>
                   </Link>
                 );
@@ -215,11 +145,8 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
           </div>
         ))}
       </nav>
-      <div className="space-y-3 border-t border-border px-1 pt-4">
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900"><ShieldCheck className="h-4 w-4" />Verified knowledge</div>
-          <p className="mt-1.5 text-[11px] leading-5 text-emerald-950/70">Operational actions require approved, published guidance.</p>
-        </div>
+      <div className="space-y-3 border-t border-[#2d4c3a] px-1 pt-4">
+        <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold text-[#b0d9bc]"><ShieldCheck className="h-4 w-4" />Governed procedures</div>
         {user ? <UserMenu user={user} onLogout={onLogout} /> : null}
       </div>
     </div>
@@ -255,7 +182,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-border lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[#244b35] lg:block">
         <SidebarContent pathname={pathname} user={user} onLogout={handleLogout} />
       </aside>
 
@@ -284,7 +211,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-800 sm:inline-flex">
-              <ShieldCheck className="h-3.5 w-3.5" /> Evidence-first guidance
+              <ShieldCheck className="h-3.5 w-3.5" /> Verified context
             </span>
             {user ? <div className="w-14 sm:w-56"><UserMenu user={user} onLogout={handleLogout} compact /></div> : <Button asChild size="sm"><Link href="/login">Sign in</Link></Button>}
           </div>
