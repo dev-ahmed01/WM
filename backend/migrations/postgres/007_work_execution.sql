@@ -26,7 +26,7 @@ ALTER TABLE workmate_copilot.work_item_events
   DROP CONSTRAINT IF EXISTS work_item_events_action_check;
 ALTER TABLE workmate_copilot.work_item_events
   ADD CONSTRAINT work_item_events_action_check CHECK (
-    action IN ('created','bound','started','step_recorded','decision_recorded','state_advanced',
+    action IN ('created','assigned','bound','started','step_recorded','decision_recorded','state_advanced',
                'paused','resumed','blocked','completed')
   );
 CREATE INDEX IF NOT EXISTS ix_work_item_events_dept_time
