@@ -36,7 +36,7 @@ def sign_in(browser, email):
     if login_response.status != 200:
         raise AssertionError(f"Login proxy status {login_response.status}: {login_response.text()[:350]}")
     try:
-        page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/intelligence-hub" if "manager" in email else "**/copilot", timeout=12000)
+        page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/intelligence-hub" if "manager" in email else "**/workspace", timeout=12000)
     except Exception as exc:
         cookie_names = [(item['name'], item['httpOnly'], item['secure']) for item in page.context.cookies([BASE])]
         profile_status = page.evaluate("async () => (await fetch('/api/session/me')).status")
