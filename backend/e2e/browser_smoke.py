@@ -434,7 +434,7 @@ def main():
                 employee.get_by_role("button",name="Record checkpoint").click()
             assert evidence.value.status==200,evidence.value.text()
             employee.screenshot(path="/tmp/workmate-phase2-decision.png",full_page=True)
-            expect(employee.get_by_text("Condition assessment")).to_be_visible()
+            expect(employee.get_by_role("heading",name="Condition assessment")).to_be_visible()
             employee.get_by_text("Accept and finish").click()
             employee.get_by_role("button",name="Record decision").click()
             expect(employee.get_by_text("Published workflow completed")).to_be_visible()
