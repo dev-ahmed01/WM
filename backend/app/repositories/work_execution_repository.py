@@ -110,11 +110,23 @@ def _options(cur, state):
     return _records(cur)
 
 
+def _require_published_version(cur, work):
+    cur.execute("""
+      SELECT 1 FROM knowledge_studio.workflow_versions v
+      JOIN knowledge_studio.workflows w ON w.id=v.workflow_id
+      WHERE v.id=%s AND v.status='published' AND w.department_id=%s
+    """, (work["workflow_version_id"], work["department_id"]))
+    if not cur.fetchone():
+        raise ExecutionConflict(
+            "The linked procedure is no longer published. Stop work and contact your supervisor."
+        )
+
+
 def _guard_rules(cur, state_id):
     # We never pretend that arbitrary SOP safety logic is machine verified.
     cur.execute("""
       SELECT 1 FROM knowledge_studio.workflow_rules
-      WHERE state_id=%s AND enforcement_level IN ('HARD_STOP','SUPERVISOR_OVERRIDE')
+      WHERE state_id=%s AND enforcement_level IN ('HARD_STOP','SUPERVISOR_OVERRIDE','WARNING_CONFIRM')
       LIMIT 1
     """, (state_id,))
     if cur.fetchone():
@@ -225,6 +237,8 @@ def _decode_evidence(file, spec):
         raise ExecutionConflict("Evidence must contain no more than 2 MB.")
     if spec.get("min_size_bytes") and len(raw) < int(spec["min_size_bytes"]):
         raise ExecutionConflict("Evidence does not meet the published minimum size.")
+    if spec.get("validation_regex"):
+        raise ExecutionConflict("This evidence requires a published validation rule not yet supported.")
     typ = spec["evidence_type"]
     if typ == "DOCUMENT_PDF":
         if not (raw.startswith(b"%PDF-") and filename.lower().endswith(".pdf")):
@@ -382,6 +396,7 @@ class WorkExecutionRepository:
                     current=_fetch(cur)
                     if not current:
                         raise ExecutionConflict("Active work session was not found.")
+                    _require_published_version(cur,work)
                     state=_graph_state(cur,work["workflow_version_id"],current["current_state_id"])
                     _guard_rules(cur,state["id"])
                     step=_pending_step(cur,session,state["id"])
@@ -485,6 +500,7 @@ class WorkExecutionRepository:
                     record=_fetch(cur)
                     if not record:
                         raise ExecutionConflict("Active session not available.")
+                    _require_published_version(cur,work)
                     state=_graph_state(cur,work["workflow_version_id"],record["current_state_id"])
                     _guard_rules(cur,state["id"])
                     if _pending_step(cur,work["execution_session_id"],state["id"]):
