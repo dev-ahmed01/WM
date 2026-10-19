@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter,Depends,File,Form,HTTPException,UploadFile
+from fastapi import APIRouter,Depends,File,Form,HTTPException,UploadFile,Response
 from pydantic import BaseModel,ConfigDict,Field
 from starlette.concurrency import run_in_threadpool
 from app.middleware.rbac_middleware import require_role
@@ -91,6 +91,23 @@ async def get_procedure_draft(
 ):
     dept,_=_identity(user)
     return await _call(ProcedureDraftRepository.get,dept,draft_id)
+
+
+@router.get("/{draft_id}/source")
+async def download_original_source(
+    draft_id:str,user:dict=Depends(require_role("admin")),
+):
+    dept,_=_identity(user)
+    filename,raw=await _call(ProcedureDraftRepository.source,dept,draft_id)
+    return Response(
+        content=raw,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition":f'attachment; filename="{filename}"',
+            "Cache-Control":"private, no-store",
+            "X-Content-Type-Options":"nosniff",
+        },
+    )
 
 
 @router.put("/{draft_id}")
