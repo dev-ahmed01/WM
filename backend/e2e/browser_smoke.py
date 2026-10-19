@@ -168,6 +168,43 @@ def main():
         try:
             admin = sign_in(browser, "e2e_admin@workmate.test")
             admin.screenshot(path="/tmp/workmate-phase1-procedure-studio.png", full_page=True)
+            # Phase 3A: ordinary SOP -> saved, manually checked, reviewed draft.
+            admin.goto(f"{BASE}/procedure-studio/drafts")
+            expect(admin.get_by_role("heading",name="Build from a document")).to_be_visible()
+            admin.get_by_label("Procedure document").set_input_files({
+                "name":"receiving-procedure.txt",
+                "mimeType":"text/plain",
+                "buffer":(
+                    "Receiving SOP\\n"
+                    "1. Inspect the inbound trailer seals before unloading.\\n"
+                    "2. Record visible carton damage for the shift supervisor.\\n"
+                ).replace("\\n","\n").encode("utf-8"),
+            })
+            admin.get_by_label("Procedure title").fill("Inbound goods validation")
+            with admin.expect_response(
+                lambda response: response.url.endswith("/api/backend/procedure/drafts/import")
+                and response.request.method == "POST",timeout=20000
+            ) as imported:
+                admin.get_by_role("button",name="Create editable procedure draft").click()
+            assert imported.value.status==201, imported.value.text()
+            imported_id=imported.value.json()["id"]
+            expect(admin.get_by_role("heading",name="Procedure editor")).to_be_visible(timeout=15000)
+            assert admin.get_by_role("checkbox").count()==2
+            for checkbox in admin.get_by_role("checkbox").all():
+                checkbox.check()
+            admin.get_by_role("button",name="Save revision").click()
+            expect(admin.get_by_text("Changes saved.",exact=False)).to_be_visible(timeout=15000)
+            with admin.expect_response(
+                lambda response: response.url.endswith("/api/backend/procedure/drafts/"+imported_id+"/review")
+                and response.request.method=="POST",timeout=20000
+            ) as reviewed:
+                admin.get_by_role("button",name="Mark draft reviewed").click()
+            assert reviewed.value.status==200, reviewed.value.text()
+            assert reviewed.value.json()["status"]=="reviewed"
+            admin.screenshot(path="/tmp/workmate-phase3-procedure-editor.png",full_page=True)
+            status=admin.request.get(f"{BASE}/api/backend/procedure/drafts/{imported_id}")
+            assert status.status==200 and status.json()["status"]=="reviewed"
+
             # Force short-lived access-cookie expiry while retaining the
             # refresh cookie: the server must rotate the refresh chain.
             old_cookies = {c["name"]: c["value"] for c in admin.context.cookies([BASE])}
@@ -191,6 +228,11 @@ def main():
             expect(admin.get_by_text("Document saved as a draft")).to_be_visible(timeout=30000)
 
             employee = sign_in(browser, "e2e_employee@workmate.test")
+            employee.goto(f"{BASE}/procedure-studio/drafts")
+            employee.wait_for_url("**/workspace",timeout=15000)
+            assert employee.request.get(
+                f"{BASE}/api/backend/procedure/drafts/{imported_id}"
+            ).status==403
             # Capture the actual desk, not the starter draft destination.
             employee.goto(f"{BASE}/workspace")
             expect(employee.get_by_role("heading", name="Today\u0027s work")).to_be_visible()
