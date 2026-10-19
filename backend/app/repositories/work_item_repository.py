@@ -1,7 +1,7 @@
 """Work queue repository: department-scoped manager creation and owner-only worker views.
 
-Queue entries are not executable workflows. Completion and evidence transitions
-are deliberately absent until the governed Phase 2 state engine is implemented.
+Queue creation is separate from Phase 2 evidence-gated execution. Completion
+is only possible through a published SOP and an audited task-bound session.
 """
 from __future__ import annotations
 
@@ -10,14 +10,15 @@ from app.core.database import get_postgres_connection
 
 
 COLUMNS = ("id,department_id,created_by,assigned_to,external_reference,"
-           "title,work_type,priority,instructions,status,created_at,updated_at")
+           "title,work_type,priority,instructions,status,created_at,updated_at,"
+           "workflow_version_id,execution_session_id,completed_at")
 
 
 def _rows(cursor):
     keys = [col.name.lower() for col in cursor.description]
     items = [dict(zip(keys, row)) for row in cursor.fetchall()]
     for item in items:
-        for key in ("created_at", "updated_at"):
+        for key in ("created_at", "updated_at", "completed_at"):
             if item.get(key) is not None:
                 item[key] = item[key].isoformat()
     return items
