@@ -11,6 +11,7 @@ from app.api.v1.intelligence import router as intelligence_router
 from app.api.v1.escalations import router as escalations_router
 from app.api.v1.pilot import router as pilot_router
 from app.api.v1.handover import router as handover_router
+from app.api.v1.work_items import router as work_items_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -23,6 +24,7 @@ api_v1_router.include_router(intelligence_router)
 api_v1_router.include_router(escalations_router)
 api_v1_router.include_router(pilot_router)
 api_v1_router.include_router(handover_router)
+api_v1_router.include_router(work_items_router)
 
 __all__ = [
     "api_v1_router",
@@ -36,5 +38,6 @@ __all__ = [
     "escalations_router",
     "pilot_router",
     "handover_router",
+    "work_items_router",
 ]
 
