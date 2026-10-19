@@ -17,6 +17,7 @@ References (reviewed 2026-10-20):
 - Role-aware navigation includes Operations Desk. Employee login lands on the desk; admin and manager keep their existing primary surfaces.
 - Copilot accepts 500-character bounded draft and validated mode query params, and does not confuse an existing session with a new draft.
 - Evidence Explorer now supports selecting two role-authorized approved reference passages, showing exact text side by side, exporting a local comparison, and passing an editable question to Copilot. Comparison makes no unsupported conflict claims.
+- Shift Handover builds a locally exportable, human-reviewed summary from the signed-in employee's actual saved session state and recent message excerpts, with manually entered recipient, next step and disposition. It does not transmit a message or create an official handover record.
 - Answers can be locally copied or exported with source excerpts, document titles, version/section/step metadata when available, and explicit unverified/possible-escalation status. An export is NOT a signed audit record or a substitute for original documentation.
 
 ## Demo sequence (requires approved sample content)
@@ -28,7 +29,8 @@ References (reviewed 2026-10-20):
 5. Open Source search, select two approved excerpts, compare exact wording, and download a source comparison. This is not a claimed AI resolution.
 6. Demonstrate refusal with a department-unauthorized or unapproved document.
 7. Record a Hindi/Hinglish phrase, correct any transcript errors, and explicitly send (subject to provisioned voice runtime).
-8. Open Session history and resume. For admin, review versioned sources; for manager, open Intelligence Hub and pilot summary.
+8. Open Session history and resume; use Shift handover to prepare and download a draft grounded in this session's recorded step/status plus your own next action.
+9. For admin, review versioned sources; for manager, open Intelligence Hub and pilot summary.
 
 ## Acceptance checklist and honest limits
 
