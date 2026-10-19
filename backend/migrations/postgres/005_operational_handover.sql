@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS workmate_copilot.shift_handovers (
     notes VARCHAR(1500) NOT NULL DEFAULT '',
     snapshot_state JSONB NOT NULL DEFAULT '{}'::jsonb,
     status VARCHAR(32) NOT NULL DEFAULT 'submitted' CHECK (status IN
-      ('submitted','acknowledged','follow_up_requested')),
+      ('submitted','claimed','acknowledged','follow_up_requested')),
+    assigned_to_user_id VARCHAR(64) NULL REFERENCES security.users(id),
+    assigned_at TIMESTAMPTZ NULL,
     reviewed_by VARCHAR(64) NULL REFERENCES security.users(id),
     reviewed_at TIMESTAMPTZ NULL,
     review_note VARCHAR(1000) NULL,
