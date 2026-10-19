@@ -16,6 +16,7 @@ References (reviewed 2026-10-20):
 - Four examples: inbound receiving, discrepancy, damaged putaway, and policy lookup. Examples are *not* asserted to be published procedures. They prefill Copilot for human review; no automatic workflow or AI request is fired.
 - Role-aware navigation includes Operations Desk. Employee login lands on the desk; admin and manager keep their existing primary surfaces.
 - Copilot accepts 500-character bounded draft and validated mode query params, and does not confuse an existing session with a new draft.
+- Evidence Explorer now supports selecting two role-authorized approved reference passages, showing exact text side by side, exporting a local comparison, and passing an editable question to Copilot. Comparison makes no unsupported conflict claims.
 - Answers can be locally copied or exported with source excerpts, document titles, version/section/step metadata when available, and explicit unverified/possible-escalation status. An export is NOT a signed audit record or a substitute for original documentation.
 
 ## Demo sequence (requires approved sample content)
@@ -24,9 +25,10 @@ References (reviewed 2026-10-20):
 2. Choose Receiving; review the prefilled Copilot prompt; send. The backend must identify a genuinely published receiving SOP or abstain.
 3. Advance one authorized step and show pause/resume where allowed.
 4. Choose Find a policy; switch to reference mode and ask a question backed by an *approved* reference. Expand citations; export evidence note.
-5. Demonstrate refusal with a department-unauthorized or unapproved document.
-6. Record a Hindi/Hinglish phrase, correct any transcript errors, and explicitly send (subject to provisioned voice runtime).
-7. Open Session history and resume. For admin, review versioned sources; for manager, open Intelligence Hub and pilot summary.
+5. Open Source search, select two approved excerpts, compare exact wording, and download a source comparison. This is not a claimed AI resolution.
+6. Demonstrate refusal with a department-unauthorized or unapproved document.
+7. Record a Hindi/Hinglish phrase, correct any transcript errors, and explicitly send (subject to provisioned voice runtime).
+8. Open Session history and resume. For admin, review versioned sources; for manager, open Intelligence Hub and pilot summary.
 
 ## Acceptance checklist and honest limits
 
@@ -41,7 +43,7 @@ References (reviewed 2026-10-20):
 
 ## Follow-on evaluation roadmap
 
-**Phase B — evidence-aware collaboration:** source comparison and manager-approved handover records, with auditable DB persistence.
+**Phase B — evidence-aware collaboration:** manager-approved handover records with auditable DB persistence; cross-document conflict analysis only after quality evaluation.
 **Phase C — advanced task reasoning:** state-specific exception decision capture, escalation ownership, and independently evaluated Hindi/Hinglish benchmarks.
 **Phase D — release acceptance:** real browsers against hosted TLS, validated recovery and security configuration, field cohort accuracy, latency, and human sign-off.
 
