@@ -559,7 +559,7 @@ class WorkExecutionRepository:
                       SELECT id,actor_id,action,event_payload,created_at
                       FROM workmate_copilot.work_item_events
                       WHERE work_item_id=%s AND department_id=%s
-                      ORDER BY created_at,id LIMIT 200
+                      ORDER BY event_seq LIMIT 200
                     """,(work_id,department))
                     events=_records(cur)
                     for event in events:
