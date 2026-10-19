@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, ArrowRight, ArrowUpRight, ClipboardList, Clock3, Inbox,
@@ -74,7 +74,7 @@ export default function ControlRoom() {
     Date.parse(b.created_at) - Date.parse(a.created_at)
   ).slice(0,12), [items]);
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (title.trim().length < 5 || saving) return;
     setSaving(true);
