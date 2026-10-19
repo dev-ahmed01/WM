@@ -10,6 +10,7 @@ from app.middleware.rbac_middleware import require_role
 from app.services.document_extraction import (
     DocumentExtractionError, MAX_DOCUMENT_BYTES, extract_document,
 )
+from app.services.procedure_publisher import ProcedurePublisher
 from app.repositories.procedure_draft_repository import (
     ProcedureDraftRepository,DraftNotFound,DraftConflict,
 )
@@ -26,16 +27,34 @@ class DraftStep(Strict):
     instruction: str=Field(min_length=10,max_length=700)
     source_line: int | None=Field(default=None,ge=1)
     reviewed: bool=False
+    output_type: str=Field(default="CONFIRMATION",pattern="^(CONFIRMATION|TEXT_INPUT|NUMERIC_INPUT|DOCUMENT_UPLOAD)$")
+    evidence_type: str=Field(default="NONE",pattern="^(NONE|PHOTO_JPEG|DOCUMENT_PDF)$")
+
+
+class Outcome(Strict):
+    code: str=Field(pattern="^[A-Z][A-Z0-9_]{1,30}$")
+    label: str=Field(min_length=3,max_length=120)
+
+
+class DraftDecision(Strict):
+    question: str=Field(default="",max_length=220)
+    options: list[Outcome]=Field(default_factory=list,max_length=3)
 
 
 class DraftUpdate(Strict):
     expected_revision: int=Field(ge=1)
     title: str=Field(min_length=5,max_length=180)
     steps: list[DraftStep]=Field(min_length=1,max_length=50)
+    decision: DraftDecision | None=None
 
 
 class DraftReview(Strict):
     expected_revision: int=Field(ge=1)
+
+
+class DraftPublish(Strict):
+    expected_revision: int=Field(ge=1)
+    approval: str=Field(pattern="^PUBLISH_REVIEWED_SOP$")
 
 
 def _identity(user):
@@ -93,6 +112,26 @@ async def get_procedure_draft(
     return await _call(ProcedureDraftRepository.get,dept,draft_id)
 
 
+@router.get("/{draft_id}/compile-preview")
+async def preview_compiled_procedure(
+    draft_id:str,user:dict=Depends(require_role("admin")),
+):
+    dept,_=_identity(user)
+    return await _call(ProcedurePublisher.preview,dept,draft_id)
+
+
+@router.post("/{draft_id}/publish")
+async def publish_reviewed_procedure(
+    draft_id:str,payload:DraftPublish,
+    user:dict=Depends(require_role("admin")),
+):
+    dept,admin=_identity(user)
+    return await _call(
+        ProcedurePublisher.publish,dept,admin,draft_id,
+        payload.expected_revision,payload.approval,
+    )
+
+
 @router.get("/{draft_id}/source")
 async def download_original_source(
     draft_id:str,user:dict=Depends(require_role("admin")),
@@ -120,6 +159,7 @@ async def update_procedure_draft(
         ProcedureDraftRepository.update,dept,actor,draft_id,
         payload.expected_revision,payload.title,
         [s.model_dump() for s in payload.steps],
+        payload.decision.model_dump() if payload.decision is not None else None,
     )
 
 
