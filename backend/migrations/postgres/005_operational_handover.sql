@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS workmate_copilot.shift_handover_events (
     handover_id VARCHAR(64) NOT NULL REFERENCES workmate_copilot.shift_handovers(id) ON DELETE CASCADE,
     department_id VARCHAR(64) NOT NULL REFERENCES security.departments(id),
     actor_user_id VARCHAR(64) NOT NULL REFERENCES security.users(id),
-    action VARCHAR(32) NOT NULL CHECK (action IN ('submitted','acknowledged','follow_up_requested')),
+    action VARCHAR(32) NOT NULL CHECK (action IN ('submitted','claimed','acknowledged','follow_up_requested')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_handover_events_handover
