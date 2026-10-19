@@ -176,7 +176,7 @@ export default function OperationsWorkspace() {
         <section className="wm-panel overflow-hidden" aria-labelledby="continuity-title">
           <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
             <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><History className="h-4 w-4" /></span><div><h2 id="continuity-title" className="text-sm font-semibold">Pick up where you left off</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Recent conversations, from your account</p></div></div>
-            <Link href="/copilot/history" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">All history <ArrowRight className="h-3.5 w-3.5" /></Link>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3"><Link href="/copilot/handover" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">Shift handover <ArrowRight className="h-3.5 w-3.5" /></Link><Link href="/copilot/history" className="hidden items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline sm:inline-flex">All history <ArrowRight className="h-3.5 w-3.5" /></Link></div>
           </div>
           {historyLoading ? <p className="p-6 text-xs text-muted-foreground" role="status">Loading your sessions…</p>
             : historyError ? <p className="p-6 text-xs text-muted-foreground">Sessions could not be loaded. You can still start a new task.</p>
