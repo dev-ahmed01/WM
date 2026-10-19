@@ -7,6 +7,7 @@ role isolation and independent departmental search.
 from __future__ import annotations
 
 import os
+import re
 import signal
 from pathlib import Path
 
@@ -37,6 +38,13 @@ def sign_in(browser, email):
         raise AssertionError(f"Login proxy status {login_response.status}: {login_response.text()[:350]}")
     try:
         page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/intelligence-hub" if "manager" in email else "**/workspace", timeout=12000)
+        if "admin" not in email and "manager" not in email:
+            expect(page.get_by_role("heading", name="Choose your next move")).to_be_visible()
+            # Starter links open editable drafts; they must not auto-submit an action.
+            page.get_by_role("link", name=re.compile("Find a policy")).click()
+            expect(page.get_by_role("heading", name="Operational Copilot")).to_be_visible()
+            expect(page.locator("textarea")).to_have_value(re.compile("According to the approved"))
+            expect(page.get_by_role("button", name="Ask documents")).to_have_attribute("aria-pressed", "true")
     except Exception as exc:
         cookie_names = [(item['name'], item['httpOnly'], item['secure']) for item in page.context.cookies([BASE])]
         profile_status = page.evaluate("async () => (await fetch('/api/session/me')).status")
