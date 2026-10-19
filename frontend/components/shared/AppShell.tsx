@@ -97,6 +97,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['manager', 'admin'],
   },
   {
+    label: 'Handover review',
+    description: 'Review department exceptions',
+    href: '/handover/review',
+    icon: ClipboardCheck,
+    roles: ['admin', 'manager'],
+  },
+  {
     label: 'Pilot review',
     description: 'Anonymized department feedback',
     href: '/pilot',
