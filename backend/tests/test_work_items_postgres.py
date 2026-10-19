@@ -12,15 +12,20 @@ def test_task_creation_visibility_and_department_rls():
     d1,d2="wi_a_"+suffix,"wi_b_"+suffix
     creator,employee,outsider="mgr_"+suffix,"emp_"+suffix,"other_"+suffix
     identifier=None
+    emp_role="role_wi_"+suffix
     with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
         with conn.cursor() as cur:
             for department in (d1,d2):
                 cur.execute("INSERT INTO security.departments(id,code,name) VALUES(%s,%s,%s)",
                             (department,department.upper(),department))
+            cur.execute("INSERT INTO security.roles(id,name,permission_set) VALUES(%s,'employee','{}'::jsonb)",(emp_role,))
             for actor,department in ((creator,d1),(employee,d1),(outsider,d2)):
                 cur.execute("""INSERT INTO security.users(id,email,hashed_password,department_id)
                                VALUES(%s,%s,'synthetic',%s)""",
                             (actor,actor+"@example.test",department))
+    with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO security.user_roles(user_id,role_id) VALUES(%s,%s)",(employee,emp_role))
     try:
         assert WorkItemRepository.create(d1,creator,"Unsafe wrong team task",
                "receiving","high","","",outsider) is None
@@ -57,5 +62,7 @@ def test_task_creation_visibility_and_department_rls():
                 if identifier:
                     cur.execute("DELETE FROM workmate_copilot.work_item_events WHERE work_item_id=%s",(identifier,))
                     cur.execute("DELETE FROM workmate_copilot.work_items WHERE id=%s",(identifier,))
+                cur.execute("DELETE FROM security.user_roles WHERE role_id=%s",(emp_role,))
                 cur.execute("DELETE FROM security.users WHERE id=ANY(%s)",([creator,employee,outsider],))
+                cur.execute("DELETE FROM security.roles WHERE id=%s",(emp_role,))
                 cur.execute("DELETE FROM security.departments WHERE id=ANY(%s)",([d1,d2],))
