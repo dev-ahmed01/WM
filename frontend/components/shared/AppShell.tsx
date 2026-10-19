@@ -69,6 +69,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'manager', 'employee'],
   },
   {
+    label: 'Shift handover',
+    description: 'Prepare next-shift context',
+    href: '/copilot/handover',
+    icon: ClipboardCheck,
+    roles: ['admin', 'manager', 'employee'],
+  },
+  {
     label: 'Knowledge studio',
     description: 'Manage verified SOPs',
     href: '/knowledge-studio',
