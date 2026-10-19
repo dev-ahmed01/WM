@@ -10,7 +10,7 @@ import {
 import { apiClient } from '@/lib/api-client';
 import { useRequireRole } from '@/lib/auth';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { workTypeLabel, type WorkItem, type WorkQueueResponse } from '@/lib/work-items';
+import { workTypeLabel, workStatusLabel, type WorkItem, type WorkQueueResponse } from '@/lib/work-items';
 
 type Filter = 'all' | 'high' | 'receiving';
 
@@ -30,7 +30,7 @@ function WorkTile({ item }: { item: WorkItem }) {
         {item.instructions ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#65726b]">{item.instructions}</p> : null}
       </div>
       <div className="mt-auto flex items-center justify-between border-t border-[#edf1ed] pt-4">
-        <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#5b6961]"><Clock3 className="h-4 w-4" />Queued</span>
+        <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#5b6961]"><Clock3 className="h-4 w-4" />{workStatusLabel(item.status)}</span>
         <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#15563e]">Open work <ArrowUpRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></span>
       </div>
     </Link>
@@ -73,7 +73,8 @@ export default function WorkDesk() {
   ), [filter, queue]);
   if (loading) return <LoadingState label="Opening your work" />;
 
-  const highCount = queue.filter(item => item.priority === 'high').length;
+  const highCount = queue.filter(item => item.priority === 'high' && item.status !== 'completed').length;
+  const openCount = queue.filter(item => item.status !== 'completed').length;
   const manager = user?.role === 'manager' || user?.role === 'admin';
 
   return (
@@ -92,8 +93,8 @@ export default function WorkDesk() {
 
       <section className="grid gap-3 sm:grid-cols-3" aria-label="Queue overview">
         <div className="rounded-2xl border border-[#dce4df] bg-white p-5">
-          <div className="flex items-center justify-between"><span className="text-xs font-medium text-[#738177]">Queued work</span><ClipboardList className="h-4 w-4 text-emerald-700" /></div>
-          <div className="mt-4 text-4xl font-semibold tabular-nums tracking-tight text-[#1b3328]">{dataLoading || error ? '—' : queue.length}</div>
+          <div className="flex items-center justify-between"><span className="text-xs font-medium text-[#738177]">Open work</span><ClipboardList className="h-4 w-4 text-emerald-700" /></div>
+          <div className="mt-4 text-4xl font-semibold tabular-nums tracking-tight text-[#1b3328]">{dataLoading || error ? '—' : openCount}</div>
         </div>
         <div className="rounded-2xl border border-[#e9dfd0] bg-[#fdfaf4] p-5">
           <div className="flex items-center justify-between"><span className="text-xs font-medium text-[#877258]">High priority</span><AlertCircle className="h-4 w-4 text-amber-700" /></div>
@@ -145,7 +146,7 @@ export default function WorkDesk() {
               ].map(link => <Link key={link.href} href={link.href} className="flex min-h-12 items-center justify-between gap-3 text-sm font-semibold text-[#304739] hover:text-emerald-700"><span className="flex items-center gap-3"><link.icon className="h-4 w-4 text-[#729281]" />{link.title}</span><ArrowRight className="h-4 w-4" /></Link>)}
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-2xl border border-[#dce6de] bg-[#f5f8f5] p-4"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /><p className="text-xs leading-5 text-[#62756b]">Queued assignments are not completed workflows. Step execution and evidence capture are added in Phase 2.</p></div>
+          <div className="flex items-start gap-3 rounded-2xl border border-[#dce6de] bg-[#f5f8f5] p-4"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /><p className="text-xs leading-5 text-[#62756b]">Work executes only against a bound published SOP. Worker attestations and submitted files are recorded, but not independently verified.</p></div>
         </aside>
       </div>
     </div>
