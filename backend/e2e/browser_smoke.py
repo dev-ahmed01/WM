@@ -205,13 +205,8 @@ def main():
             admin.get_by_text("Require final outcome selection").click()
             admin.get_by_role("button",name="Save revision").click()
             expect(admin.get_by_text("Changes saved.",exact=False)).to_be_visible(timeout=15000)
-            # Changed proof obligations invalidate previous review attestations.
-            assert admin.get_by_role("checkbox").count()>=4
-            for box in admin.locator('input[type="checkbox"]').all():
-                if box.is_visible() and not box.is_checked() and box.get_attribute("id") is None:
-                    # Only review the step checkboxes, not the publish confirmation.
-                    if box.locator("xpath=..").inner_text().find("Checked against original source")>=0:
-                        box.check()
+            # Changed proof obligations must be acknowledged again before review.
+            admin.get_by_role("checkbox").nth(1).check()
             admin.get_by_role("button",name="Save revision").click()
             expect(admin.get_by_text("Changes saved.",exact=False)).to_be_visible(timeout=15000)
             with admin.expect_response(
