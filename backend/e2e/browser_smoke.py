@@ -217,6 +217,23 @@ def main():
                        and item["excerpt"] in DOCUMENT_TEXT
                        for item in approved_answer["citations"]), approved_answer
             verify_history_resume(employee, approved_answer["conversation_id"])
+            # Shift handover is read-only; the reviewer exports an explicit
+            # local draft from a real saved conversation and workflow status.
+            employee.goto(f"{BASE}/copilot/handover")
+            expect(employee.get_by_role("heading", name="Pass on the context, not the confusion.")).to_be_visible()
+            chosen_session = employee.locator("#handover-session")
+            expect(chosen_session.locator(f'option[value="{approved_answer["conversation_id"]}"]')).to_be_attached(timeout=15000)
+            chosen_session.select_option(approved_answer["conversation_id"])
+            employee.get_by_label("What needs to happen next?").fill("Verify damaged cartons before the next shift.")
+            handover_download = employee.get_by_role("button", name="Download .txt")
+            expect(handover_download).to_be_enabled(timeout=15000)
+            with employee.expect_download() as exported:
+                handover_download.click()
+            handover_file = exported.value.path()
+            handover_body = handover_file.read_text(encoding="utf-8")
+            assert "Verify damaged cartons before the next shift." in handover_body
+            assert approved_answer["conversation_id"] in handover_body
+            assert "not an approved policy" in handover_body.lower()
             outsider_answer = ask_reference(
                 outsider, "security seal damaged cartons quarantine goods supervisor",
             )
