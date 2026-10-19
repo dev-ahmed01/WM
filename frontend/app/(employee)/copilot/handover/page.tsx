@@ -239,7 +239,7 @@ export default function ShiftHandoverPage() {
             <button type="button" disabled={!canExport} onClick={download} className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-xs font-semibold hover:bg-muted disabled:opacity-50"><Download className="h-4 w-4" />Download .txt</button>
           </div>
           {notice ? <p role="status" className="mt-3 text-xs text-emerald-800">{notice}</p> : null}
-          <p className="mt-4 text-[11px] leading-5 text-muted-foreground">Copy/download stays local. **Submit for review** writes a scoped handover and audit event to PostgreSQL for manager review. It does not contact the recipient, complete a workflow, or approve a safety decision.</p>
+          <p className="mt-4 text-[11px] leading-5 text-muted-foreground">Copy and download stay local. Submit for review saves the record and an audit event to PostgreSQL. It does not contact the recipient, complete a workflow, or approve a safety decision.</p>
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-24">
