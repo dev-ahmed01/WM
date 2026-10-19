@@ -6,8 +6,11 @@ role isolation and independent departmental search.
 """
 from __future__ import annotations
 
+import io
 import os
 import re
+import psycopg
+from PIL import Image
 import signal
 from pathlib import Path
 
@@ -21,6 +24,56 @@ DOCUMENT_TEXT = (
     "For damaged cartons, quarantine the goods and notify the supervisor "
     "before putaway. This is a reference, not an executable SOP."
 )
+
+
+def seed_published_execution_fixture():
+    """Disposable, synthetic published SOP specifically for browser execution tests."""
+    dsn = os.environ.get("DATABASE_URL", "")
+    assert os.environ.get("WORKMATE_BROWSER_SMOKE") == "1"
+    assert "@localhost:" in dsn and os.environ.get("APP_ENV") in ("dev","test","development")
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""INSERT INTO knowledge_studio.workflows
+                (id,workflow_code,title,department_id,category,created_by)
+                VALUES('e2e_workflow','E2E_RECEIVING','Synthetic receiving inspection',
+                       'e2e_ops','receiving','e2e_admin')""")
+            cur.execute("""INSERT INTO knowledge_studio.workflow_versions
+                (id,workflow_id,version_number,stage_file_uri,ast_hash,status,published_at)
+                VALUES('e2e_sop_version','e2e_workflow',1,'pgobj:synthetic_fixture',
+                       %s,'published',CURRENT_TIMESTAMP)""",("b"*64,))
+            for state,kind,name,start,terminal,index in (
+                ("e2e_initial","ATOMIC_STEP","Check incoming goods",True,False,1),
+                ("e2e_choice","DECISION","Condition assessment",False,False,2),
+                ("e2e_done","END","Receiving inspection completed",False,True,3),
+            ):
+                cur.execute("""INSERT INTO knowledge_studio.workflow_states
+                    (id,workflow_version_id,state_key,state_type,title,
+                     is_initial,is_terminal,ordinal_index)
+                    VALUES(%s,'e2e_sop_version',%s,%s,%s,%s,%s,%s)""",
+                    (state,state,kind,name,start,terminal,index))
+            for step,kind,title,index in (
+                ("e2e_step_seal","CONFIRMATION","Inspect the inbound seal",1),
+                ("e2e_step_carton","TEXT_INPUT","Record carton condition and attach a photo",2),
+            ):
+                cur.execute("""INSERT INTO knowledge_studio.workflow_steps
+                    (id,state_id,step_code,instruction,expected_output_type,
+                     is_mandatory,ordinal_index)
+                    VALUES(%s,'e2e_initial',%s,%s,%s,TRUE,%s)""",
+                    (step,step,title,kind,index))
+            cur.execute("""INSERT INTO knowledge_studio.workflow_evidence_specs
+                (id,step_id,evidence_type,is_required,min_size_bytes)
+                VALUES('e2e_photo_spec','e2e_step_carton','PHOTO_JPEG',TRUE,6)""")
+            cur.execute("""INSERT INTO knowledge_studio.workflow_transitions
+                (id,from_state_id,to_state_id,condition_type)
+                VALUES('e2e_tr_init','e2e_initial','e2e_choice','ALWAYS')""")
+            cur.execute("""INSERT INTO knowledge_studio.workflow_transitions
+                (id,from_state_id,to_state_id,condition_type,condition_expression)
+                VALUES('e2e_tr_end','e2e_choice','e2e_done',
+                       'DECISION_OPTION','ACCEPT')""")
+            cur.execute("""INSERT INTO knowledge_studio.workflow_decision_options
+                (id,state_id,option_code,option_label,target_state_id)
+                VALUES('e2e_opt_accept','e2e_choice','ACCEPT','Accept and finish','e2e_done')""")
+    return "e2e_sop_version"
 
 
 def sign_in(browser, email):
@@ -329,12 +382,73 @@ def main():
                 employee, "security seal damaged cartons quarantine goods supervisor",
             )
             assert archived_answer["requires_escalation"] and not archived_answer["citations"], archived_answer
+            # Phase 2: a real published compiled state graph and required JPEG proof.
+            # This synthetic SOP is inserted into *disposable test DB only*.
+            seeded_version=seed_published_execution_fixture()
+            manager.goto(f"{BASE}/work/{work_id}")
+            expect(manager.get_by_role("heading",name="Work procedure")).to_be_visible()
+            manager.get_by_label("Published procedure").select_option(seeded_version)
+            with manager.expect_response(
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/bind")
+                and r.request.method=="POST", timeout=20000,
+            ) as bound:
+                manager.get_by_role("button",name="Link published SOP").click()
+            assert bound.value.status==200,bound.value.text()
+            employee.goto(f"{BASE}/work/{work_id}")
+            expect(employee.get_by_role("button",name="Start guided work")).to_be_visible()
+            with employee.expect_response(
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/start")
+                and r.request.method=="POST", timeout=20000,
+            ) as started:
+                employee.get_by_role("button",name="Start guided work").click()
+            assert started.value.status==200,started.value.text()
+            session_id=started.value.json()["session_id"]
+            # Task sessions cannot be advanced through the legacy chat endpoint.
+            bypass=employee.request.post(
+                f"{BASE}/api/backend/copilot/session/{session_id}/advance",
+                headers={"Origin":BASE},data={"values":{}}
+            )
+            assert bypass.status==403,bypass.text()
+            employee.get_by_role("button",name="Pause work").click()
+            expect(employee.get_by_text("Work paused",exact=True)).to_be_visible()
+            employee.get_by_role("button",name="Resume execution").click()
+            expect(employee.get_by_text("Inspect the inbound seal")).to_be_visible()
+            expect(employee.get_by_role("button",name="Record checkpoint")).to_be_disabled()
+            employee.get_by_text("I confirm I performed this checkpoint").click()
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("Record carton condition and attach a photo")).to_be_visible()
+            expect(employee.get_by_role("button",name="Record checkpoint")).to_be_disabled()
+            photo_buffer=io.BytesIO()
+            Image.new("RGB",(8,8),(140,180,130)).save(photo_buffer,format="JPEG")
+            employee.get_by_label("Recorded observation").fill("Carton intact at the receiving bay.")
+            employee.locator("#file-e2e_photo_spec").set_input_files({
+                "name":"synthetic-carton.jpg",
+                "mimeType":"image/jpeg",
+                "buffer":photo_buffer.getvalue(),
+            })
+            with employee.expect_response(
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/step")
+                and r.request.method=="POST", timeout=20000,
+            ) as evidence:
+                employee.get_by_role("button",name="Record checkpoint").click()
+            assert evidence.value.status==200,evidence.value.text()
+            employee.screenshot(path="/tmp/workmate-phase2-decision.png",full_page=True)
+            expect(employee.get_by_text("Condition assessment")).to_be_visible()
+            employee.get_by_text("Accept and finish").click()
+            employee.get_by_role("button",name="Record decision").click()
+            expect(employee.get_by_text("Published workflow completed")).to_be_visible()
+            employee.screenshot(path="/tmp/workmate-phase2-completed.png",full_page=True)
+            summary=employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()
+            assert summary["status"]=="completed" and summary["completed_steps"]==2
+            assert outsider.request.get(
+                f"{BASE}/api/backend/work/execution/{work_id}"
+            ).status==404
             logout = employee.request.post(
                 f"{BASE}/api/session/logout", headers={"Origin": BASE}
             )
             assert logout.status == 200
             assert employee.evaluate("async () => (await fetch('/api/session/me')).status") == 401
-            print("BROWSER PASSED: reference citations and history, manager role, pilot feedback, pre/post approval/archive abstention, department isolation, CSRF and logout.")
+            print("BROWSER PASSED: real published SOP binding, step confirmation, required JPEG evidence, decision completion, session bypass denial, tenant isolation; reference and handover regression.")
         except Exception:
             for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider), ("manager", manager)]:
                 if page is not None:
