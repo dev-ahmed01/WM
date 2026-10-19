@@ -37,14 +37,13 @@ def sign_in(browser, email):
     if login_response.status != 200:
         raise AssertionError(f"Login proxy status {login_response.status}: {login_response.text()[:350]}")
     try:
-        page.wait_for_url("**/knowledge-studio" if "admin" in email else "**/intelligence-hub" if "manager" in email else "**/workspace", timeout=12000)
+        page.wait_for_url("**/procedure-studio" if "admin" in email else "**/control-room" if "manager" in email else "**/workspace", timeout=12000)
         if "admin" not in email and "manager" not in email:
-            expect(page.get_by_role("heading", name="Choose your next move")).to_be_visible()
-            # Starter links open editable drafts; they must not auto-submit an action.
-            page.get_by_role("link", name=re.compile("Find a policy")).click()
+            expect(page.get_by_role("heading", name="Today's work")).to_be_visible()
+            # Guided assistance is accessible from work, but never auto-sends.
+            page.get_by_role("link", name=re.compile("Ask about your work")).click()
             expect(page.get_by_role("heading", name="Operational Copilot")).to_be_visible()
-            expect(page.locator("textarea")).to_have_value(re.compile("According to the approved"))
-            expect(page.get_by_role("button", name="Ask documents")).to_have_attribute("aria-pressed", "true")
+            assert page.get_by_role("log").locator("article").count() == 0
     except Exception as exc:
         cookie_names = [(item['name'], item['httpOnly'], item['secure']) for item in page.context.cookies([BASE])]
         profile_status = page.evaluate("async () => (await fetch('/api/session/me')).status")
@@ -140,12 +139,12 @@ def main():
             employee = sign_in(browser, "e2e_employee@workmate.test")
             # Capture the actual desk, not the starter draft destination.
             employee.goto(f"{BASE}/workspace")
-            expect(employee.get_by_role("heading", name="Less searching. More work getting done.")).to_be_visible()
+            expect(employee.get_by_role("heading", name="Today\u0027s work")).to_be_visible()
             employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-eval-operations-desk.png", full_page=True)
             employee.set_viewport_size({"width": 375, "height": 812})
             employee.goto(f"{BASE}/workspace")
-            expect(employee.get_by_role("heading", name="Less searching. More work getting done.")).to_be_visible()
+            expect(employee.get_by_role("heading", name="Today\u0027s work")).to_be_visible()
             document_width = employee.evaluate("document.documentElement.scrollWidth")
             viewport_width = employee.evaluate("window.innerWidth")
             assert document_width <= viewport_width + 2, f"Mobile overflow: {document_width} > {viewport_width}"
@@ -153,9 +152,34 @@ def main():
             employee.set_viewport_size({"width": 1280, "height": 720})
             outsider = sign_in(browser, "e2e_other@workmate.test")
             manager = sign_in(browser, "e2e_manager@workmate.test")
-            expect(manager.get_by_role("heading", name="Manager overview")).to_be_visible()
+            expect(manager.get_by_role("heading", name="Control room")).to_be_visible()
             manager.goto(f"{BASE}/knowledge-studio")
-            manager.wait_for_url("**/intelligence-hub", timeout=12000)
+            manager.wait_for_url("**/control-room", timeout=12000)
+            # Phase 1 real manager intake -> PostgreSQL assignment -> employee-only view.
+            manager.goto(f"{BASE}/control-room")
+            manager.get_by_role("button", name="New assignment").click()
+            expect(manager.get_by_role("heading", name="Create assignment")).to_be_visible()
+            manager.get_by_label("Task title").fill("Inspect inbound pallet under received goods SOP")
+            manager.get_by_label("Work type").select_option("receiving")
+            manager.get_by_label("Priority").select_option("high")
+            manager.get_by_label("Assign employee").select_option("e2e_employee")
+            manager.get_by_label("External reference (optional)").fill("E2E-GRN-2071")
+            manager.get_by_label("Brief (optional)").fill("Inspect carton seal and check the published procedure.")
+            with manager.expect_response(lambda r: r.url.endswith("/api/backend/work/items")
+                                         and r.request.method == "POST", timeout=20000) as created:
+                manager.get_by_role("button", name="Queue assignment").click()
+            assert created.value.status == 201, created.value.text()
+            work_id = created.value.json()["id"]
+            assert created.value.json()["status"] == "queued"
+            employee.goto(f"{BASE}/workspace")
+            expect(employee.get_by_role("heading", name="Today's work")).to_be_visible()
+            expect(employee.get_by_role("link", name=re.compile("Inspect inbound pallet"))).to_be_visible(timeout=15000)
+            employee.goto(f"{BASE}/work/{work_id}")
+            expect(employee.get_by_role("heading", name="Inspect inbound pallet under received goods SOP")).to_be_visible()
+            expect(employee.get_by_text("Phase 2 · no evidence captured yet")).to_be_visible()
+            assert outsider.request.get(f"{BASE}/api/backend/work/items/{work_id}").status == 404
+            manager.goto(f"{BASE}/control-room")
+            manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
             expect(manager.get_by_role("heading", name="Pilot review")).to_be_visible()
             # Pilot feedback stays behind real HttpOnly sessions and the
