@@ -138,7 +138,19 @@ def main():
             expect(admin.get_by_text("Document saved as a draft")).to_be_visible(timeout=30000)
 
             employee = sign_in(browser, "e2e_employee@workmate.test")
+            # Capture the actual desk, not the starter draft destination.
+            employee.goto(f"{BASE}/workspace")
+            expect(employee.get_by_role("heading", name="Less searching. More work getting done.")).to_be_visible()
+            employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-eval-operations-desk.png", full_page=True)
+            employee.set_viewport_size({"width": 375, "height": 812})
+            employee.goto(f"{BASE}/workspace")
+            expect(employee.get_by_role("heading", name="Less searching. More work getting done.")).to_be_visible()
+            document_width = employee.evaluate("document.documentElement.scrollWidth")
+            viewport_width = employee.evaluate("window.innerWidth")
+            assert document_width <= viewport_width + 2, f"Mobile overflow: {document_width} > {viewport_width}"
+            employee.screenshot(path="/tmp/workmate-eval-mobile-desk.png")
+            employee.set_viewport_size({"width": 1280, "height": 720})
             outsider = sign_in(browser, "e2e_other@workmate.test")
             manager = sign_in(browser, "e2e_manager@workmate.test")
             expect(manager.get_by_role("heading", name="Manager overview")).to_be_visible()
@@ -232,6 +244,7 @@ def main():
                 handover_download.click()
             handover_file = exported.value.path()
             handover_body = handover_file.read_text(encoding="utf-8")
+            employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-eval-shift-handover.png", full_page=True)
             assert "Verify damaged cartons before the next shift." in handover_body
             assert approved_answer["conversation_id"] in handover_body
@@ -262,6 +275,7 @@ def main():
                 manager.get_by_role("button", name="Take ownership").click()
             assert claim_reply.value.status == 200, claim_reply.value.text()
             assert claim_reply.value.json()["assigned_to_user_id"]
+            manager.evaluate("window.scrollTo(0,0)")
             manager.screenshot(path="/tmp/workmate-eval-manager-queue.png", full_page=True)
             manager.get_by_label("Reviewer note (required)").fill(
                 "Keep the damaged cartons separated until reviewed.")
