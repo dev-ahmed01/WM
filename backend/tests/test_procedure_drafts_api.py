@@ -69,3 +69,16 @@ def test_foreign_drafts_are_hidden_and_store_errors_redacted():
                side_effect=RuntimeError("postgres://private:password@local-db")):
         res=client.get("/api/v1/procedure/drafts/drft_1",headers=auth())
     assert res.status_code==503 and "local-db" not in res.text
+
+def test_original_source_only_downloadable_by_admin_scope():
+    assert client.get("/api/v1/procedure/drafts/drft_1/source",
+                      headers=auth("employee")).status_code==403
+    with patch("app.api.v1.procedure_drafts.ProcedureDraftRepository.source",
+               return_value=("validated.txt",b"Original inspection record")) as source:
+        res=client.get("/api/v1/procedure/drafts/drft_1/source",
+                       headers=auth())
+    assert res.status_code==200
+    assert res.content==b"Original inspection record"
+    assert "attachment;" in res.headers["content-disposition"]
+    assert res.headers["cache-control"]=="private, no-store"
+    assert source.call_args.args==("receiving","drft_1")
