@@ -12,6 +12,7 @@ import {
   History,
   Search,
   Library,
+  LayoutDashboard,
   ClipboardCheck,
   LogOut,
   Menu,
@@ -39,6 +40,13 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Operations desk',
+    description: 'Start work and resume tasks',
+    href: '/workspace',
+    icon: LayoutDashboard,
+    roles: ['admin', 'manager', 'employee'],
+  },
   {
     label: 'Copilot',
     description: 'Live SOP guidance',
@@ -98,7 +106,7 @@ function isActiveRoute(pathname: string, href: string) {
 
 function Brand() {
   return (
-    <Link href="/copilot" className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4" aria-label="WorkMate home">
+    <Link href="/workspace" className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4" aria-label="WorkMate home">
       <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#164a3b] text-sm font-bold tracking-tight text-white shadow-sm transition group-hover:bg-[#0d3328]">
         WM
       </span>
@@ -153,8 +161,8 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const role = user?.role || 'employee';
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
   const sections = [
-    { title: 'My workspace', items: visibleItems.filter((item) => item.href.startsWith('/copilot')) },
-    { title: 'Manage operations', items: visibleItems.filter((item) => !item.href.startsWith('/copilot')) },
+    { title: 'My workspace', items: visibleItems.filter((item) => item.href.startsWith('/copilot') || item.href === '/workspace') },
+    { title: 'Manage operations', items: visibleItems.filter((item) => !item.href.startsWith('/copilot') && item.href !== '/workspace') },
   ];
 
   return (

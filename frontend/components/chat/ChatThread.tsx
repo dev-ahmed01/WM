@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, ChevronDown, CircleAlert, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
+import { Bot, ChevronDown, CircleAlert, ClipboardCopy, Download, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
+import { formatEvidenceNote, downloadEvidenceNote } from '@/lib/evidence-note';
 import type { CopilotResponse, SopSuggestion } from '@/lib/api-client';
 import { presentCopilotMessage } from '@/lib/copilot-presentation';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +120,8 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                           {Math.round(data.confidence_score * 100)}% {data.citations?.some((citation) => citation.source_type === 'reference') ? 'evidence match' : 'confidence'}
                         </Badge>
                         {data.requires_escalation ? <Badge variant="danger"><CircleAlert className="h-3 w-3" />Escalated</Badge> : null}
+                        <button type="button" onClick={() => { void navigator.clipboard?.writeText(formatEvidenceNote(message.content, data)); }} title="Copy answer with its recorded evidence" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><ClipboardCopy className="h-3.5 w-3.5" />Copy evidence</button>
+                        <button type="button" onClick={() => downloadEvidenceNote(message.content, data)} title="Download a local text note of the response and citations" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><Download className="h-3.5 w-3.5" />Evidence note</button>
                       </>
                     ) : null}
                     {speechSupported ? (

@@ -28,6 +28,8 @@ function CopilotContent() {
   const { user, loading } = useRequireRole(['employee', 'admin', 'manager']);
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
+  const draftPrompt = searchParams.get('draft');
+  const draftMode = searchParams.get('mode');
 
   const [input, setInput] = useState('');
   const [answerMode, setAnswerMode] = useState<'workflow' | 'reference'>('workflow');
@@ -49,6 +51,13 @@ function CopilotContent() {
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceObjectUrlRef = useRef<string | null>(null);
   const [pilotEnabled, setPilotEnabled] = useState(false);
+  useEffect(() => {
+    // Launchpad drafts are editable suggestions, never automatic model calls or workflow mutations.
+    if (sessionId || !draftPrompt) return;
+    setInput(draftPrompt.slice(0, 500));
+    if (draftMode === 'workflow' || draftMode === 'reference') setAnswerMode(draftMode);
+  }, [sessionId, draftPrompt, draftMode]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
