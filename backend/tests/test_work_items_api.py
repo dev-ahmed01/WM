@@ -57,3 +57,20 @@ def test_invalid_assignee_is_not_created_and_errors_hide_credentials():
         failed=client.post("/api/v1/work/items",headers=auth("manager"),json=ITEM)
     assert failed.status_code == 503
     assert "local-db" not in failed.text
+
+
+def test_reassignment_requires_manager_and_live_in_department():
+    assert client.post("/api/v1/work/items/wrk_1/assign",headers=auth(),
+                       json={"assigned_to":"person2"}).status_code==403
+    with patch("app.api.v1.work_items.WorkItemRepository.assign",
+               return_value={"id":"wrk_1","assigned_to":"person2"}) as assign:
+        result=client.post("/api/v1/work/items/wrk_1/assign",
+                           headers=auth("manager"),json={"assigned_to":"person2"})
+    assert result.status_code==200
+    assert assign.call_args.args==("receiving","person1","wrk_1","person2")
+    assert client.post("/api/v1/work/items/wrk_1/assign",headers=auth("manager"),
+                       json={"assigned_to":"person2","department_id":"other"}).status_code==422
+    with patch("app.api.v1.work_items.WorkItemRepository.assign",return_value=None):
+        denied=client.post("/api/v1/work/items/wrk_1/assign",
+                           headers=auth("manager"),json={"assigned_to":"unknown"})
+    assert denied.status_code==409
