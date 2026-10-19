@@ -96,7 +96,7 @@ def test_hindi_voice_flow_translates_calls_copilot_and_returns_audio_url():
             response = client.post(
                 "/api/v1/copilot/voice",
                 headers={"Authorization": f"Bearer {TOKEN}"},
-                data={"language": "auto"},
+                data={"language": "auto", "synthesize": "true"},
                 files={"audio": ("voice.webm", b"audio bytes", "audio/webm")},
             )
     finally:
