@@ -192,6 +192,9 @@ def main():
             admin.wait_for_url("**/procedure-studio/drafts/drft_*",timeout=15000)
             imported_id=admin.url.rsplit("/",1)[-1]
             expect(admin.get_by_role("heading",name="Procedure editor")).to_be_visible(timeout=15000)
+            with admin.expect_download() as original_download:
+                admin.get_by_role("link",name="Download original").click()
+            assert b"Inspect the inbound trailer seals" in original_download.value.path().read_bytes()
             assert admin.get_by_role("checkbox").count()==2
             for checkbox in admin.get_by_role("checkbox").all():
                 checkbox.check()
