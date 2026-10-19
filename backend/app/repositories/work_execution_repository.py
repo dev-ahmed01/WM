@@ -162,6 +162,8 @@ def _transition(cur, state_id, option=None):
         raise ExecutionConflict(
             "This transition needs a validated rule result or supervisor decision."
         )
+    if option is not None and chosen.get('option_code') != option:
+        raise ExecutionConflict('The selected option must match its published graph edge.')
     return chosen
 
 
