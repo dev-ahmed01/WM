@@ -47,6 +47,11 @@ def test_handover_is_owner_scoped_and_review_is_atomic():
                  "acknowledged","Self-review must be rejected.") is None
         assert HandoverRepository.review(dep_b, outsider, submitted["id"],
                  "acknowledged","Wrong department must be rejected.") is None
+        assert HandoverRepository.claim(dep_a, worker, submitted["id"]) is None
+        assert HandoverRepository.claim(dep_b, outsider, submitted["id"]) is None
+        claimed = HandoverRepository.claim(dep_a, manager, submitted["id"])
+        assert claimed and claimed["assigned_to_user_id"] == manager
+        assert HandoverRepository.claim(dep_a, manager, submitted["id"]) is None
         accepted = HandoverRepository.review(dep_a, manager, submitted["id"],
                  "follow_up_requested","Keep shipment segregated until a supervisor decides.")
         assert accepted and accepted["status"] == "follow_up_requested"
@@ -57,7 +62,7 @@ def test_handover_is_owner_scoped_and_review_is_atomic():
             with conn.cursor() as cur:
                 cur.execute("""SELECT action,actor_user_id FROM workmate_copilot.shift_handover_events
                                WHERE handover_id=%s ORDER BY created_at""", (submitted["id"],))
-                assert cur.fetchall() == [("submitted",worker),("follow_up_requested",manager)]
+                assert cur.fetchall() == [("submitted",worker),("claimed",manager),("follow_up_requested",manager)]
                 cur.execute("BEGIN")
                 cur.execute("SET LOCAL ROLE workmate_scoped_reader")
                 cur.execute("SELECT COUNT(*) FROM workmate_copilot.shift_handovers WHERE id=%s", (submitted["id"],))
