@@ -66,10 +66,11 @@ export default function ControlRoom() {
   }, [loading,user?.sub,user?.department_id]);
 
   const pending = handovers.filter(item => item.status === 'submitted').length;
-  const priorityCount = items.filter(item => item.priority === 'high').length;
+  const openItems = items.filter(item => item.status !== 'completed');
+  const priorityCount = openItems.filter(item => item.priority === 'high').length;
   const urgent = handovers.filter(item => item.status === 'submitted' && item.severity !== 'normal').length;
-  const assigned = items.filter(item => Boolean(item.assigned_to)).length;
-  const ordered = useMemo(() => items.slice().sort((a,b) =>
+  const assigned = openItems.filter(item => Boolean(item.assigned_to)).length;
+  const ordered = useMemo(() => items.filter(item => item.status !== 'completed').sort((a,b) =>
     Number(b.priority === 'high') - Number(a.priority === 'high') ||
     Date.parse(b.created_at) - Date.parse(a.created_at)
   ).slice(0,12), [items]);
@@ -111,7 +112,7 @@ export default function ControlRoom() {
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">{error}</p> : null}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Department metrics">
         {[
-          { title: 'Work queued', value: items.length, icon: ClipboardList },
+          { title: 'Open work', value: openItems.length, icon: ClipboardList },
           { title: 'Assigned', value: assigned, icon: UsersRound },
           { title: 'High priority', value: priorityCount, icon: AlertTriangle },
           { title: 'Handover reviews', value: pending, icon: Clock3 },
@@ -123,14 +124,14 @@ export default function ControlRoom() {
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,.7fr)]">
         <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-[#d9e4db] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] p-5 sm:px-6">
-            <div><h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2><p className="mt-1 text-xs text-[#708177]">Priority-first · assignments saved in PostgreSQL</p></div>
+            <div><h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2><p className="mt-1 text-xs text-[#708177]">Priority-first · active work and queued assignments</p></div>
             <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700">View all <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {fetching ? <div className="p-8"><LoadingState label="Loading work queue" /></div> : ordered.length ? (
             <div className="divide-y divide-[#edf0eb]">
               {ordered.map(item => <Link key={item.id} href={'/work/' + encodeURIComponent(item.id)} className="group flex min-w-0 items-center gap-4 px-5 py-4 hover:bg-[#f7faf7] sm:px-6">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eff5f0] text-[#22644a]"><Layers3 className="h-[18px] w-[18px]" /></span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#1a3227]">{item.title}</p><p className="mt-1 truncate text-xs text-[#78877e]">{workTypeLabel(item.work_type)} · {item.assigned_to || 'Not assigned'}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#1a3227]">{item.title}</p><p className="mt-1 truncate text-xs text-[#78877e]">{workTypeLabel(item.work_type)} · {item.status.replaceAll('_',' ')} · {item.assigned_to || 'Not assigned'}</p></div>
                 <div className="flex items-center gap-2">
                   {item.priority === 'high' ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">HIGH</span> : null}
                   <ArrowUpRight className="h-4 w-4 text-[#688878] group-hover:text-emerald-700" />
