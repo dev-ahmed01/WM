@@ -11,6 +11,8 @@ import type {
   ExecutionPosition, PublishedProcedure, WorkEvent, WorkItem,
 } from '@/lib/work-items';
 
+type Staff = { id:string; label:string };
+
 type Props = {
   item: WorkItem;
   canManage: boolean;
@@ -44,6 +46,8 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
   const [position, setPosition] = useState<ExecutionPosition | null>(null);
   const [events, setEvents] = useState<WorkEvent[]>([]);
   const [procedures, setProcedures] = useState<PublishedProcedure[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState(item.assigned_to || '');
   const [selectedVersion, setSelectedVersion] = useState('');
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -64,9 +68,13 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
       ]);
       setPosition(current);
       setEvents(timeline.events || []);
-      if (canManage && current.status === 'queued') {
-        const approved = await apiClient<{items: PublishedProcedure[]}>('/work/execution/procedures');
-        setProcedures(approved.items || []);
+      if (canManage && (current.status === 'queued' || current.status === 'ready')) {
+        const people = await apiClient<{items: Staff[]}>('/work/items/assignees');
+        setStaff(people.items || []);
+        if (current.status === 'queued') {
+          const approved = await apiClient<{items: PublishedProcedure[]}>('/work/execution/procedures');
+          setProcedures(approved.items || []);
+        }
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Execution status unavailable.');
@@ -79,6 +87,27 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
     setLoading(true);
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setSelectedAssignee(item.assigned_to || '');
+  }, [item.assigned_to]);
+
+  const assignWork = async () => {
+    if (!selectedAssignee || working) return;
+    setWorking(true);
+    setError('');
+    try {
+      await apiClient('/work/items/' + encodeURIComponent(item.id) + '/assign', {
+        method:'POST',body:JSON.stringify({assigned_to:selectedAssignee}),
+      });
+      onTaskChanged();
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update the assigned employee.');
+    } finally {
+      setWorking(false);
+    }
+  };
 
   const commit = async (suffix: string, payload?: object) => {
     setWorking(true);
@@ -144,6 +173,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
     step.expected_output_type === 'NUMERIC_INPUT' ? number !== '' && Number.isFinite(Number(number)) :
     step.expected_output_type === 'DOCUMENT_UPLOAD' ? Object.values(files).some(Boolean) : true;
   const filesReady = requiredSpecs.every(spec => Boolean(files[spec.id]));
+  const safetyGates = position?.safety_gates || [];
 
   return (
     <section className="overflow-hidden rounded-[1.6rem] border border-[#d8e2da] bg-white" aria-labelledby="work-execution-title">
@@ -166,6 +196,24 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
               <ShieldCheck className="h-5 w-5 text-emerald-700" />
               <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[#234b33]">Published SOP version linked</p><p className="break-all text-[11px] text-[#7c8c80]">{position.workflow_version_id}</p></div>
               <span className="rounded-md bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{position.status.replaceAll('_',' ')}</span>
+            </div>
+          ) : null}
+
+          {canManage && ['queued','ready'].includes(position.status) ? (
+            <div className="space-y-3 rounded-xl border border-[#dfe7df] bg-[#f7faf7] p-4">
+              <p className="text-xs font-semibold text-[#284a32]">Assigned worker</p>
+              <div className="flex flex-wrap gap-2">
+                <select aria-label="Assigned worker" className="wm-input min-w-0 flex-1" value={selectedAssignee}
+                  onChange={event => setSelectedAssignee(event.target.value)}>
+                  <option value="">Unassigned</option>
+                  {staff.map(person => <option key={person.id} value={person.id}>{person.label}</option>)}
+                </select>
+                <button type="button" disabled={!selectedAssignee || working || selectedAssignee === item.assigned_to}
+                  onClick={() => void assignWork()} className="rounded-xl bg-[#205a40] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                  Assign worker
+                </button>
+              </div>
+              <p className="text-[11px] text-[#77877b]">Only active employees in your department can receive this assignment. Ownership becomes locked once work starts.</p>
             </div>
           ) : null}
 
@@ -201,6 +249,17 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             </div>
           ) : null}
 
+          {position.status === 'active' && safetyGates.length ? (
+            <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+                <ShieldAlert className="h-5 w-5" />Supervisor / safety validation required
+              </div>
+              {safetyGates.map(gate => <p key={gate.rule_code} className="mt-2 text-xs leading-6 text-amber-950">
+                {gate.rule_code}: {gate.error_message}
+              </p>)}
+              <p className="mt-2 text-xs leading-6 text-amber-900">This state cannot be approved automatically. Stop work and escalate; a worker attestation will not bypass the published gate.</p>
+            </div>
+          ) : null}
           {position.status === 'active' ? <>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -250,7 +309,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                     </div>;
                   })}
                 </div> : null}
-                <button type="button" disabled={!inputReady || !filesReady || unsupportedSpec || working} onClick={() => void recordStep()}
+                <button type="button" disabled={!inputReady || !filesReady || unsupportedSpec || safetyGates.length > 0 || working} onClick={() => void recordStep()}
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#15583e] px-5 text-sm font-semibold text-white hover:bg-[#0d3929] disabled:cursor-not-allowed disabled:opacity-50">
                   <ClipboardCheck className="h-5 w-5" />{working ? 'Recording…' : 'Record checkpoint'}<ArrowRight className="h-4 w-4" />
                 </button>
@@ -268,7 +327,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                       {option.option_label}
                     </label>)}
                   </fieldset>
-                  <button type="button" disabled={!decision || working} onClick={() => void commit('decision',{decision_option:decision})}
+                  <button type="button" disabled={!decision || safetyGates.length > 0 || working} onClick={() => void commit('decision',{decision_option:decision})}
                     className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-sm font-semibold text-white disabled:opacity-50">
                     Record decision <ArrowRight className="h-4 w-4" />
                   </button>
@@ -280,7 +339,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                 <h3 className="text-lg font-semibold">{position.state?.title || 'Procedure checkpoint'}</h3>
                 {position.state?.description ? <p className="mt-2 text-xs leading-6 text-[#657b6d]">{position.state.description}</p> : null}
                 <p className="mt-2 text-xs leading-6 text-[#728579]">No atomic step or decision is required in this published state. Continue only after checking the listed procedure context.</p>
-                {isAssignee ? <button type="button" disabled={working} onClick={() => void commit('continue')}
+                {isAssignee ? <button type="button" disabled={working || safetyGates.length > 0} onClick={() => void commit('continue')}
                   className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-xs font-semibold text-white disabled:opacity-50">Continue approved procedure <ArrowRight className="h-4 w-4" /></button> : null}
               </div>
             ) : null}
