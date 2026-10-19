@@ -63,6 +63,19 @@ def test_worker_list_is_own_only_and_manager_reviews_department(monkeypatch):
     assert client.get("/api/v1/handover?limit=900", headers=identity()).status_code == 422
 
 
+def test_reviewer_ownership_requires_manager_and_is_single_claim():
+    assert client.post("/api/v1/handover/hov_1/claim", headers=identity()).status_code == 403
+    with patch("app.api.v1.handover.HandoverRepository.claim",
+               return_value={"id":"hov_1", "assigned_to_user_id":"boss"}) as claimed:
+        accepted = client.post("/api/v1/handover/hov_1/claim",
+                               headers=identity("manager",user="boss"))
+    assert accepted.status_code == 200
+    assert claimed.call_args.args == ("warehouse","boss","hov_1")
+    with patch("app.api.v1.handover.HandoverRepository.claim",return_value=None):
+        repeated = client.post("/api/v1/handover/hov_1/claim",headers=identity("manager"))
+    assert repeated.status_code == 409
+
+
 def test_manager_review_never_available_to_worker_or_forged_user():
     review = {"decision": "follow_up_requested", "review_note": "Please isolate goods for manual verification."}
     assert client.post("/api/v1/handover/hov_1/review", headers=identity(), json=review).status_code == 403
