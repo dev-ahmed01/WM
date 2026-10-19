@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import io
 import json
 import re
 from uuid import uuid4
@@ -225,11 +226,28 @@ def _decode_evidence(file, spec):
     if spec.get("min_size_bytes") and len(raw) < int(spec["min_size_bytes"]):
         raise ExecutionConflict("Evidence does not meet the published minimum size.")
     typ = spec["evidence_type"]
-    if typ == "DOCUMENT_PDF" and not (raw.startswith(b"%PDF-") and filename.lower().endswith(".pdf")):
-        raise ExecutionConflict("The required document must be a PDF file.")
-    if typ == "PHOTO_JPEG" and not (raw.startswith(b"\xff\xd8\xff") and filename.lower().endswith((".jpg",".jpeg"))):
-        raise ExecutionConflict("The required image must be a JPEG file.")
-    if typ not in ("DOCUMENT_PDF","PHOTO_JPEG"):
+    if typ == "DOCUMENT_PDF":
+        if not (raw.startswith(b"%PDF-") and filename.lower().endswith(".pdf")):
+            raise ExecutionConflict("The required document must be a valid PDF.")
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw), strict=True)
+            if reader.is_encrypted or len(reader.pages) < 1:
+                raise ValueError("No readable pages")
+        except Exception as exc:
+            raise ExecutionConflict("The attached PDF is corrupt or unreadable.") from exc
+    elif typ == "PHOTO_JPEG":
+        if not (raw.startswith(b"\xff\xd8\xff") and filename.lower().endswith((".jpg",".jpeg"))):
+            raise ExecutionConflict("The required image must be JPEG.")
+        try:
+            from PIL import Image
+            with Image.open(io.BytesIO(raw)) as img:
+                if img.format != "JPEG" or img.width < 1 or img.height < 1:
+                    raise ValueError("Invalid JPEG")
+                img.verify()
+        except Exception as exc:
+            raise ExecutionConflict("The attached JPEG is corrupt or unreadable.") from exc
+    else:
         raise ExecutionConflict("This evidence type requires specialist human verification.")
     digest = hashlib.sha256(raw).hexdigest()
     return raw, digest
