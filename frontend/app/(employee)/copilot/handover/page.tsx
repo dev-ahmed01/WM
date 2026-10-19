@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Check, ClipboardCheck, ClipboardCopy, Clock3, Download, FileText, History, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ClipboardCheck, ClipboardCopy, Download, FileText, History, ShieldCheck } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
 import { apiClient, type CopilotConversationDetail, type CopilotHistoryResponse, type CopilotSessionSummary } from '@/lib/api-client';
 import { LoadingState } from '@/components/shared/LoadingState';
