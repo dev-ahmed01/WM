@@ -1,12 +1,14 @@
 """True Chromium -> Next.js -> FastAPI -> PostgreSQL browser smoke.
 
-Runs only against disposable CI services. No mocked responses, no seeded
-business knowledge. Tests draft approval, immediately effective archival,
-role isolation and independent departmental search.
+Runs only against disposable CI services and real PostgreSQL state. The Phase 5B
+microphone/ASR preview is an isolated browser fixture because the heavy speech
+model is disabled in CI; task guidance and workflow authorization stay real.
+Tests draft approval, archival, and departmental isolation.
 """
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import psycopg
@@ -346,6 +348,34 @@ def main():
             ) as bound:
                 manager.get_by_role("button",name="Link published SOP").click()
             assert bound.value.status==200,bound.value.text()
+            # Deterministic microphone fixture exercises MediaRecorder UI, upload,
+            # explicit editing and confirmation. This does NOT validate Whisper WER.
+            employee.add_init_script("""() => {
+                Object.defineProperty(navigator, 'mediaDevices', {
+                  configurable: true,
+                  value: {getUserMedia: async () => {
+                    const ctx = new AudioContext();
+                    return ctx.createMediaStreamDestination().stream;
+                  }}
+                });
+                window.MediaRecorder = class SyntheticRecorder {
+                  static isTypeSupported() { return true; }
+                  constructor(_stream, options) {
+                    this.mimeType = options?.mimeType || 'audio/webm';
+                    this.state = 'inactive';
+                    this.ondataavailable = null;
+                    this.onstop = null;
+                  }
+                  start() { this.state = 'recording'; }
+                  stop() {
+                    if (this.state !== 'recording') return;
+                    this.state = 'inactive';
+                    this.ondataavailable?.({data: new Blob(['synthetic-test-audio'],
+                      {type: this.mimeType})});
+                    this.onstop?.();
+                  }
+                };
+            }""")
             employee.goto(f"{BASE}/work/{work_id}")
             expect(employee.get_by_role("button",name="Start guided work")).to_be_visible(timeout=15000)
             employee.get_by_role("button",name="Start guided work").click()
@@ -362,6 +392,59 @@ def main():
             assert explained.value.json()["read_only"] is True
             assert explained.value.json()["citations"][0]["workflow_version_id"]==published_version
             expect(employee.get_by_text("Source-linked guidance")).to_be_visible(timeout=15000)
+            # Speech preview transport is stubbed, but all session/citation checks
+            # below execute through live cookie proxy, FastAPI and PostgreSQL.
+            before_voice=employee.request.get(
+                f"{BASE}/api/backend/work/execution/{work_id}").json()
+            preview_calls=[]
+            def preview_transcription(route):
+                request=route.request
+                assert request.method=="POST"
+                assert "multipart/form-data" in request.headers.get("content-type","")
+                preview_calls.append(request.url)
+                route.fulfill(status=200, content_type="application/json",body=json.dumps({
+                    "transcript":"Barcode को scan करो, carton damaged है?",
+                    "suggested_text":"How should damaged cartons be documented?",
+                    "detected_language":"hi","confidence":0.55,
+                    "transcription_ms":5,"translation_ms":3,
+                    "requires_confirmation":True,
+                    "warning":"Review names and safety terms before sending.",
+                }))
+            employee.route("**/api/backend/copilot/voice/transcribe",preview_transcription)
+            expect(employee.get_by_role("button",name="Speak question")).to_be_enabled()
+            employee.get_by_role("button",name="Speak question").click()
+            expect(employee.get_by_role("button",name="Stop recording question")).to_be_visible()
+            employee.get_by_role("button",name="Stop recording question").click()
+            expect(employee.get_by_label("Voice transcript review")).to_be_visible(timeout=15000)
+            expect(employee.get_by_text("Barcode को scan करो, carton damaged है?")).to_be_visible()
+            expect(employee.get_by_text("Speech recognition is uncertain",exact=False)).to_be_visible()
+            assert len(preview_calls)==1
+            assert employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()==before_voice
+            # No voice processing or transcript preview writes to the task.
+            employee.get_by_label("Editable question · suggested English").fill(
+                "How should damaged cartons be documented under this SOP?"
+            )
+            employee.get_by_role("button",name="Use this question").click()
+            expect(employee.get_by_label("Question about this task")).to_have_value(
+                "How should damaged cartons be documented under this SOP?"
+            )
+            assert employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()==before_voice
+            with employee.expect_response(
+                lambda response: response.url.endswith("/api/backend/work/guidance/"+work_id)
+                and response.request.method=="POST",timeout=20000,
+            ) as confirmed_voice_guidance:
+                employee.get_by_role("button",name="Ask task question").click()
+            assert confirmed_voice_guidance.value.status==200
+            voice_answer=confirmed_voice_guidance.value.json()
+            assert voice_answer["read_only"] is True
+            assert voice_answer["workflow_version_id"]==published_version
+            assert voice_answer["citations"]
+            assert employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()==before_voice
+            employee.screenshot(path="/tmp/workmate-phase5b-confirmed-task-voice.png",full_page=True)
+            # Department isolation remains enforced after spoken and typed queries.
+            assert outsider.request.post(f"{BASE}/api/backend/work/guidance/{work_id}",
+                                         data={"intent":"ask","question":"What is the current SOP?"}).status in (403,404)
+            employee.unroute("**/api/backend/copilot/voice/transcribe")
             employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-phase5a-task-guidance.png",full_page=True)
             employee.get_by_role("button",name="What evidence is required?").click()
