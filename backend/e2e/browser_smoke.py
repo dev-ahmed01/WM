@@ -311,6 +311,75 @@ def main():
             outsider = sign_in(browser, "e2e_other@workmate.test")
             manager = sign_in(browser, "e2e_manager@workmate.test")
             expect(manager.get_by_role("heading", name="Control room")).to_be_visible()
+            # Phase 6A: authentic two-person WMS event intake with actual
+            # PostgreSQL queue creation only AFTER explicit human review.
+            manager.goto(f"{BASE}/work/integrations")
+            expect(manager.get_by_role("heading",name="Integration inbox")).to_be_visible()
+            manager.get_by_label("Source format").select_option("custom_wms")
+            manager.get_by_label("External event ID").fill("shipment.received.7201")
+            manager.get_by_label("External work ID").fill("SHIP-7201")
+            manager.get_by_label("Work title").fill("Check WMS inbound shipment 7201")
+            manager.get_by_label("Work type").select_option("receiving")
+            manager.get_by_label("Priority").select_option("high")
+            manager.get_by_label("Intended worker").select_option("e2e_employee")
+            manager.get_by_label("Source instructions").fill(
+                "Match the source shipment with the dock receipt and inspect sealed cartons."
+            )
+            with manager.expect_response(
+                lambda response:response.url.endswith("/api/backend/work/integrations/intake")
+                    and response.request.method=="POST",timeout=20000
+            ) as intake_staged:
+                manager.get_by_role("button",name="Stage for review").click()
+            assert intake_staged.value.status==201,intake_staged.value.text()
+            intake_id=intake_staged.value.json()["id"]
+            assert intake_staged.value.json()["status"]=="pending"
+            assert intake_staged.value.json()["work_item_id"] is None
+            assert manager.request.post(
+                f"{BASE}/api/backend/work/integrations/intake/{intake_id}/decision",
+                headers={"Origin":BASE},
+                data={"decision":"accepted",
+                      "decision_note":"A submitter cannot independently approve this order."}
+            ).status==409
+            assert employee.request.get(
+                f"{BASE}/api/backend/work/integrations/intake"
+            ).status==403
+            admin.goto(f"{BASE}/work/integrations")
+            expect(admin.get_by_role("heading",name="Integration inbox")).to_be_visible()
+            admin.get_by_role("button",name=re.compile("Check WMS inbound shipment 7201")).click()
+            admin.get_by_label("Independent review note").fill(
+                "Receipt verified against inbound dock order; SOP must be bound separately."
+            )
+            with admin.expect_response(
+                lambda response:response.url.endswith(
+                    f"/api/backend/work/integrations/intake/{intake_id}/decision")
+                    and response.request.method=="POST",timeout=20000
+            ) as intake_accepted:
+                admin.get_by_role("button",name="Accept into queue").click()
+            assert intake_accepted.value.status==200,intake_accepted.value.text()
+            imported_work=intake_accepted.value.json()["work_item_id"]
+            assert intake_accepted.value.json()["status"]=="accepted"
+            imported_state=manager.request.get(
+                f"{BASE}/api/backend/work/execution/{imported_work}"
+            ).json()
+            assert imported_state["status"]=="queued" and imported_state["session_id"] is None
+            assert imported_state["workflow_version_id"] is None
+            admin.screenshot(path="/tmp/workmate-phase6a-integration-approved.png",full_page=True)
+            retry=manager.request.post(
+                f"{BASE}/api/backend/work/integrations/intake",
+                headers={"Origin":BASE},
+                data={
+                  "source_system":"custom_wms",
+                  "external_event_id":"shipment.received.7201",
+                  "external_work_id":"SHIP-7201",
+                  "title":"Check WMS inbound shipment 7201",
+                  "work_type":"receiving","priority":"high",
+                  "instructions":"Match the source shipment with the dock receipt and inspect sealed cartons.",
+                  "assigned_to":"e2e_employee"
+                },
+            )
+            assert retry.status==201 and retry.json()["replayed"] is True
+            assert retry.json()["work_item_id"]==imported_work
+            assert outsider.request.get(f"{BASE}/api/backend/work/items/{imported_work}").status==404
             manager.goto(f"{BASE}/knowledge-studio")
             manager.wait_for_url("**/control-room", timeout=12000)
             # Phase 1 real manager intake -> PostgreSQL assignment -> employee-only view.
