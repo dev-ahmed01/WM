@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     WORKMATE_CONNECTOR_SECRETS_JSON: str = "{}"
     WORKMATE_WEBHOOK_CLOCK_SKEW_SECONDS: int = Field(default=300,ge=60,le=600)
 
+    # Outbound ERP events are OFF until a reviewed deployment provisions
+    # explicit HTTPS hosts and signing secrets in the process secret manager.
+    WORKMATE_OUTBOUND_ENABLED: bool = False
+    WORKMATE_OUTBOUND_TARGETS_JSON: str = "{}"
+    WORKMATE_OUTBOUND_ALLOWED_HOSTS: str = ""
+    WORKMATE_OUTBOUND_TIMEOUT_SECONDS: float = Field(default=5.0,ge=1.0,le=10.0)
+
     # Auth & Security Credentials
     JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
