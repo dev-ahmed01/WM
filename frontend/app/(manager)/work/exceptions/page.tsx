@@ -7,7 +7,7 @@ import { useRequireRole } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { LoadingState } from '@/components/shared/LoadingState';
 
-type CaseStatus = 'open' | 'claimed' | 'follow_up_requested' | 'reviewed';
+type CaseStatus = 'open' | 'claimed' | 'follow_up_requested' | 'reviewed' | 'closed';
 type WorkCase = {
   id: string; department_id: string; work_item_id: string; work_title: string;
   work_status: string; work_assignee: string | null; raised_by: string;
@@ -17,6 +17,8 @@ type WorkCase = {
   status: CaseStatus; revision: number; review_note: string | null;
   handover_id?:string|null; handover_status?:string|null;
   corrective_status?:'pending'|'approved'|'rejected'|null;
+  corrective_work_status?:'ready'|'active'|'paused'|'blocked'|'completed'|null;
+  evidence_reviewed_at?:string|null; site_accepted_at?:string|null;
   created_at: string; updated_at: string; reviewed_at: string | null;
 };
 type CaseEvent = {id:string;actor_id:string;action:string;note:string;event_seq:number;created_at:string};
@@ -27,15 +29,19 @@ type CorrectivePlan={id:string;status:'pending'|'approved'|'rejected';proposed_b
   decision_note:string|null;decided_at:string|null;corrective_work_id:string|null};
 type PublishedProcedure={workflow_version_id:string;title:string;version_number:number};
 type WorkerOption={id:string;label:string};
+type CaseClosure={id:string;corrective_work_id:string;corrective_session_id:string;
+  evidence_reviewed_by:string;evidence_review_note:string;evidence_reviewed_at:string;
+  evidence_snapshot:{recorded_step_count:number;received_evidence:Array<{submission_id:string;sha256:string;bytes:number;verification:string}>};
+  site_accepted_by:string|null;site_record_reference:string|null;site_acceptance_note:string|null;site_accepted_at:string|null};
 type CaseDetail = WorkCase & {events:CaseEvent[];work_events:WorkEvent[];
-  corrective_request:CorrectivePlan|null};
+  corrective_request:CorrectivePlan|null;closure:CaseClosure|null};
 
 const formatTime=(value:string)=>new Date(value).toLocaleString('en-IN',{
   timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true,
 });
 const statusText=(status:CaseStatus)=>status.replaceAll('_',' ');
 const active=(value:CaseStatus)=>value==='open'||value==='claimed'||value==='follow_up_requested';
-const unresolved=(item:WorkCase)=>active(item.status)||item.corrective_status==='pending';
+const unresolved=(item:WorkCase)=>item.status!=='closed';
 const elapsed=(value:string,now:number)=>{
   const minutes=Math.max(0,Math.floor((now-Date.parse(value))/60000));
   if(minutes<60)return minutes+'m';
@@ -58,6 +64,10 @@ export default function SupervisorExceptionDesk() {
   const [actionNote,setActionNote]=useState('');
   const [correctionNote,setCorrectionNote]=useState('');
   const [decisionNote,setDecisionNote]=useState('');
+  const [evidenceNote,setEvidenceNote]=useState('');
+  const [siteReference,setSiteReference]=useState('');
+  const [siteNote,setSiteNote]=useState('');
+  const [siteAttested,setSiteAttested]=useState(false);
   const [correctionVersion,setCorrectionVersion]=useState('');
   const [correctionAssignee,setCorrectionAssignee]=useState('');
   const [procedures,setProcedures]=useState<PublishedProcedure[]>([]);
@@ -111,7 +121,7 @@ export default function SupervisorExceptionDesk() {
   const openCount=items.filter(unresolved).length;
   const criticalCount=items.filter(x=>unresolved(x)&&x.severity==='critical').length;
   const canClaim=selected?.status==='open'&&!selected.reviewer_id&&selected.raised_by!==user?.sub;
-  const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked');
+  const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked'&&selected.status!=='closed');
   const hasContainment=selected?.events.some(event=>event.action==='containment_recorded')||false;
   const hasRemediation=selected?.events.some(event=>event.action==='remediation_proposed')||false;
   const canPropose=Boolean(canRecord&&hasContainment&&hasRemediation
@@ -123,6 +133,18 @@ export default function SupervisorExceptionDesk() {
     &&user?.sub!==selected.reviewer_id
     &&user?.sub!==selected.raised_by
     &&user?.sub!==selected.corrective_request.assigned_to);
+  const canReviewEvidence=Boolean(selected&&selected.status!=='closed'
+    &&selected.reviewer_id===user?.sub
+    &&selected.corrective_request?.status==='approved'
+    &&selected.corrective_work_status==='completed'
+    &&!selected.closure);
+  const canAcceptSite=Boolean(selected&&selected.status!=='closed'&&selected.closure
+    &&!selected.closure.site_accepted_at&&user?.role==='admin'
+    &&user?.sub!==selected.raised_by&&user?.sub!==selected.reviewer_id
+    &&user?.sub!==selected.corrective_request?.proposed_by
+    &&user?.sub!==selected.corrective_request?.decided_by
+    &&user?.sub!==selected.corrective_request?.assigned_to
+    &&user?.sub!==selected.closure.evidence_reviewed_by);
   const canReview=Boolean(selected&&(selected.status==='open'||selected.status==='claimed')&&selected.raised_by!==user?.sub&&
     (!selected.reviewer_id||selected.reviewer_id===user?.sub));
 
@@ -197,6 +219,47 @@ export default function SupervisorExceptionDesk() {
       ]);
       setSelected(detail);setItems(list.items||[]);setDecisionNote('');
     }catch(err){setActionError(err instanceof Error?err.message:'Independent decision not recorded.');}
+    finally{setWorking(false);}
+  }
+
+
+  async function reviewCorrectiveEvidence(){
+    if(!selected||!canReviewEvidence||working||evidenceNote.trim().length<20)return;
+    setWorking(true);setActionError('');
+    try{
+      await apiClient('/work/exceptions/'+encodeURIComponent(selected.id)+'/closure/evidence',{
+        method:'POST',body:JSON.stringify({
+          expected_revision:selected.revision,review_note:evidenceNote.trim(),
+        }),
+      });
+      const [detail,list]=await Promise.all([
+        apiClient<CaseDetail>('/work/exceptions/'+encodeURIComponent(selected.id)),
+        apiClient<{items:WorkCase[]}>('/work/exceptions?limit=100'),
+      ]);
+      setSelected(detail);setItems(list.items||[]);setEvidenceNote('');
+    }catch(caught){setActionError(caught instanceof Error?caught.message:'Evidence review was not recorded.');}
+    finally{setWorking(false);}
+  }
+
+  async function acceptSite(){
+    if(!selected||!canAcceptSite||working||!siteAttested
+      ||siteReference.trim().length<8||siteNote.trim().length<30)return;
+    setWorking(true);setActionError('');
+    try{
+      await apiClient('/work/exceptions/'+encodeURIComponent(selected.id)+'/closure/site',{
+        method:'POST',body:JSON.stringify({
+          expected_revision:selected.revision,site_record_reference:siteReference.trim(),
+          site_acceptance_note:siteNote.trim(),
+          independent_site_inspection_attested:true,
+        }),
+      });
+      const [detail,list]=await Promise.all([
+        apiClient<CaseDetail>('/work/exceptions/'+encodeURIComponent(selected.id)),
+        apiClient<{items:WorkCase[]}>('/work/exceptions?limit=100'),
+      ]);
+      setSelected(detail);setItems(list.items||[]);
+      setSiteReference('');setSiteNote('');setSiteAttested(false);
+    }catch(caught){setActionError(caught instanceof Error?caught.message:'Site acceptance was not recorded.');}
     finally{setWorking(false);}
   }
 
@@ -342,6 +405,65 @@ export default function SupervisorExceptionDesk() {
                 Submit for independent authorization
               </button>
             </div>:<p className="text-xs text-[#75877a]">A reviewed incident with recorded containment and remediation is required before requesting corrective work.</p>}
+          </div>
+
+          <div className="space-y-3 border-t border-[#e6eee6] pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-[#1c3527]">Closure controls</h3>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#66826b]">
+                {selected.status==='closed'?'Closed · original work held':selected.closure?'Evidence reviewed · site acceptance pending':'Separate verification required'}
+              </span>
+            </div>
+            {selected.corrective_request?.status==='approved'?
+              <p className="text-xs text-[#526c59]">
+                Corrective SOP task: {selected.corrective_work_status||'not started'}.
+                A completed task with retained attachments and independent site inspection are required.
+              </p>:<p className="text-xs text-[#718574]">An authorized corrective SOP must be completed first.</p>}
+            {canReviewEvidence?<div className="space-y-2 rounded-xl border border-[#dce9de] bg-[#f8fbf8] p-4">
+              <label htmlFor="closure-evidence-note" className="wm-label">Corrective evidence review</label>
+              <textarea id="closure-evidence-note" rows={3} minLength={20} maxLength={1000}
+                className="wm-input" value={evidenceNote} onChange={event=>setEvidenceNote(event.target.value)}
+                placeholder="Record which submitted corrective evidence was inspected and what remains to verify on site."/>
+              <button type="button" disabled={working||evidenceNote.trim().length<20}
+                onClick={()=>void reviewCorrectiveEvidence()} className="min-h-11 rounded-xl bg-[#155a40] px-4 text-xs font-semibold text-white disabled:opacity-50">
+                Record independent evidence review
+              </button>
+            </div>:null}
+            {selected.closure?<div className="space-y-2 rounded-xl border border-[#dce9de] bg-[#f8fbf8] p-4">
+              <p className="text-xs font-semibold text-[#28593c]">Evidence review recorded · {formatTime(selected.closure.evidence_reviewed_at)}</p>
+              <p className="text-xs text-[#54705c]">Reviewer: {selected.closure.evidence_reviewed_by} · {selected.closure.evidence_snapshot.recorded_step_count} steps · {selected.closure.evidence_snapshot.received_evidence.length} received files</p>
+              <p className="whitespace-pre-wrap text-xs leading-5 text-[#526c59]">{selected.closure.evidence_review_note}</p>
+              {selected.closure.site_accepted_at?<div className="space-y-1 border-t border-[#d9e6da] pt-3">
+                <p className="text-xs font-bold text-[#1d603f]">Site acceptance recorded · {formatTime(selected.closure.site_accepted_at)}</p>
+                <p className="text-xs text-[#526c59]">Reference: {selected.closure.site_record_reference} · Signed by {selected.closure.site_accepted_by}</p>
+                <p className="whitespace-pre-wrap text-xs text-[#526c59]">{selected.closure.site_acceptance_note}</p>
+                <p className="text-xs font-semibold text-amber-800">The original task remains blocked. Closure is a recorded human decision, not automated physical verification.</p>
+              </div>:null}
+            </div>:null}
+            {canAcceptSite?<div className="space-y-3 rounded-xl border border-[#bcd9c4] bg-white p-4">
+              <p className="text-xs font-semibold text-[#28593c]">Independent site acceptance</p>
+              <div>
+                <label htmlFor="closure-site-reference" className="wm-label">External inspection record ID</label>
+                <input id="closure-site-reference" className="wm-input" maxLength={128}
+                  value={siteReference} onChange={event=>setSiteReference(event.target.value)}
+                  placeholder="SITE-QA-INSPECTION-2071"/>
+              </div>
+              <div>
+                <label htmlFor="closure-site-note" className="wm-label">Actual site inspection findings</label>
+                <textarea id="closure-site-note" className="wm-input" rows={3} maxLength={1000}
+                  value={siteNote} onChange={event=>setSiteNote(event.target.value)}
+                  placeholder="Identify inspected location, corrective findings and remaining site controls."/>
+              </div>
+              <label className="flex items-start gap-2 text-xs leading-5 text-[#3f6349]">
+                <input type="checkbox" className="mt-1" checked={siteAttested}
+                  onChange={event=>setSiteAttested(event.target.checked)}/>
+                I independently inspected the site and accept responsibility for the referenced inspection record. This is not an automated verification.
+              </label>
+              <button type="button" disabled={working||!siteAttested||siteReference.trim().length<8||siteNote.trim().length<30}
+                onClick={()=>void acceptSite()} className="min-h-11 rounded-xl bg-[#155a40] px-4 text-xs font-semibold text-white disabled:opacity-50">
+                Record site acceptance and close case
+              </button>
+            </div>:null}
           </div>
           {actionError?<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{actionError}</p>:null}
           {canClaim?<button type="button" disabled={working} onClick={()=>void updateCase('claim')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#bad6c0] bg-[#f0f8f1] px-4 text-xs font-semibold text-emerald-900 disabled:opacity-50"><UserRoundCheck className="h-4 w-4"/>Take ownership</button>:null}
