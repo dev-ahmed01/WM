@@ -449,7 +449,40 @@ def main():
             signed_position=manager.request.get(f"{BASE}/api/backend/work/execution/{signed_work}").json()
             assert signed_position["status"]=="queued" and signed_position["session_id"] is None
             admin.goto(f"{BASE}/work/integrations")
-            admin.get_by_role("button",name=re.compile("e2e_signed_wms")).click()
+            # Phase 6D: health is real committed Postgres state, never GO.
+            expect(admin.get_by_role("heading",name="Integration readiness")).to_be_visible(timeout=15000)
+            readiness=admin.request.get(
+                f"{BASE}/api/backend/work/integrations/operations/readiness")
+            assert readiness.status==200,readiness.text()
+            signals=readiness.json()
+            assert signals["decision"]=="NO_GO"
+            assert signals["counts"]["sources"]==1
+            assert signals["counts"]["inbound_24h"]>=3
+            assert signals["counts"]["open_alerts"]>=2
+            assert {"invalid_inbound","outbound_unconfigured"} <= {
+                row["code"] for row in signals["alerts"]}
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/integrations/operations/readiness").status==403
+            assert employee.request.get(
+                f"{BASE}/api/backend/work/integrations/operations/readiness").status==403
+            admin.get_by_role("button",name=re.compile("Signed incoming deliveries were rejected")).click()
+            admin.get_by_label("Operational response").select_option("acknowledged")
+            admin.get_by_label("Operator note").fill(
+                "Inspected the rejected vendor schema and escalated remediation to the integration owner.")
+            with admin.expect_response(
+                lambda response:response.url.endswith("/api/backend/work/integrations/operations/actions")
+                    and response.request.method=="POST",timeout=20000
+            ) as ops_response:
+                admin.get_by_role("button",name="Record response").click()
+            assert ops_response.value.status==201,ops_response.value.text()
+            assert ops_response.value.json()["health_cleared"] is False
+            expect(admin.get_by_text("Operator response recorded.",exact=False)).to_be_visible()
+            health_after=admin.request.get(
+                f"{BASE}/api/backend/work/integrations/operations/readiness").json()
+            assert health_after["counts"]["open_alerts"]>=2
+            assert health_after["latest_actions"][0]["issue_code"]=="invalid_inbound"
+            admin.screenshot(path="/tmp/workmate-phase6d-operations-readiness.png",full_page=True)
+            admin.get_by_role("button",name=re.compile("^e2e_signed_wms")).click()
             expect(admin.get_by_text("3 deliveries",exact=False)).to_be_visible(timeout=15000)
             admin.screenshot(path="/tmp/workmate-phase6b-signed-connector-health.png",full_page=True)
             # Phase 6C: accepted signed work has a single pending outbound
