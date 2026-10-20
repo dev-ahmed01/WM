@@ -561,6 +561,8 @@ def main():
             assert fresh_execution["status"]=="active"
             assert fresh_execution["session_id"]!=old_execution["session_id"]
             assert old_execution["status"]=="blocked"
+            employee.evaluate("window.scrollTo(0,0)")
+            employee.screenshot(path="/tmp/workmate-phase4c-corrective-worker.png",full_page=True)
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
