@@ -8,6 +8,7 @@ import {
   PauseCircle, PlayCircle, RefreshCw, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { TaskGuidancePanel } from './TaskGuidancePanel';
 import type {
   ExecutionPosition, PublishedProcedure, WorkEvent, WorkItem,
 } from '@/lib/work-items';
@@ -261,6 +262,15 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
               </div> : null}
             </div>
           ) : null}
+
+          {position.workflow_version_id && ['ready','active','paused','blocked'].includes(position.status) ? (
+            <TaskGuidancePanel
+              key={[position.workflow_version_id,position.status,position.step?.id||position.state?.id||'initial'].join(':')}
+              workId={item.id} status={position.status}
+              workflowVersionId={position.workflow_version_id}
+              stepId={position.step?.id||null}
+            />
+          ):null}
 
           {position.status === 'ready' ? (
             <div className="space-y-4 rounded-[1.35rem] bg-[#f1f8f3] p-6">
