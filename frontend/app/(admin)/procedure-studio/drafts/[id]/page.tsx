@@ -9,7 +9,7 @@ import { useRequireRole } from '@/lib/auth';
 import { LoadingState } from '@/components/shared/LoadingState';
 
 type DraftStep={id:string;instruction:string;source_line:number|null;reviewed:boolean;output_type?:'CONFIRMATION'|'TEXT_INPUT'|'NUMERIC_INPUT'|'DOCUMENT_UPLOAD';evidence_type?:'NONE'|'PHOTO_JPEG'|'DOCUMENT_PDF'};
-type DraftDecision={question:string;options:{code:string;label:string}[]};
+type DraftDecision={question:string;options:{code:string;label:string;requires_supervisor_review?:boolean}[]};
 type CompilePreview={valid:boolean;can_publish:boolean;validation_errors:string[];warnings:string[];states:number;steps:number;decisions:number;review_revision:number;workflow_code:string};
 type Draft={id:string;title:string;source_filename:string;source_sha256:string;source_excerpt:string;
   steps:DraftStep[];warnings:string[];decision?:DraftDecision;published_version_id?:string|null;status:'draft'|'reviewed'|'published';revision:number;updated_at:string};
@@ -198,7 +198,7 @@ export default function ProcedureDraftEditor() {
               className="h-4 w-4 accent-emerald-700"
               onChange={e=>editDecision(e.target.checked?{
                 question:'What outcome was observed at the end of this procedure?',
-                options:[{code:'OPT_ACCEPT',label:'Expected outcome recorded'},{code:'OPT_EXCEPTION',label:'An exception was documented'}]
+                options:[{code:'OPT_ACCEPT',label:'Expected outcome recorded',requires_supervisor_review:false},{code:'OPT_EXCEPTION',label:'An exception was documented',requires_supervisor_review:true}]
               }:{question:'',options:[]})}/>
             Require final outcome selection
           </label>
@@ -210,8 +210,16 @@ export default function ProcedureDraftEditor() {
             </div>
             {decision.options.map((option,i)=><div key={option.code} className="flex items-center gap-3">
               <span className="w-12 shrink-0 text-[10px] font-bold text-[#65866d]">{i+1<10?'0'+(i+1):i+1}</span>
-              <input aria-label={'Outcome '+(i+1)+' label'} disabled={published} className="wm-input" maxLength={120}
-                value={option.label} onChange={e=>editDecision({options:decision.options.map((opt,j)=>j===i?{...opt,label:e.target.value}:opt)})}/>
+              <div className="min-w-0 flex-1 space-y-2">
+                <input aria-label={'Outcome '+(i+1)+' label'} disabled={published} className="wm-input" maxLength={120}
+                  value={option.label} onChange={e=>editDecision({options:decision.options.map((opt,j)=>j===i?{...opt,label:e.target.value}:opt)})}/>
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-[#7c674c]">
+                  <input type="checkbox" disabled={published} checked={Boolean(option.requires_supervisor_review)}
+                    onChange={e=>editDecision({options:decision.options.map((opt,j)=>j===i?{...opt,requires_supervisor_review:e.target.checked}:opt)})}
+                    className="h-4 w-4 accent-amber-700"/>
+                  Hold for supervisor review (cannot complete automatically)
+                </label>
+              </div>
             </div>)}
           </div>:null}
         </div>
