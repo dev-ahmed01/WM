@@ -452,6 +452,28 @@ def main():
             admin.get_by_role("button",name=re.compile("e2e_signed_wms")).click()
             expect(admin.get_by_text("3 deliveries",exact=False)).to_be_visible(timeout=15000)
             admin.screenshot(path="/tmp/workmate-phase6b-signed-connector-health.png",full_page=True)
+            # Phase 6C: accepted signed work has a single pending outbound
+            # event; no connector host/secret is configured in this CI process,
+            # so no third-party network call is made.
+            outbound=admin.request.get(
+                f"{BASE}/api/backend/work/integrations/sources/e2e_signed_wms/outbox"
+            )
+            assert outbound.status==200,outbound.text()
+            outbound_items=outbound.json()["items"]
+            assert len(outbound_items)==1,outbound_items
+            assert outbound_items[0]["work_item_id"]==signed_work
+            assert outbound_items[0]["status"]=="pending"
+            assert outbound_items[0]["attempts"]==0
+            assert outbound_items[0]["ack_reference"] is None
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/integrations/sources/e2e_signed_wms/outbox"
+            ).status==403
+            assert outsider.request.get(
+                f"{BASE}/api/backend/work/integrations/sources/e2e_signed_wms/outbox"
+            ).status==404
+            expect(admin.get_by_text("Outbound reconciliation")).to_be_visible()
+            expect(admin.get_by_text("Awaiting dispatch")).to_be_visible()
+            admin.screenshot(path="/tmp/workmate-phase6c-outbound-reconciliation.png",full_page=True)
             admin.get_by_role("button",name="Disable source").click()
             expect(admin.get_by_role("button",name="Enable source")).to_be_visible(timeout=15000)
             assert admin.request.post(webhook_url,data=raw,
