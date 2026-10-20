@@ -216,7 +216,7 @@ class ConnectorRepository:
                       WHERE id=%s AND department_id=%s FOR SHARE
                     """,(source["id"],dept))
                     current=cur.fetchone()
-                    if not current or current[0]!="active":
+                    if not current or current[0]!="active" or not _admin(cur,dept,source["created_by"]):
                         raise IntegrationNotFound()
                     delivery_id="del_"+uuid4().hex[:24]
                     cur.execute("""
