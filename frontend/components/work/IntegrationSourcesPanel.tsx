@@ -1,13 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowDownRight, LockKeyhole, RefreshCw, ShieldAlert } from 'lucide-react';
+import { LockKeyhole, RefreshCw, ShieldAlert } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
 type Source={
   id:string;source_system:'sap'|'oracle'|'odoo'|'custom_wms';
   status:'active'|'disabled';created_by:string;deliveries:number;failures:number;
   last_delivery_at:string|null;
+};
+type Outbound={
+  id:string;work_item_id:string;status:'pending'|'leased'|'delivered'|'dead';
+  attempts:number;recovered_count:number;last_error_code:string|null;
+  ack_reference:string|null;created_at:string;updated_at:string;
 };
 type Delivery={
   id:string;status:'staged'|'replayed'|'conflict'|'invalid';reason_code:string;
@@ -20,6 +25,9 @@ export function IntegrationSourcesPanel(){
   const [sources,setSources]=useState<Source[]>([]);
   const [selected,setSelected]=useState('');
   const [deliveries,setDeliveries]=useState<Delivery[]>([]);
+  const [outbox,setOutbox]=useState<Outbound[]>([]);
+  const [recovering,setRecovering]=useState('');
+  const [recoveryNote,setRecoveryNote]=useState('');
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
@@ -42,11 +50,14 @@ export function IntegrationSourcesPanel(){
   },[]);
 
   useEffect(()=>{
-    if(!selected){setDeliveries([]);return;}
+    if(!selected){setDeliveries([]);setOutbox([]);return;}
     let valid=true;
-    void apiClient<{items:Delivery[]}>('/work/integrations/sources/'+encodeURIComponent(selected)+'/deliveries')
-      .then(r=>{if(valid)setDeliveries(r.items||[]);})
-      .catch(()=>{if(valid)setError('Delivery history is unavailable.');});
+    void Promise.all([
+      apiClient<{items:Delivery[]}>('/work/integrations/sources/'+encodeURIComponent(selected)+'/deliveries'),
+      apiClient<{items:Outbound[]}>('/work/integrations/sources/'+encodeURIComponent(selected)+'/outbox'),
+    ]).then(([incoming,outgoing])=>{
+      if(valid){setDeliveries(incoming.items||[]);setOutbox(outgoing.items||[]);}
+    }).catch(()=>{if(valid)setError('Connector delivery history is unavailable.');});
     return()=>{valid=false;};
   },[selected]);
 
@@ -73,6 +84,21 @@ export function IntegrationSourcesPanel(){
       setMessage(enabled?'Signed source re-enabled.':'Signed source disabled; further deliveries will be denied.');
       await load();
     }catch(caught){setError(caught instanceof Error?caught.message:'Source control did not save.');}
+    finally{setBusy(false);}
+  }
+  async function recover(id:string){
+    if(busy||recoveryNote.trim().length<16)return;
+    setBusy(true);setError('');setMessage('');
+    try{
+      await apiClient('/work/integrations/outbox/'+encodeURIComponent(id)+'/recover',{
+        method:'POST',body:JSON.stringify({justification:recoveryNote.trim()}),
+      });
+      setMessage('Delivery recovered for a new attempt. The warehouse task is unchanged.');
+      setRecovering('');setRecoveryNote('');
+      const next=await apiClient<{items:Outbound[]}>(
+        '/work/integrations/sources/'+encodeURIComponent(selected)+'/outbox');
+      setOutbox(next.items||[]);
+    }catch(caught){setError(caught instanceof Error?caught.message:'Recovery was rejected.');}
     finally{setBusy(false);}
   }
   const focused=sources.find(x=>x.id===selected);
@@ -131,6 +157,33 @@ export function IntegrationSourcesPanel(){
               <p className="mt-1 text-[#748778]">{x.reason_code==='none'?'Received':x.reason_code}</p></div>
             <span className="text-[#829084]">{fmt(x.received_at)}</span></div>)}
           {!deliveries.length?<p className="p-4 text-xs text-[#718275]">No signed deliveries yet.</p>:null}
+        </div>
+        <div className="space-y-2 border-t border-[#e6efe7] pt-4">
+          <h3 className="text-xs font-semibold text-[#244a34]">Outbound reconciliation</h3>
+          <p className="text-[11px] leading-5 text-[#778979]">Reviewed warehouse tasks only · explicit remote acknowledgement</p>
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-[#e1e9e2]">
+            {outbox.map(x=><div key={x.id} className="border-b border-[#eaf0ea] p-3 text-xs last:border-0">
+              <div className="flex items-center justify-between gap-2"><span className="font-semibold text-[#315b3e]">{x.status}</span>
+                <span className="text-[#758679]">{x.attempts} attempts</span></div>
+              <p className="mt-1 truncate text-[11px] text-[#657a6a]">{x.work_item_id}</p>
+              <p className="mt-1 text-[11px] text-[#657a6a]">{x.ack_reference?'Acknowledged: '+x.ack_reference:x.last_error_code||'Awaiting dispatch'}</p>
+              {x.status==='dead'&&x.recovered_count<3?<div className="mt-3">
+                {recovering===x.id?<div className="space-y-2">
+                  <label htmlFor={'recovery-'+x.id} className="wm-label">Recovery justification</label>
+                  <textarea id={'recovery-'+x.id} className="wm-input" rows={2} minLength={16} maxLength={1000}
+                    value={recoveryNote} onChange={e=>setRecoveryNote(e.target.value)}
+                    placeholder="Describe the resolved endpoint issue and why retry is safe."/>
+                  <button type="button" onClick={()=>void recover(x.id)} disabled={busy||recoveryNote.trim().length<16}
+                    className="min-h-10 rounded-lg bg-[#155a40] px-3 text-xs font-semibold text-white disabled:opacity-50">
+                    Retry delivery
+                  </button>
+                  <button type="button" onClick={()=>{setRecovering('');setRecoveryNote('');}} className="ml-2 text-xs text-[#687e6d]">Cancel</button>
+                </div>:<button type="button" onClick={()=>{setRecovering(x.id);setRecoveryNote('');}}
+                  className="text-[11px] font-semibold text-[#286846]">Review failed delivery</button>}
+              </div>:null}
+            </div>)}
+            {!outbox.length?<p className="p-4 text-xs text-[#728474]">No reviewed signed work awaiting outbound acknowledgement.</p>:null}
+          </div>
         </div></>:<div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center text-[#748476]">
           <ShieldAlert className="h-6 w-6"/><p className="text-xs">Select a registered source to inspect delivery health.</p>
         </div>}
