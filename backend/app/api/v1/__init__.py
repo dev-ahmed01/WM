@@ -14,6 +14,7 @@ from app.api.v1.handover import router as handover_router
 from app.api.v1.work_items import router as work_items_router
 from app.api.v1.work_execution import router as work_execution_router
 from app.api.v1.procedure_drafts import router as procedure_drafts_router
+from app.api.v1.work_exceptions import router as work_exceptions_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -29,6 +30,7 @@ api_v1_router.include_router(handover_router)
 api_v1_router.include_router(work_items_router)
 api_v1_router.include_router(work_execution_router)
 api_v1_router.include_router(procedure_drafts_router)
+api_v1_router.include_router(work_exceptions_router)
 
 __all__ = [
     "api_v1_router",
@@ -45,5 +47,6 @@ __all__ = [
     "work_items_router",
     "work_execution_router",
     "procedure_drafts_router",
+    "work_exceptions_router",
 ]
 
