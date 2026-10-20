@@ -13,7 +13,7 @@ services:
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Missing migration-only PostgreSQL URL}
       DATABASE_URL: ${DATABASE_URL:?Missing runtime PostgreSQL URL}
     command: ["sh", "-ec", "python scripts/migrate_postgres.py && python scripts/grant_pg_runtime.py"]
-    networks: [internal]
+    networks: [database_egress]
 
   backend:
     build:
@@ -37,11 +37,16 @@ services:
       VOICE_ENABLED: "false"
       VOICE_PREWARM_MODELS: "false"
       POSTGRES_POOL_SIZE: "4"
+      # No WMS/ERP callbacks may leave this reference staging deployment.
+      WORKMATE_OUTBOUND_ENABLED: "false"
+      WORKMATE_OUTBOUND_ALLOWED_HOSTS: ""
     depends_on:
       migrate:
         condition: service_completed_successfully
     command: ["sh", "-ec", "python scripts/verify_runtime_database.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
-    networks: [internal]
+    # The private app network has no egress. A second, explicitly scoped
+    # bridge is required for the external managed PostgreSQL endpoint.
+    networks: [internal, database_egress]
     expose: ["8000"]
     read_only: true
     tmpfs:
@@ -108,7 +113,7 @@ services:
       BACKUP_DIRECTORY: /backups
     volumes:
       - ./backups:/backups
-    networks: [internal]
+    networks: [database_egress]
     security_opt:
       - no-new-privileges:true
 
@@ -117,6 +122,9 @@ networks:
   internal:
     internal: true
   public: {}
+  # External managed Postgres requires an outbound-capable bridge. The host
+  # firewall/DNS policy MUST restrict its destinations; Docker alone cannot.
+  database_egress: {}
 
 volumes:
   caddy_data: {}

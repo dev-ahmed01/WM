@@ -10,6 +10,22 @@ A one-shot `migrate` service applies versioned SQL with the owner credential and
 
 The existing Vercel `workmate-ai` project was found in the account listing; it has not been changed or redeployed. Railway exposes a different project, so this staging package does not create a potentially billable new Railway service. You can keep Caddy/Next.js and FastAPI on a single small test server, or later split the UI into Vercel after backend/DB staging is verified. This is not a cloud-cost quote.
 
+## Corrected staging network plan — Phase 7A
+
+The original reference Compose topology attached both the migration job and API only to a Docker network marked `internal: true`. That prevents outbound connections to the separately managed PostgreSQL service and is not a functional remote-database staging deployment.
+
+The corrected topology separates:
+
+- `internal` (**internal: true**) for Next.js ↔ FastAPI ↔ Caddy, without public access to API or frontend ports;
+- `database_egress` (outbound-capable bridge) for migration, API, and optional encrypted-backup jobs to reach the **operator-provisioned managed PostgreSQL hostname**;
+- `public` for Caddy HTTPS ingress only. The frontend is **not** on the outbound network, and FastAPI is never published as a host port.
+
+**Security dependency:** Docker's outbound bridge is NOT a network firewall. An operator must restrict backend/migrator/backup egress to the actual PostgreSQL destination at the host/VPC firewall, use `sslmode=verify-full`, prevent private-IP / DNS-rebinding egress for any future external callback, and verify TLS certificates. Backend ERP outbound is explicitly **disabled** in this staging profile, and no vendor callbacks are configured.
+
+`python scripts/check_staging_topology.py` is a **static** check for network separation, role preflight, and default-off ERP integrations; CI also checks Compose parsing. Neither is proof that the managed database is reachable or that firewall/TLS policies exist on an actual server. On the real host, test the network with operator-owned throwaway credentials against the approved PostgreSQL endpoint **before** application startup.
+
+The sample staging environment remains placeholder-only. Real passwords and TLS configuration must come from an external secrets manager, never be committed to GitHub. A successful staging stack is still **not** a production pilot approval.
+
 ## Prerequisites (operator-owned)
 
 1. A staging host with Docker/Compose, an unused DNS name pointing to it, inbound TCP 80/443 (and UDP 443 if HTTP/3 is desired), and outbound access to a managed PostgreSQL 16 instance.
