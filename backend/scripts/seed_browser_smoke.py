@@ -17,6 +17,7 @@ DEPARTMENTS = (
 )
 USERS = (
     ("e2e_admin", "e2e_admin@workmate.test", "e2e_ops", "e2e_role_admin"),
+    ("e2e_site_admin", "e2e_site_admin@workmate.test", "e2e_ops", "e2e_role_admin"),
     ("e2e_employee", "e2e_employee@workmate.test", "e2e_ops", "e2e_role_employee"),
     ("e2e_other", "e2e_other@workmate.test", "e2e_other", "e2e_role_employee"),
     ("e2e_manager", "e2e_manager@workmate.test", "e2e_ops", "e2e_role_manager"),
