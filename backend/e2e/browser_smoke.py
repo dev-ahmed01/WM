@@ -432,11 +432,17 @@ def main():
             assert employee.request.get(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
             ).status==403
-            manager.get_by_role("button",name="Take ownership").click()
-            expect(manager.get_by_text("Review owner")).to_be_visible()
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/claim")
+                and r.request.method=="POST",timeout=20000
+            ) as claimed_case:
+                manager.get_by_role("button",name="Take ownership").click()
+            assert claimed_case.value.status==200
+            expect(manager.get_by_role("button",name="Take ownership")).not_to_be_visible(timeout=15000)
             manager.get_by_label("Supervisor review note").fill(
                 "Quarantine the damaged goods; assign physical QA review next shift."
             )
+            expect(manager.get_by_role("button",name="Request follow-up")).to_be_enabled(timeout=15000)
             with manager.expect_response(
                 lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/review")
                 and r.request.method=="POST",timeout=20000
