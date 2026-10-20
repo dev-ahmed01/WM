@@ -248,6 +248,7 @@ def main():
                     """,(published_version,))
                     assert cur.fetchone()[0]==1
             expect(admin.get_by_text("Published version:",exact=False)).to_be_visible(timeout=15000)
+            admin.evaluate("window.scrollTo(0,0)")
             admin.screenshot(path="/tmp/workmate-phase3b-published-workflow.png",full_page=True)
             status=admin.request.get(f"{BASE}/api/backend/procedure/drafts/{imported_id}")
             assert status.status==200 and status.json()["status"]=="published"
@@ -364,6 +365,7 @@ def main():
             employee.get_by_text("Expected outcome recorded").click()
             employee.get_by_role("button",name="Record decision").click()
             expect(employee.get_by_text("Published workflow completed")).to_be_visible(timeout=15000)
+            employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-phase3b-worker-execution.png",full_page=True)
             assert outsider.request.get(
                 f"{BASE}/api/backend/work/execution/{work_id}"
