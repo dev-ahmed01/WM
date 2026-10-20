@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from scripts.pilot_release_gate import (
-    BOOLEAN_GATES, COUNTS, ZERO_GATES, assess_file, evaluate,
+    BOOLEAN_GATES, COUNTS, ZERO_GATES, INTEGRATION_FIELD_GATES, assess_file, evaluate,
 )
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "deploy" / "pilot" / "evidence.template.json"
@@ -23,6 +23,8 @@ def test_release_gate_requires_every_field_and_rejects_boolean_counts():
     evidence = copy.deepcopy(template)
     for key in BOOLEAN_GATES:
         evidence[key] = True
+    for key in INTEGRATION_FIELD_GATES:
+        evidence[key] = True
     for key, count in COUNTS.items():
         evidence[key] = count
     for key in ZERO_GATES:
@@ -38,3 +40,21 @@ def test_release_gate_requires_every_field_and_rejects_boolean_counts():
         broken = dict(evidence, **{key:value})
         assert evaluate(broken, "synthetic-only")["decision"] == "NO_GO"
         assert key in evaluate(broken, "synthetic-only")["blocked_gates"]
+
+
+def test_enabled_wms_pilot_requires_all_real_world_integration_signoffs():
+    template=json.loads(TEMPLATE.read_text())
+    assert template["bidirectional_integrations_in_scope"] is True
+    verdict=evaluate(template,"checked-file")
+    assert verdict["decision"]=="NO_GO"
+    for key in INTEGRATION_FIELD_GATES:
+        assert key in verdict["blocked_gates"]
+    # Scope cannot be silently omitted to bypass the integration evidence gate.
+    unspecified=dict(template)
+    del unspecified["bidirectional_integrations_in_scope"]
+    unspecified.update({key:True for key in INTEGRATION_FIELD_GATES})
+    assert "bidirectional_integrations_in_scope" in evaluate(unspecified,"test")["blocked_gates"]
+    negative=dict(template,bidirectional_integrations_in_scope=False)
+    assert not any(key in evaluate(negative,"test")["blocked_gates"]
+                   for key in INTEGRATION_FIELD_GATES)
+    assert evaluate(negative,"test")["decision"]=="NO_GO"  # all other gates still required
