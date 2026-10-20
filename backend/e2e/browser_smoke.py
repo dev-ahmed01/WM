@@ -617,22 +617,26 @@ def main():
             outsider.wait_for_url("**/workspace", timeout=12000)
             manager.goto(f"{BASE}/handover/review")
             expect(manager.get_by_role("heading", name="Shift handover queue")).to_be_visible()
+            # The linked Phase 4B incident handover also appears here.
+            # Target the independent legacy handover by its recipient rather
+            # than clicking the first of multiple valid claim buttons.
+            target_handover=manager.locator("article").filter(has_text="Night shift lead")
             with manager.expect_response(
                 lambda r: r.url.endswith("/api/backend/handover/" + handover_id + "/claim")
                 and r.request.method == "POST", timeout=20000,
             ) as claim_reply:
-                manager.get_by_role("button", name="Take ownership").click()
+                target_handover.get_by_role("button", name="Take ownership").click()
             assert claim_reply.value.status == 200, claim_reply.value.text()
             assert claim_reply.value.json()["assigned_to_user_id"]
             manager.evaluate("window.scrollTo(0,0)")
             manager.screenshot(path="/tmp/workmate-eval-manager-queue.png", full_page=True)
-            manager.get_by_label("Reviewer note (required)").fill(
+            target_handover.get_by_label("Reviewer note (required)").fill(
                 "Keep the damaged cartons separated until reviewed.")
             with manager.expect_response(
                 lambda r: r.url.endswith("/api/backend/handover/" + handover_id + "/review")
                 and r.request.method == "POST", timeout=20000,
             ) as reviewed:
-                manager.get_by_role("button", name="Request follow-up").click()
+                target_handover.get_by_role("button", name="Request follow-up").click()
             assert reviewed.value.status == 200, reviewed.value.text()
             assert reviewed.value.json()["status"] == "follow_up_requested"
             outsider_answer = ask_reference(
