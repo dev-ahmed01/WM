@@ -350,7 +350,7 @@ def main():
             assert bound.value.status==200,bound.value.text()
             # Deterministic microphone fixture exercises MediaRecorder UI, upload,
             # explicit editing and confirmation. This does NOT validate Whisper WER.
-            employee.add_init_script("""() => {
+            employee.add_init_script("""(() => {
                 Object.defineProperty(navigator, 'mediaDevices', {
                   configurable: true,
                   value: {getUserMedia: async () => {
@@ -375,7 +375,7 @@ def main():
                     this.onstop?.();
                   }
                 };
-            }""")
+            })();""")
             employee.goto(f"{BASE}/work/{work_id}")
             expect(employee.get_by_role("button",name="Start guided work")).to_be_visible(timeout=15000)
             employee.get_by_role("button",name="Start guided work").click()
