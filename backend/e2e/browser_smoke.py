@@ -410,7 +410,7 @@ def main():
             stamp=str(int(time.time()))
             source_secret=b"ci-only-signed-warehouse-secret-has-36-bytes-for-tests"
             def signature(nonce,payload=raw):
-                mac=hmac.new(source_secret,b"v1\n"+stamp.encode()+b"\n"+nonce.encode()+b"\\n"+payload,
+                mac=hmac.new(source_secret,b"v1\n"+stamp.encode()+b"\n"+nonce.encode()+b"\n"+payload,
                              hashlib.sha256).hexdigest()
                 return {"X-WM-Timestamp":stamp,"X-WM-Nonce":nonce,
                         "X-WM-Signature":"v1="+mac,"Content-Type":"application/json"}
