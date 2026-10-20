@@ -249,6 +249,16 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             </div>
           ) : null}
 
+          {position.status === 'blocked' ? (
+            <div role="alert" className="rounded-xl border border-amber-200 bg-[#fffaf0] p-5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+                <ShieldAlert className="h-5 w-5" />Work stopped — supervisor review required
+              </div>
+              <p className="mt-2 text-xs leading-6 text-amber-900">This assignment cannot resume from the worker screen. Evidence and the recorded SOP state are retained for review.</p>
+              {position.case_id ? <p className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-950">Supervisor case: {position.case_id}</p> : null}
+              {canManage ? <Link href="/work/exceptions" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-900">Open supervisor case desk <ArrowRight className="h-4 w-4"/></Link> : null}
+            </div>
+          ) : null}
           {position.status === 'active' && safetyGates.length ? (
             <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-amber-950">
