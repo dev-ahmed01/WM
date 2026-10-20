@@ -131,3 +131,50 @@ def test_corrective_approval_requires_admin_and_explicit_decision():
     assert result.status_code==200
     assert approve.call_args.args==("receiving","admin2","case_one","cwr_1",
                                     "approved",decision["decision_note"])
+
+
+def test_case_closure_requires_distinct_role_and_literal_site_attestation():
+    base="/api/v1/work/exceptions/case_one/closure"
+    review={"expected_revision":7,
+            "review_note":"Reviewed the fresh corrective session and its retained photo records."}
+    assert client.post(base+"/evidence",headers=auth("employee"),json=review).status_code==403
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",
+               return_value={"id":"cls_one","evidence_reviewed_by":"supervisor"}) as reviewed:
+        result=client.post(base+"/evidence",headers=auth(),json=review)
+    assert result.status_code==201
+    assert reviewed.call_args.args==("receiving","supervisor","case_one",7,review["review_note"])
+    for injected in ({"release_original":True},{"work_id":"other"},{"verification_status":"VERIFIED"}):
+        assert client.post(base+"/evidence",headers=auth(),json={**review,**injected}).status_code==422
+    acceptance={
+        "expected_revision":8,"site_record_reference":"SITE-QA-2071",
+        "site_acceptance_note":"Personally inspected receiving bay and checked quarantined cartons on site.",
+        "independent_site_inspection_attested":True,
+    }
+    assert client.post(base+"/site",headers=auth("manager"),json=acceptance).status_code==403
+    assert client.post(base+"/site",headers=auth("employee"),json=acceptance).status_code==403
+    for injected in (
+        {"release_original":True}, {"site_record_reference":"x"},
+        {"independent_site_inspection_attested":False},
+        {"original_task_status":"completed"},
+    ):
+        assert client.post(base+"/site",headers=auth("admin"),json={**acceptance,**injected}).status_code==422
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.accept_site",
+               return_value={"status":"closed","original_work_status":"blocked"}) as accepted:
+        result=client.post(base+"/site",headers=auth("admin","receiving","site_signer"),json=acceptance)
+    assert result.status_code==200 and result.json()["original_work_status"]=="blocked"
+    assert accepted.call_args.args==(
+        "receiving","site_signer","case_one",8,"SITE-QA-2071",
+        acceptance["site_acceptance_note"],True,
+    )
+
+
+def test_case_closure_does_not_leak_cross_department_or_storage_errors():
+    request={"expected_revision":7,"review_note":"A separate reviewer examined the recorded corrective evidence."}
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",side_effect=CaseNotFound()):
+        assert client.post("/api/v1/work/exceptions/hidden/closure/evidence",
+                           headers=auth(),json=request).status_code==404
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",
+               side_effect=RuntimeError("postgresql://secret:password@internalhost")):
+        response=client.post("/api/v1/work/exceptions/case_one/closure/evidence",
+                             headers=auth(),json=request)
+    assert response.status_code==503 and "internalhost" not in response.text
