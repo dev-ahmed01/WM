@@ -126,6 +126,21 @@ def test_signed_connector_nonce_diagnostics_review_and_tenant_separation(monkeyp
     finally:
         with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
             with conn.cursor() as cur:
+                # Phase 6C adds a dependent outbox on independent acceptance.
+                # Tear down the leaf attempt/recovery rows before the intake.
+                cur.execute("""
+                  DELETE FROM workmate_copilot.work_integration_outbox_attempts
+                  WHERE outbox_id IN (
+                    SELECT id FROM workmate_copilot.work_integration_outbox
+                    WHERE source_id=%s)
+                """,(connector,))
+                cur.execute("""
+                  DELETE FROM workmate_copilot.work_integration_outbox_recoveries
+                  WHERE outbox_id IN (
+                    SELECT id FROM workmate_copilot.work_integration_outbox
+                    WHERE source_id=%s)
+                """,(connector,))
+                cur.execute("DELETE FROM workmate_copilot.work_integration_outbox WHERE source_id=%s",(connector,))
                 cur.execute("DELETE FROM workmate_copilot.work_integration_deliveries WHERE source_id=%s",(connector,))
                 if entry:
                     cur.execute("DELETE FROM workmate_copilot.work_integration_intake WHERE id=%s",(entry,))
