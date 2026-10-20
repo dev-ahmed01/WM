@@ -479,6 +479,9 @@ def main():
             ) as contained:
                 manager.get_by_role("button",name="Record containment").click()
             assert contained.value.status==200
+            # The UI reloads the case and its audit trail asynchronously;
+            # await the persisted containment before proposing remediation.
+            expect(manager.get_by_text("containment recorded",exact=True)).to_be_visible(timeout=15000)
             manager.get_by_label("Operational action note").fill(
                 "Schedule authorized site QA inspection and independent written sign-off."
             )
