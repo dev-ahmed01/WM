@@ -231,12 +231,16 @@ def main():
             admin.screenshot(path="/tmp/workmate-phase3b-published-workflow.png",full_page=True)
             status=admin.request.get(f"{BASE}/api/backend/procedure/drafts/{imported_id}")
             assert status.status==200 and status.json()["status"]=="published"
-            duplicate=admin.request.post(
-                f"{BASE}/api/backend/procedure/drafts/{imported_id}/publish",
-                data={"expected_revision":reviewed.value.json()["revision"],
-                      "approval":"PUBLISH_REVIEWED_SOP"}
-            )
-            assert duplicate.status in (409,422)
+            # Send JSON from the authenticated same-origin browser, including
+            # the usual CSRF protections, to prove replay is a conflict.
+            duplicate=admin.evaluate("""async ({id,revision}) => {
+                const response=await fetch('/api/backend/procedure/drafts/'+id+'/publish',{
+                    method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({expected_revision:revision,approval:'PUBLISH_REVIEWED_SOP'})
+                });
+                return response.status;
+            }""",{"id":imported_id,"revision":reviewed.value.json()["revision"]})
+            assert duplicate==409,duplicate
 
 
             # Force short-lived access-cookie expiry while retaining the
