@@ -5,6 +5,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import Literal
 from app.middleware.rbac_middleware import require_role
 from app.repositories.work_corrective_repository import CorrectiveWorkRepository
+from app.repositories.work_case_closure_repository import CaseClosureRepository
 from app.repositories.work_exception_repository import (
     WorkExceptionRepository,CaseNotFound,CaseConflict,
 )
@@ -50,6 +51,17 @@ class CorrectiveDecision(Strict):
     decision:Literal["approved","rejected"]
     decision_note:str=Field(min_length=16,max_length=1000)
 
+
+class EvidenceReview(Strict):
+    expected_revision:int=Field(ge=1)
+    review_note:str=Field(min_length=20,max_length=1000)
+
+
+class SiteAcceptance(Strict):
+    expected_revision:int=Field(ge=1)
+    site_record_reference:str=Field(min_length=8,max_length=128)
+    site_acceptance_note:str=Field(min_length=30,max_length=1000)
+    independent_site_inspection_attested:Literal[True]
 
 
 def who(user):
@@ -145,4 +157,29 @@ async def decide_corrective_task(
     return await call(
         CorrectiveWorkRepository.decide,department,actor,
         case_id,request_id,payload.decision,payload.decision_note,
+    )
+
+
+@router.post("/{case_id}/closure/evidence",status_code=201)
+async def review_corrective_evidence(
+    case_id:str,payload:EvidenceReview,
+    user:dict=Depends(require_role("admin","manager")),
+):
+    department,actor=who(user)
+    return await call(
+        CaseClosureRepository.review_evidence,department,actor,case_id,
+        payload.expected_revision,payload.review_note,
+    )
+
+
+@router.post("/{case_id}/closure/site")
+async def attest_independent_site_acceptance(
+    case_id:str,payload:SiteAcceptance,
+    user:dict=Depends(require_role("admin")),
+):
+    department,actor=who(user)
+    return await call(
+        CaseClosureRepository.accept_site,department,actor,case_id,
+        payload.expected_revision,payload.site_record_reference,
+        payload.site_acceptance_note,payload.independent_site_inspection_attested,
     )
