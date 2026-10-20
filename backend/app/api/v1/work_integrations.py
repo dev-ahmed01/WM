@@ -20,6 +20,10 @@ from app.repositories.work_integration_connector_repository import (
     ConnectorRepository,configured_secret,is_signature_valid,ID_PATTERN,MAX_BODY,
 )
 
+from app.repositories.work_integration_outbox_repository import (
+    OutboxRepository,OutboxConflict,OutboxNotFound,
+)
+
 router=APIRouter(prefix="/work/integrations",tags=["Warehouse integrations"])
 
 class Strict(BaseModel):
@@ -70,6 +74,12 @@ async def call(fn,*args):
         return await run_in_threadpool(fn,*args)
     except IntegrationNotFound as exc:
         raise HTTPException(404,detail={"error_code":"INTEGRATION_NOT_FOUND"}) from exc
+    except OutboxNotFound as exc:
+        raise HTTPException(404,detail={"error_code":"OUTBOX_NOT_FOUND"}) from exc
+    except OutboxConflict as exc:
+        raise HTTPException(409,detail={
+            "error_code":"OUTBOX_CONFLICT","message":str(exc),
+        }) from exc
     except IntegrationConflict as exc:
         raise HTTPException(409,detail={
             "error_code":"INTEGRATION_CONFLICT","message":str(exc),
@@ -187,3 +197,27 @@ async def receive_signed_webhook(source_id:str,request:Request):
     if delivery["status"]=="invalid":
         raise HTTPException(422,detail={"error_code":"WEBHOOK_PAYLOAD_INVALID"})
     return delivery
+
+
+class OutboxRecovery(Strict):
+    justification:str=Field(min_length=16,max_length=1000)
+
+
+@router.get("/sources/{source_id}/outbox")
+async def source_outbox(
+    source_id:str,limit:int=Query(50,ge=1,le=100),
+    user:dict=Depends(require_role("admin")),
+):
+    dept,actor=who(user)
+    return {"items":await call(OutboxRepository.list,dept,actor,source_id,limit)}
+
+
+@router.post("/outbox/{event_id}/recover")
+async def recover_outbox_event(
+    event_id:str,payload:OutboxRecovery,
+    user:dict=Depends(require_role("admin")),
+):
+    dept,actor=who(user)
+    return await call(
+        OutboxRepository.recover,dept,actor,event_id,payload.justification.strip(),
+    )
