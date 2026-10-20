@@ -98,9 +98,41 @@ def test_guidance_api_scopes_worker_and_rejects_invalid_payloads():
 def test_api_uses_authenticated_actor_department_and_never_executes_steps():
     endpoint="/api/v1/work/guidance/wrk_1"
     with patch("app.api.v1.task_guidance.WorkExecutionRepository.position",
-               return_value=position()) as get_position:
+               return_value=position()) as get_position, patch(
+               "app.api.v1.task_guidance.WorkExecutionRepository.published_in_department",
+               return_value=True) as recheck:
         result=client.post(endpoint,headers=auth(),json={"intent":"evidence"})
     assert result.status_code==200,result.text
     assert get_position.call_args.args==("warehouse","operator",False,"wrk_1")
+    assert recheck.call_args.args==("warehouse","v_published")
     assert result.json()["read_only"] is True
     assert "JPEG photograph" in result.json()["answer"]
+
+
+def test_withdrawn_version_never_receives_guidance():
+    endpoint="/api/v1/work/guidance/wrk_1"
+    with patch("app.api.v1.task_guidance.WorkExecutionRepository.position",
+               return_value=position()), patch(
+               "app.api.v1.task_guidance.WorkExecutionRepository.published_in_department",
+               return_value=False), patch(
+               "app.api.v1.task_guidance.TaskGuidanceService.answer",
+               new_callable=AsyncMock) as helper:
+        result=client.post(endpoint,headers=auth(),json={
+            "intent":"current_step"
+        })
+    assert result.status_code==409
+    assert result.json()["detail"]["error_code"]=="SOP_VERSION_WITHDRAWN"
+    helper.assert_not_awaited()
+
+
+def test_blocked_task_can_report_stop_without_reusing_withdrawn_procedure():
+    endpoint="/api/v1/work/guidance/wrk_1"
+    with patch("app.api.v1.task_guidance.WorkExecutionRepository.position",
+               return_value=position("blocked")), patch(
+               "app.api.v1.task_guidance.WorkExecutionRepository.published_in_department"
+               ) as recheck:
+        result=client.post(endpoint,headers=auth(),json={"intent":"current_step"})
+    assert result.status_code==200
+    assert result.json()["requires_supervisor"]
+    assert "blocked" in result.json()["answer"]
+    recheck.assert_not_called()
