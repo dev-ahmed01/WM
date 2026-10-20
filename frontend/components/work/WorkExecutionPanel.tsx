@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle, ArrowRight, Camera, CheckCircle2, ClipboardCheck,
   Clock3, FileCheck2, FileText, GitBranchPlus, LockKeyhole,
