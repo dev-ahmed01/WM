@@ -6,13 +6,18 @@ department manager imports normalized events for a second manager to review.
 from __future__ import annotations
 
 from typing import Literal
+import json
 
-from fastapi import APIRouter,Depends,HTTPException,Query
-from pydantic import BaseModel,ConfigDict,Field,field_validator
+from fastapi import APIRouter,Depends,HTTPException,Query,Request
+from pydantic import BaseModel,ConfigDict,Field,field_validator,ValidationError
 from starlette.concurrency import run_in_threadpool
 from app.middleware.rbac_middleware import require_role
 from app.repositories.work_integration_intake_repository import (
     IntegrationIntakeRepository,IntegrationNotFound,IntegrationConflict,
+)
+
+from app.repositories.work_integration_connector_repository import (
+    ConnectorRepository,configured_secret,is_signature_valid,ID_PATTERN,MAX_BODY,
 )
 
 router=APIRouter(prefix="/work/integrations",tags=["Warehouse integrations"])
@@ -35,7 +40,7 @@ class IncomingWork(Strict):
     @classmethod
     def clean_text(cls,value:str):
         value=value.strip()
-        if "\x00" in value or (value=="" and cls.__name__=="n/a"):
+        if "\x00" in value or False:
             raise ValueError("Invalid task text")
         return value
 
@@ -104,3 +109,81 @@ async def decide_import(
         IntegrationIntakeRepository.decide,dept,actor,intake_id,
         payload.decision,payload.decision_note,
     )
+
+
+class NewConnector(Strict):
+    id:str=Field(min_length=6,max_length=64,pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{5,63}$")
+    source_system:Literal["sap","oracle","odoo","custom_wms"]
+
+
+class ConnectorControl(Strict):
+    enabled:bool
+
+
+@router.get("/sources")
+async def connector_sources(user:dict=Depends(require_role("admin"))):
+    dept,actor=who(user)
+    return {"items":await call(ConnectorRepository.list,dept,actor)}
+
+
+@router.post("/sources",status_code=201)
+async def register_connector(payload:NewConnector,user:dict=Depends(require_role("admin"))):
+    dept,actor=who(user)
+    return await call(ConnectorRepository.register,dept,actor,payload.id,payload.source_system)
+
+
+@router.post("/sources/{source_id}/control")
+async def set_connector_control(
+    source_id:str,payload:ConnectorControl,user:dict=Depends(require_role("admin")),
+):
+    dept,actor=who(user)
+    return await call(ConnectorRepository.set_enabled,dept,actor,source_id,payload.enabled)
+
+
+@router.get("/sources/{source_id}/deliveries")
+async def source_deliveries(
+    source_id:str,limit:int=Query(40,ge=1,le=100),
+    user:dict=Depends(require_role("admin")),
+):
+    dept,actor=who(user)
+    return {"items":await call(ConnectorRepository.deliveries,dept,actor,source_id,limit)}
+
+
+@router.post("/webhooks/{source_id}",status_code=202)
+async def receive_signed_webhook(source_id:str,request:Request):
+    """Public ingress only with configured signing key, fresh timestamp and nonce.
+
+    All source objects, departments, audit authors and review permission come
+    from the registered backend source; never from unauthenticated JSON claims.
+    """
+    secret=configured_secret(source_id) if ID_PATTERN.fullmatch(source_id) else None
+    stamp=request.headers.get("x-wm-timestamp","")
+    nonce=request.headers.get("x-wm-nonce","")
+    signature=request.headers.get("x-wm-signature","")
+    if not secret:
+        raise HTTPException(401,detail={"error_code":"WEBHOOK_AUTH_FAILED"})
+    # Stream-bounded upload avoids allocating arbitrarily large bodies.
+    data=bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data)>MAX_BODY:
+            raise HTTPException(413,detail={"error_code":"WEBHOOK_TOO_LARGE"})
+    raw=bytes(data)
+    if not is_signature_valid(secret,stamp,nonce,raw,signature):
+        raise HTTPException(401,detail={"error_code":"WEBHOOK_AUTH_FAILED"})
+    source=await call(ConnectorRepository.lookup_active,source_id)
+    if source is None:
+        raise HTTPException(401,detail={"error_code":"WEBHOOK_AUTH_FAILED"})
+    payload=None
+    issue=None
+    try:
+        candidate=json.loads(raw)
+        payload=IncomingWork.model_validate(candidate).model_dump()
+    except (ValueError,TypeError,ValidationError):
+        issue="invalid_schema"
+    delivery=await call(ConnectorRepository.deliver,source,nonce,stamp,raw,payload,issue)
+    if delivery["status"]=="conflict":
+        raise HTTPException(409,detail={"error_code":"WEBHOOK_SOURCE_CONFLICT"})
+    if delivery["status"]=="invalid":
+        raise HTTPException(422,detail={"error_code":"WEBHOOK_PAYLOAD_INVALID"})
+    return delivery
