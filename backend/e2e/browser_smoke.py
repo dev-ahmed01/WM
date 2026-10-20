@@ -481,6 +481,9 @@ def main():
                 f"{BASE}/api/backend/work/integrations/operations/readiness").json()
             assert health_after["counts"]["open_alerts"]>=2
             assert health_after["latest_actions"][0]["issue_code"]=="invalid_inbound"
+            # Full-page evidence should include the fixed navigation from y=0;
+            # auto-scroll from the incident action would otherwise displace it.
+            admin.evaluate("window.scrollTo(0,0)")
             admin.screenshot(path="/tmp/workmate-phase6d-operations-readiness.png",full_page=True)
             admin.get_by_role("button",name=re.compile("^e2e_signed_wms")).click()
             expect(admin.get_by_text("3 deliveries",exact=False)).to_be_visible(timeout=15000)
