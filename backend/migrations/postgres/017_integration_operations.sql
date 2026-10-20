@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS workmate_copilot.work_integration_operator_actions (
     ('dead_outbound','stale_outbound','expired_lease','invalid_inbound',
      'pending_review','signing_key_missing','outbound_unconfigured',
      'connector_disabled','no_recent_receipt')),
-  action VARCHAR(16) NOT NULL CHECK(action IN ('acknowledged','remediation_logged')),
+  action VARCHAR(24) NOT NULL CHECK(action IN ('acknowledged','remediation_logged')),
   justification VARCHAR(1000) NOT NULL
     CHECK(char_length(trim(justification)) BETWEEN 16 AND 1000),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
