@@ -432,6 +432,9 @@ def main():
             assert handover_created.value.status==201
             linked_handover=handover_created.value.json()["handover_id"]
             expect(employee.get_by_text("Shift handover saved:",exact=False)).to_be_visible(timeout=15000)
+            employee.reload()
+            expect(employee.get_by_text("Shift handover saved:",exact=False)).to_be_visible(timeout=15000)
+            expect(employee.get_by_role("button",name="Submit linked shift handover")).not_to_be_visible()
             employee.evaluate("window.scrollTo(0,0)")
             employee.screenshot(path="/tmp/workmate-phase4b-worker-handover.png",full_page=True)
             assert employee.request.post(
