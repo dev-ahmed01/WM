@@ -36,7 +36,7 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
                 (flow,"CORRECTIVE_"+k.upper(),dep,manager))
             cur.execute("""INSERT INTO knowledge_studio.workflow_versions
                 (id,workflow_id,version_number,stage_file_uri,ast_hash,status,published_at)
-                VALUES(%s,%s,1,'pgobj:corrective','{}','published',CURRENT_TIMESTAMP)""",
+                VALUES(%s,%s,1,'pgobj:corrective',%s,'published',CURRENT_TIMESTAMP)""",
                 (version,flow,"b"*64))
             for state,typ,initial,terminal,n in (
                 (first,"ATOMIC_STEP",True,False,1),(last,"END",False,True,2)
