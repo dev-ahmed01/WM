@@ -46,6 +46,21 @@ async def ask_about_task(
         raise HTTPException(status_code=409,detail={"error_code":"WORK_GUIDANCE_CONFLICT"}) from exc
     except Exception as exc:
         raise HTTPException(status_code=503,detail={"error_code":"WORK_GUIDANCE_UNAVAILABLE"}) from exc
+    if (current.get("workflow_version_id") and current.get("status") not in ("blocked","completed")):
+        try:
+            published=await run_in_threadpool(
+                WorkExecutionRepository.published_in_department,
+                department,current["workflow_version_id"],
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,detail={"error_code":"WORK_GUIDANCE_UNAVAILABLE"}
+            ) from exc
+        if not published:
+            raise HTTPException(status_code=409,detail={
+                "error_code":"SOP_VERSION_WITHDRAWN",
+                "message":"This procedure is no longer published. Stop work and ask your supervisor.",
+            })
     return await TaskGuidanceService.answer(
         current,department,payload.intent,payload.question.strip()
     )
