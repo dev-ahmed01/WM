@@ -76,10 +76,13 @@ class WorkExceptionRepository:
                 _begin(cur,department)
                 cur.execute("""
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
-                           w.assigned_to AS work_assignee,w.workflow_version_id
+                           w.assigned_to AS work_assignee,w.workflow_version_id,
+                           h.id AS handover_id,h.status AS handover_status
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.shift_handovers h
+                      ON h.work_exception_id=c.id AND h.department_id=c.department_id
                     WHERE c.department_id=%s
                     ORDER BY
                       CASE WHEN c.status IN ('open','claimed') THEN 0 ELSE 1 END,
@@ -98,10 +101,13 @@ class WorkExceptionRepository:
                 _begin(cur,department)
                 cur.execute("""
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
-                           w.assigned_to AS work_assignee,w.workflow_version_id
+                           w.assigned_to AS work_assignee,w.workflow_version_id,
+                           h.id AS handover_id,h.status AS handover_status
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.shift_handovers h
+                      ON h.work_exception_id=c.id AND h.department_id=c.department_id
                     WHERE c.id=%s AND c.department_id=%s
                 """,(case_id,department))
                 case=_row(cur)
@@ -207,6 +213,156 @@ class WorkExceptionRepository:
                     # Never mutate the work status or paused session here.
                     cur.execute("COMMIT")
                     return updated
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
+
+    @staticmethod
+    def action(department,manager,case_id,revision,kind,note):
+        """Append a human-authored containment/remediation record, never unblock."""
+        if kind not in ("containment_recorded","remediation_proposed"):
+            raise CaseConflict("Unsupported containment action.")
+        if not 12<=len(note.strip())<=1000:
+            raise CaseConflict("An actionable, specific note of 12–1000 characters is required.")
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _begin(cur,department)
+                try:
+                    cur.execute("""
+                        SELECT id,raised_by,reviewer_id,status,revision,work_item_id
+                        FROM workmate_copilot.work_exceptions
+                        WHERE id=%s AND department_id=%s FOR UPDATE
+                    """,(case_id,department))
+                    current=_row(cur)
+                    if not current:
+                        raise CaseNotFound()
+                    if (current["raised_by"]==manager
+                        or current["reviewer_id"]!=manager
+                        or current["status"] not in ("claimed","reviewed","follow_up_requested")
+                        or current["revision"]!=revision):
+                        raise CaseConflict("Only the assigned supervisor can add a current case action.")
+                    cur.execute("""
+                        SELECT status FROM workmate_copilot.work_items
+                        WHERE id=%s AND department_id=%s FOR UPDATE
+                    """,(current["work_item_id"],department))
+                    work=cur.fetchone()
+                    if not work or work[0]!="blocked":
+                        raise CaseConflict("This case is no longer linked to blocked work.")
+                    if kind=="remediation_proposed":
+                        cur.execute("""
+                            SELECT 1 FROM workmate_copilot.work_exception_events
+                            WHERE case_id=%s AND department_id=%s
+                            AND action='containment_recorded' LIMIT 1
+                        """,(case_id,department))
+                        if cur.fetchone() is None:
+                            raise CaseConflict("Record a containment action before proposing remediation.")
+                    cur.execute("""
+                        UPDATE workmate_copilot.work_exceptions
+                        SET revision=revision+1,updated_at=CURRENT_TIMESTAMP
+                        WHERE id=%s AND department_id=%s RETURNING id,revision,status
+                    """,(case_id,department))
+                    updated=_row(cur)
+                    _log(cur,case_id,department,manager,kind,note.strip())
+                    cur.execute("""
+                        INSERT INTO workmate_copilot.work_item_events
+                        (id,work_item_id,department_id,actor_id,action,event_payload)
+                        VALUES(%s,%s,%s,%s,%s,%s::jsonb)
+                    """,(uuid4().hex,current["work_item_id"],department,manager,kind,
+                          json.dumps({"case_id":case_id,"action":kind})))
+                    cur.execute("COMMIT")
+                    return updated
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
+
+    @staticmethod
+    def handover(department,worker,case_id,recipient,next_action,notes):
+        """The incident reporter transfers their *actual* paused SOP session.
+
+        Builds a normal shift_handover visible in the existing manager queue.
+        The case and handover IDs are not accepted from the client as proof
+        of session ownership: ownership and the snapshot come from PostgreSQL.
+        """
+        if not 2<=len(recipient.strip())<=100 or not 5<=len(next_action.strip())<=1500:
+            raise CaseConflict("Recipient and requested action are required.")
+        if len(notes)>1500:
+            raise CaseConflict("Handover notes exceed the permitted size.")
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _begin(cur,department)
+                try:
+                    cur.execute("""
+                        SELECT c.id,c.work_item_id,c.execution_session_id,c.trigger,
+                               c.severity,c.raised_by,w.status AS work_status,
+                               s.conversation_id,s.user_id AS session_owner,
+                               s.current_state_id,s.status AS session_status,
+                               state.title AS state_title
+                        FROM workmate_copilot.work_exceptions c
+                        JOIN workmate_copilot.work_items w
+                          ON w.id=c.work_item_id AND w.department_id=c.department_id
+                        JOIN workmate_copilot.workflow_sessions s
+                          ON s.id=c.execution_session_id
+                        JOIN workmate_copilot.conversations conv
+                          ON conv.id=s.conversation_id AND conv.department_id=c.department_id
+                             AND conv.user_id=%s
+                        LEFT JOIN knowledge_studio.workflow_states state
+                          ON state.id=s.current_state_id
+                        WHERE c.id=%s AND c.department_id=%s
+                        FOR UPDATE OF c,w,s
+                    """,(worker,case_id,department))
+                    current=_row(cur)
+                    if not current:
+                        raise CaseNotFound()
+                    if (current["raised_by"]!=worker or current["session_owner"]!=worker
+                        or current["work_status"]!="blocked" or
+                        current["session_status"]!="paused"):
+                        raise CaseConflict("Only the original worker can hand over an active blocked case.")
+                    cur.execute("""
+                        SELECT 1 FROM workmate_copilot.shift_handovers
+                        WHERE work_exception_id=%s AND department_id=%s
+                    """,(case_id,department))
+                    if cur.fetchone():
+                        raise CaseConflict("A shift handover already exists for this incident.")
+                    handover_id="hov_"+uuid4().hex
+                    cur.execute("""
+                        INSERT INTO workmate_copilot.shift_handovers (
+                          id,department_id,conversation_id,created_by,recipient_label,
+                          disposition,exception_type,severity,next_action,notes,
+                          snapshot_state,work_exception_id
+                        ) VALUES(
+                          %s,%s,%s,%s,%s,'blocked_supervisor',%s,%s,%s,%s,
+                          jsonb_build_object('workflow_status',%s::text,
+                                             'state_id',%s::text,
+                                             'step_title',%s::text,
+                                             'work_item_id',%s::text,
+                                             'case_id',%s::text),
+                          %s
+                        )
+                    """,(handover_id,department,current["conversation_id"],worker,
+                          recipient.strip(),
+                          "safety_concern" if current["trigger"]=="sop_outcome" else "other",
+                          current["severity"],next_action.strip(),notes.strip(),
+                          current["session_status"],current["current_state_id"],
+                          current["state_title"],current["work_item_id"],case_id,case_id))
+                    cur.execute("""
+                        INSERT INTO workmate_copilot.shift_handover_events
+                          (id,handover_id,department_id,actor_user_id,action)
+                        VALUES(%s,%s,%s,%s,'submitted')
+                    """,(uuid4().hex,handover_id,department,worker))
+                    _log(cur,case_id,department,worker,"handover_linked",
+                         "Shift handover submitted for this blocked task.")
+                    cur.execute("""
+                        INSERT INTO workmate_copilot.work_item_events
+                          (id,work_item_id,department_id,actor_id,action,event_payload)
+                        VALUES(%s,%s,%s,%s,'handover_linked',%s::jsonb)
+                    """,(uuid4().hex,current["work_item_id"],department,worker,
+                          json.dumps({"case_id":case_id,"handover_id":handover_id})))
+                    cur.execute("COMMIT")
+                    return {
+                        "handover_id":handover_id,"case_id":case_id,
+                        "work_id":current["work_item_id"],"status":"submitted",
+                        "work_status":"blocked",
+                    }
                 except Exception:
                     cur.execute("ROLLBACK")
                     raise
