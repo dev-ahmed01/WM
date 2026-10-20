@@ -66,7 +66,11 @@ def check_plan(steps:list[dict], decision:dict | None) -> tuple[list[dict],dict]
             raise ProcedurePlanError("Outcome codes must be unique uppercase identifiers.")
         if not isinstance(label,str) or not 3<=len(label.strip())<=120 or label.casefold() in labels:
             raise ProcedurePlanError("Each outcome label must be unique and meaningful.")
+        if type(opt.get("requires_supervisor_review",False)) is not bool:
+            raise ProcedurePlanError("Supervisor review must be a true/false decision.")
         codes.add(code);labels.add(label.casefold())
+    if opts and all(opt.get("requires_supervisor_review",False) for opt in opts):
+        raise ProcedurePlanError("At least one terminal completion outcome is required.")
     return validated,{"question":question.strip(),"options":opts}
 
 
@@ -115,12 +119,20 @@ def render_owd(draft:dict)->str:
             ":::","",
         ])
         for i,opt in enumerate(decision["options"]):
+            hold=opt.get("requires_supervisor_review",False)
             lines.extend([
-                f'::state[STATE_RESULT_{i+1:02d}]{{type="END" is_terminal=true}}',
+                f'::state[STATE_RESULT_{i+1:02d}]{{type="{"ESCALATION" if hold else "END"}" is_terminal={"false" if hold else "true"}}}',
                 f"# State: {opt['label'].replace(chr(10),' ').replace(chr(13),' ')}",
-                "Recording this outcome completes the inspection record, not external safety approval.",
-                "",
             ])
+            if hold:
+                lines.extend([
+                    f':::rule[RULE_SUPERVISOR_{i+1:02d}]{{type="SAFETY_GUARDRAIL" enforcement="HARD_STOP"}}',
+                    "Stop this work and request a documented supervisor review. No worker self-release or automatic completion is allowed.",
+                    ":::",
+                ])
+            else:
+                lines.append("Recording this outcome completes the inspection record, not external safety approval.")
+            lines.append("")
     else:
         lines.extend([
             '::state[STATE_FINISHED]{type="END" is_terminal=true}',
