@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import settings
 from app.repositories.work_integration_connector_repository import ConnectorRepository
-from app.repositories.work_integration_intake_repository import IntegrationIntakeRepository
+from app.repositories.work_integration_intake_repository import IntegrationIntakeRepository,IntegrationConflict
 from app.repositories.work_integration_outbox_repository import OutboxRepository,OutboxConflict,OutboxNotFound
 from app.repositories.work_item_repository import WorkItemRepository
 from app.services.work_integration_outbound import dispatch_claim
@@ -62,7 +62,7 @@ def test_pg_reviewed_signed_work_outbox_retry_lease_dead_and_remote_ack(monkeypa
         assert OutboxRepository.list(dept,submitter,source_id)==[]
         assert WorkItemRepository.list(dept,submitter,True)==[]
         # Preapproval imports cannot emit an ERP notice or create work.
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrationConflict):
             IntegrationIntakeRepository.decide(dept,submitter,intake_id,"accepted",
                 "Self-review must not create a task or outbound event.")
         assert OutboxRepository.list(dept,submitter,source_id)==[]
