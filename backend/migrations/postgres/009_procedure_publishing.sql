@@ -1,7 +1,10 @@
 -- Phase 3B: reviewed draft becomes an explicit compiler-validated published version.
 ALTER TABLE knowledge_studio.procedure_drafts
- ADD COLUMN IF NOT EXISTS decision JSONB NOT NULL DEFAULT '{"question":"","options":[]}'::jsonb
- CHECK (jsonb_typeof(decision)='object');
+ ADD COLUMN IF NOT EXISTS decision JSONB NOT NULL DEFAULT '{"question":"","options":[]}'::jsonb;
+ALTER TABLE knowledge_studio.procedure_drafts
+ DROP CONSTRAINT IF EXISTS procedure_drafts_decision_shape_check;
+ALTER TABLE knowledge_studio.procedure_drafts
+ ADD CONSTRAINT procedure_drafts_decision_shape_check CHECK(jsonb_typeof(decision)='object');
 ALTER TABLE knowledge_studio.procedure_drafts
  ADD COLUMN IF NOT EXISTS published_version_id VARCHAR(64) NULL
  REFERENCES knowledge_studio.workflow_versions(id);
@@ -9,6 +12,8 @@ ALTER TABLE knowledge_studio.procedure_drafts
  DROP CONSTRAINT IF EXISTS procedure_drafts_status_check;
 ALTER TABLE knowledge_studio.procedure_drafts
  ADD CONSTRAINT procedure_drafts_status_check CHECK(status IN ('draft','reviewed','published'));
+ALTER TABLE knowledge_studio.procedure_drafts
+ DROP CONSTRAINT IF EXISTS procedure_drafts_published_state_check;
 ALTER TABLE knowledge_studio.procedure_drafts
  ADD CONSTRAINT procedure_drafts_published_state_check CHECK (
    (status='published' AND published_version_id IS NOT NULL)
