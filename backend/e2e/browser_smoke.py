@@ -468,9 +468,11 @@ def main():
             assert manager.request.get(
                 f"{BASE}/api/backend/work/integrations/sources/e2e_signed_wms/outbox"
             ).status==403
+            # Other-department browser persona has employee role: fail at RBAC.
+            # Live PG separately verifies a foreign *admin* receives 404.
             assert outsider.request.get(
                 f"{BASE}/api/backend/work/integrations/sources/e2e_signed_wms/outbox"
-            ).status==404
+            ).status==403
             expect(admin.get_by_text("Outbound reconciliation")).to_be_visible()
             expect(admin.get_by_text("Awaiting dispatch")).to_be_visible()
             admin.screenshot(path="/tmp/workmate-phase6c-outbound-reconciliation.png",full_page=True)
