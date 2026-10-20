@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity, BarChart3, BookOpenText, Bot, Building2, ChevronDown,
-  ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut,
+  ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut, AlertTriangle,
   Menu, Search, ShieldCheck, X,
 } from 'lucide-react';
 import { loadUserClaims, getUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
@@ -37,7 +37,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
   { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
   { label: 'Procedure Studio', description: 'Manage governed SOPs', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
-  { label: 'Exception review', description: 'Department handovers', href: '/handover/review', icon: ClipboardCheck, roles: ['admin','manager'] },
+  { label: 'Task exceptions', description: 'Blocked work and reviews', href: '/work/exceptions', icon: AlertTriangle, roles: ['admin','manager'] },
+  { label: 'Shift reviews', description: 'Department handovers', href: '/handover/review', icon: ClipboardCheck, roles: ['admin','manager'] },
   { label: 'Intelligence', description: 'Actual operational metrics', href: '/intelligence-hub', icon: BarChart3, roles: ['admin','manager'] },
   { label: 'Pilot evaluation', description: 'Private quality signals', href: '/pilot', icon: Activity, roles: ['admin','manager'] },
 ];
@@ -107,7 +108,7 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const sections = [
     { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/copilot','/copilot/handover'].includes(item.href)) },
     { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/procedure-studio'].includes(item.href)) },
-    { title: 'Supervise', items: visibleItems.filter(item => ['/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
+    { title: 'Supervise', items: visibleItems.filter(item => ['/work/exceptions','/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
   ];
 
   return (
