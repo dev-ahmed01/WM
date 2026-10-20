@@ -128,6 +128,17 @@ class WorkExceptionRepository:
                     ORDER BY event_seq LIMIT 150
                 """,(case["work_item_id"],department))
                 case["work_events"]=_rows(cur)
+                cur.execute("""
+                  SELECT r.id,r.status,r.proposed_by,r.proposed_at,
+                         r.workflow_version_id,r.assigned_to,r.plan_note,
+                         r.decided_by,r.decision_note,r.decided_at,r.corrective_work_id,
+                         w.title AS procedure_title
+                  FROM workmate_copilot.work_corrective_requests r
+                  JOIN knowledge_studio.workflow_versions v ON v.id=r.workflow_version_id
+                  JOIN knowledge_studio.workflows w ON w.id=v.workflow_id
+                  WHERE r.case_id=%s AND r.department_id=%s
+                """,(case_id,department))
+                case["corrective_request"]=_row(cur)
                 cur.execute("COMMIT")
                 return case
 
