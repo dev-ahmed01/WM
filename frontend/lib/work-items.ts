@@ -70,6 +70,7 @@ export interface ExecutionStep {
 export interface ExecutionPosition {
   work_id: string;
   case_id?: string | null;
+  handover_id?: string | null;
   status: WorkItem['status'];
   workflow_version_id: string | null;
   session_id: string | null;
