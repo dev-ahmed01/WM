@@ -57,10 +57,7 @@ def _answer(position:dict[str,Any], intent:str) -> dict[str,Any]:
         if position.get("case_id"):
             result["answer"]+=" Supervisor case: "+str(position["case_id"])+"."
         result["requires_supervisor"]=True
-        if state:
-            citation=_citation(position,str(state.get("title") or ""))
-            if citation:
-                result["citations"]=[citation]
+        # A blocked/withdrawn procedure never generates a fresh SOP quotation.
         return result
     if status=="completed":
         result["answer"]="The published workflow has already been recorded as completed. Guidance cannot change that record."
