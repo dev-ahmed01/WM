@@ -11,6 +11,7 @@ import json
 from uuid import uuid4
 
 from app.core.database import get_postgres_connection
+from app.repositories.work_integration_outbox_repository import enqueue_reviewed_work
 
 
 class IntegrationNotFound(Exception):
@@ -218,6 +219,10 @@ class IntegrationIntakeRepository:
                     updated=_record(cur)
                     if not updated:
                         raise IntegrationConflict("Integration record changed before review.")
+                    if decision=="accepted":
+                        # Guaranteed atomic with human acceptance, work creation
+                        # and source audit. Only signed source work is exported.
+                        enqueue_reviewed_work(cur,department,updated,new_work)
                     # No workflow version is assigned or session created here.
                     cur.execute("COMMIT")
                     return _readable(updated)
