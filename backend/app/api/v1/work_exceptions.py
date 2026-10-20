@@ -25,6 +25,19 @@ class CaseReview(Strict):
     review_note:str=Field(min_length=8,max_length=1000)
 
 
+
+class CaseAction(Strict):
+    expected_revision:int=Field(ge=1)
+    kind:Literal["containment_recorded","remediation_proposed"]
+    note:str=Field(min_length=12,max_length=1000)
+
+
+class ShiftTransfer(Strict):
+    recipient_label:str=Field(min_length=2,max_length=100)
+    next_action:str=Field(min_length=5,max_length=1500)
+    notes:str=Field(default="",max_length=1500)
+
+
 def who(user):
     department=str(user.get("department_id") or "")
     actor=str(user.get("sub") or "")
@@ -76,3 +89,22 @@ async def review_case(case_id:str,payload:CaseReview,
     return await call(WorkExceptionRepository.review,department,actor,
                       case_id,payload.expected_revision,
                       payload.decision,payload.review_note)
+
+@router.post("/{case_id}/action")
+async def record_containment_or_remediation(
+    case_id:str,payload:CaseAction,
+    user:dict=Depends(require_role("admin","manager")),
+):
+    department,actor=who(user)
+    return await call(WorkExceptionRepository.action,department,actor,case_id,
+                      payload.expected_revision,payload.kind,payload.note)
+
+
+@router.post("/{case_id}/handover",status_code=201)
+async def submit_task_shift_handover(
+    case_id:str,payload:ShiftTransfer,
+    user:dict=Depends(require_role("admin","manager","employee")),
+):
+    department,actor=who(user)
+    return await call(WorkExceptionRepository.handover,department,actor,case_id,
+                      payload.recipient_label,payload.next_action,payload.notes)
