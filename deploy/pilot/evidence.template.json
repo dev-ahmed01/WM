@@ -28,5 +28,12 @@
   "qa_quality_thresholds_approved": false,
   "qa_thresholds_met": false,
   "voice_quality_thresholds_approved": false,
-  "voice_thresholds_met": false
+  "voice_thresholds_met": false,
+  "bidirectional_integrations_in_scope": true,
+  "integration_ingress_tls_verified": false,
+  "integration_egress_firewall_verified": false,
+  "integration_partner_ack_dedup_verified": false,
+  "integration_secret_rotation_drilled": false,
+  "integration_dead_letter_recovery_drilled": false,
+  "integration_external_security_review_signed_off": false
 }
