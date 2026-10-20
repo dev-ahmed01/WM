@@ -75,6 +75,7 @@ export interface ExecutionPosition {
   state: { id: string; title: string; description?: string | null; state_type: string; is_terminal: boolean } | null;
   step: ExecutionStep | null;
   decision_options: { option_code: string; option_label: string }[];
+  decision_question?: string | null;
   safety_gates: {rule_code:string;enforcement_level:string;error_message:string}[];
   completed_steps: number;
   total_steps: number;
