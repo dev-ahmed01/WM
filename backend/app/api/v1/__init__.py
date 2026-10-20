@@ -15,6 +15,7 @@ from app.api.v1.work_items import router as work_items_router
 from app.api.v1.work_execution import router as work_execution_router
 from app.api.v1.procedure_drafts import router as procedure_drafts_router
 from app.api.v1.work_exceptions import router as work_exceptions_router
+from app.api.v1.task_guidance import router as task_guidance_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -31,6 +32,7 @@ api_v1_router.include_router(work_items_router)
 api_v1_router.include_router(work_execution_router)
 api_v1_router.include_router(procedure_drafts_router)
 api_v1_router.include_router(work_exceptions_router)
+api_v1_router.include_router(task_guidance_router)
 
 __all__ = [
     "api_v1_router",
@@ -48,5 +50,6 @@ __all__ = [
     "work_execution_router",
     "procedure_drafts_router",
     "work_exceptions_router",
+    "task_guidance_router",
 ]
 
