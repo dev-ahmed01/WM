@@ -201,6 +201,7 @@ def main():
                 checkbox.check()
             # Phase 3B: configure an actual conditional outcome branch and
             # a photo-evidence requirement using the visual editor.
+            admin.locator('select[id^="output-"]').nth(1).select_option("TEXT_INPUT")
             admin.locator('select[id^="evidence-"]').nth(1).select_option("PHOTO_JPEG")
             admin.get_by_text("Require final outcome selection").click()
             admin.get_by_role("button",name="Save revision").click()
