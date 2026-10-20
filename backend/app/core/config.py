@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     VOICE_MODEL_REUSE_MIN_MEMORY_GB: float = 3.5
     VOICE_PREWARM_MODELS: bool = False
 
+    # Pre-provisioned HMAC secrets, keyed by registered integration source ID.
+    # Values live only in environment/secret manager. Never persist or expose them.
+    WORKMATE_CONNECTOR_SECRETS_JSON: str = "{}"
+    WORKMATE_WEBHOOK_CLOCK_SKEW_SECONDS: int = Field(default=300,ge=60,le=600)
+
     # Auth & Security Credentials
     JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
