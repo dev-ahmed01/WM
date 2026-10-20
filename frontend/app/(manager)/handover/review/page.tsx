@@ -9,6 +9,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 
 type Handover = {
   id: string;
+  work_exception_id?: string | null;
   conversation_id: string;
   created_by: string;
   department_id: string;
@@ -90,6 +91,7 @@ function ReviewCard({ item, userId, onReviewed }: {
         {item.severity !== 'normal' ? <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>High-priority handover. An acknowledgment records receipt only; it does not authorize unsafe work or resolve the exception.</span></div> : null}
         <div><p className="wm-label">Requested next action</p><p className="whitespace-pre-wrap break-words text-sm leading-7">{item.next_action}</p></div>
         {item.notes ? <div><p className="wm-label">Operator context</p><p className="whitespace-pre-wrap break-words text-xs leading-6 text-muted-foreground">{item.notes}</p></div> : null}
+        {item.work_exception_id ? <Link href="/work/exceptions" className="inline-flex items-center gap-2 text-xs font-bold text-emerald-800">Open linked task exception <ArrowRight className="h-4 w-4"/></Link> : null}
         <p className="text-[11px] text-muted-foreground">Linked session: <span className="font-mono">{item.conversation_id}</span> · The owner’s conversation is not shared with reviewers.</p>
         {item.assigned_to_user_id ? <p className="text-xs text-muted-foreground">Review owner: <strong className="text-foreground">{item.assigned_to_user_id}</strong></p> : null}
         {canClaim ? <button type="button" disabled={working} onClick={() => void claim()} className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">Take ownership</button> : null}
