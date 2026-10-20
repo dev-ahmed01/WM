@@ -128,6 +128,7 @@ jobs:
             /tmp/workmate-phase5a-*.png
             /tmp/workmate-phase5b-*.png
             /tmp/workmate-phase4d-*.png
+            /tmp/workmate-phase6a-*.png
           if-no-files-found: warn
           retention-days: 3
 
