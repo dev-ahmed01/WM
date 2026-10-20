@@ -282,7 +282,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
               {position.case_id ? <p className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-950">Supervisor case: {position.case_id}</p> : null}
               {isAssignee && position.case_id ? <div className="mt-4 space-y-3 border-t border-amber-200 pt-4">
                 <h3 className="text-xs font-bold text-amber-950">Transfer blocked work to the next shift</h3>
-                {transferSaved ? <p className="rounded-xl bg-white p-3 text-xs font-semibold text-emerald-900">Shift handover saved: {transferSaved}. The case remains blocked.</p> : <>
+                {position.handover_id || transferSaved ? <p className="rounded-xl bg-white p-3 text-xs font-semibold text-emerald-900">Shift handover saved: {position.handover_id || transferSaved}. The case remains blocked.</p> : <>
                   <div><label htmlFor="incident-recipient" className="wm-label">Recipient</label>
                     <input id="incident-recipient" maxLength={100} className="wm-input bg-white"
                       value={transferRecipient} onChange={e=>setTransferRecipient(e.target.value)}/>
