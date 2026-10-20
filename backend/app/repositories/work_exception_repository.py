@@ -78,7 +78,7 @@ class WorkExceptionRepository:
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
                            w.assigned_to AS work_assignee,w.workflow_version_id,
                            h.id AS handover_id,h.status AS handover_status,
-                           cr.status AS corrective_status
+                           cr.status AS corrective_status, cl.evidence_reviewed_at AS evidence_reviewed_at, cl.site_accepted_at AS site_accepted_at
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
@@ -86,6 +86,8 @@ class WorkExceptionRepository:
                       ON h.work_exception_id=c.id AND h.department_id=c.department_id
                     LEFT JOIN workmate_copilot.work_corrective_requests cr
                       ON cr.case_id=c.id AND cr.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_case_closures cl
+                      ON cl.case_id=c.id AND cl.department_id=c.department_id
                     WHERE c.department_id=%s
                     ORDER BY
                       CASE WHEN c.status IN ('open','claimed','follow_up_requested')
@@ -107,7 +109,7 @@ class WorkExceptionRepository:
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
                            w.assigned_to AS work_assignee,w.workflow_version_id,
                            h.id AS handover_id,h.status AS handover_status,
-                           cr.status AS corrective_status
+                           cr.status AS corrective_status, cl.evidence_reviewed_at AS evidence_reviewed_at, cl.site_accepted_at AS site_accepted_at
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
@@ -115,6 +117,8 @@ class WorkExceptionRepository:
                       ON h.work_exception_id=c.id AND h.department_id=c.department_id
                     LEFT JOIN workmate_copilot.work_corrective_requests cr
                       ON cr.case_id=c.id AND cr.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_case_closures cl
+                      ON cl.case_id=c.id AND cl.department_id=c.department_id
                     WHERE c.id=%s AND c.department_id=%s
                 """,(case_id,department))
                 case=_row(cur)
@@ -146,6 +150,15 @@ class WorkExceptionRepository:
                   WHERE r.case_id=%s AND r.department_id=%s
                 """,(case_id,department))
                 case["corrective_request"]=_row(cur)
+                cur.execute("""
+                   SELECT id,corrective_work_id,corrective_session_id,evidence_snapshot,
+                          evidence_reviewed_by,evidence_review_note,evidence_reviewed_at,
+                          site_accepted_by,site_record_reference,site_acceptance_note,
+                          site_accepted_at
+                   FROM workmate_copilot.work_case_closures
+                   WHERE case_id=%s AND department_id=%s
+                """,(case_id,department))
+                case["closure"]=_row(cur)
                 cur.execute("COMMIT")
                 return case
 
