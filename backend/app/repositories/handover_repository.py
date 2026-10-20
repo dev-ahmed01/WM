@@ -15,7 +15,7 @@ class HandoverRepository:
     COLUMNS = (
         "id,department_id,conversation_id,created_by,recipient_label,"
         "disposition,exception_type,severity,next_action,notes,"
-        "snapshot_state,status,assigned_to_user_id,assigned_at,reviewed_by,reviewed_at,review_note,created_at,updated_at"
+        "snapshot_state,status,assigned_to_user_id,assigned_at,reviewed_by,reviewed_at,review_note,created_at,updated_at,work_exception_id"
     )
 
     @staticmethod
