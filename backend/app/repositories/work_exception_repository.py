@@ -85,7 +85,7 @@ class WorkExceptionRepository:
                       ON h.work_exception_id=c.id AND h.department_id=c.department_id
                     WHERE c.department_id=%s
                     ORDER BY
-                      CASE WHEN c.status IN ('open','claimed') THEN 0 ELSE 1 END,
+                      CASE WHEN c.status IN ('open','claimed','follow_up_requested') THEN 0 ELSE 1 END,
                       CASE WHEN c.severity='critical' THEN 0 ELSE 1 END,
                       c.created_at ASC
                     LIMIT %s
