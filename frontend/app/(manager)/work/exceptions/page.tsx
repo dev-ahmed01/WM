@@ -86,7 +86,7 @@ export default function SupervisorExceptionDesk() {
   const canClaim=selected?.status==='open'&&!selected.reviewer_id&&selected.raised_by!==user?.sub;
   const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked');
   const hasContainment=selected?.events.some(event=>event.action==='containment_recorded')||false;
-  const canReview=Boolean(selected&&active(selected.status)&&selected.raised_by!==user?.sub&&
+  const canReview=Boolean(selected&&(selected.status==='open'||selected.status==='claimed')&&selected.raised_by!==user?.sub&&
     (!selected.reviewer_id||selected.reviewer_id===user?.sub));
 
   async function updateCase(action:'claim'|'reviewed'|'follow_up_requested'){

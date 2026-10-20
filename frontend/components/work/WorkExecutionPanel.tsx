@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, ArrowRight, Camera, CheckCircle2, ClipboardCheck,
+  ArrowRight, Camera, CheckCircle2, ClipboardCheck,
   Clock3, FileCheck2, FileText, GitBranchPlus, LockKeyhole,
   PauseCircle, PlayCircle, RefreshCw, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
@@ -422,11 +422,6 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             <h3 className="text-base font-semibold">Work paused</h3>
             <p className="mt-2 text-xs leading-6 text-[#6b7b70]">Your step history is retained. Resume only when it is appropriate to continue.</p>
             {isAssignee ? <button type="button" onClick={() => void commit('resume')} disabled={working} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-xs font-semibold text-white"><PlayCircle className="h-4 w-4" />Resume execution</button> : null}
-          </div> : null}
-
-          {position.status === 'blocked' ? <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-5">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" />
-            <div><h3 className="text-base font-semibold text-amber-950">Work blocked</h3><p className="mt-2 text-xs leading-6 text-amber-900">Stop this operation and contact your supervisor. Worker self-release is disabled; a human-authorized resolution process will be added before blocked work can resume.</p></div>
           </div> : null}
 
           {position.status === 'completed' ? <div className="rounded-[1.4rem] border border-[#cce4d1] bg-[#eff8f0] p-6">
