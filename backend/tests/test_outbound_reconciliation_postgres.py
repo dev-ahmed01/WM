@@ -90,15 +90,25 @@ def test_pg_reviewed_signed_work_outbox_retry_lease_dead_and_remote_ack(monkeypa
             assert job["attempt"]==n
             assert not OutboxRepository.settle(outbox_id,"forged-token",False,
                                                reason="http_status")
-            assert OutboxRepository.settle(outbox_id,job["lease_token"],False,
-                                           reason="transport_error")
             if n<5:
+                assert OutboxRepository.settle(outbox_id,job["lease_token"],False,
+                                               reason="transport_error")
                 with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
                     conn.execute("""
                       UPDATE workmate_copilot.work_integration_outbox
                       SET next_attempt_at=CURRENT_TIMESTAMP-INTERVAL '1 second'
                       WHERE id=%s
                     """,(outbox_id,))
+            else:
+                # A crash after the fifth claim must not strand a leased event.
+                # Simulate lease expiry without calling settle.
+                with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
+                    conn.execute("""
+                      UPDATE workmate_copilot.work_integration_outbox
+                      SET lease_expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second'
+                      WHERE id=%s
+                    """,(outbox_id,))
+                assert OutboxRepository.claim(1)==[]
         last=OutboxRepository.list(dept,submitter,source_id)[0]
         assert last["status"]=="dead" and last["attempts"]==5
         assert OutboxRepository.claim(1)==[]
