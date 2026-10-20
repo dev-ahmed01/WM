@@ -500,20 +500,32 @@ def main():
             assert archived_answer["requires_escalation"] and not archived_answer["citations"], archived_answer
             # Phase 2: a real published compiled state graph and required JPEG proof.
             # This synthetic SOP is inserted into *disposable test DB only*.
+            manager.goto(f"{BASE}/control-room")
+            manager.get_by_role("button",name="New assignment").click()
+            manager.get_by_label("Task title").fill("Independent checkpoint validation task")
+            manager.get_by_label("Work type").select_option("receiving")
+            manager.get_by_label("Assign employee").select_option("e2e_employee")
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/items")
+                and r.request.method=="POST",timeout=20000
+            ) as second_task:
+                manager.get_by_role("button",name="Queue assignment").click()
+            assert second_task.value.status==201
+            phase2_work_id=second_task.value.json()["id"]
             seeded_version=seed_published_execution_fixture()
-            manager.goto(f"{BASE}/work/{work_id}")
+            manager.goto(f"{BASE}/work/{phase2_work_id}")
             expect(manager.get_by_role("heading",name="Work procedure")).to_be_visible()
             manager.get_by_label("Published procedure").select_option(seeded_version)
             with manager.expect_response(
-                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/bind")
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{phase2_work_id}/bind")
                 and r.request.method=="POST", timeout=20000,
             ) as bound:
                 manager.get_by_role("button",name="Link published SOP").click()
             assert bound.value.status==200,bound.value.text()
-            employee.goto(f"{BASE}/work/{work_id}")
+            employee.goto(f"{BASE}/work/{phase2_work_id}")
             expect(employee.get_by_role("button",name="Start guided work")).to_be_visible()
             with employee.expect_response(
-                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/start")
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{phase2_work_id}/start")
                 and r.request.method=="POST", timeout=20000,
             ) as started:
                 employee.get_by_role("button",name="Start guided work").click()
@@ -543,7 +555,7 @@ def main():
                 "buffer":photo_buffer.getvalue(),
             })
             with employee.expect_response(
-                lambda r: r.url.endswith(f"/api/backend/work/execution/{work_id}/step")
+                lambda r: r.url.endswith(f"/api/backend/work/execution/{phase2_work_id}/step")
                 and r.request.method=="POST", timeout=20000,
             ) as evidence:
                 employee.get_by_role("button",name="Record checkpoint").click()
@@ -554,10 +566,10 @@ def main():
             employee.get_by_role("button",name="Record decision").click()
             expect(employee.get_by_text("Published workflow completed")).to_be_visible()
             employee.locator('section[aria-labelledby="work-execution-title"]').screenshot(path="/tmp/workmate-phase2-completed.png")
-            summary=employee.request.get(f"{BASE}/api/backend/work/execution/{work_id}").json()
+            summary=employee.request.get(f"{BASE}/api/backend/work/execution/{phase2_work_id}").json()
             assert summary["status"]=="completed" and summary["completed_steps"]==2
             assert outsider.request.get(
-                f"{BASE}/api/backend/work/execution/{work_id}"
+                f"{BASE}/api/backend/work/execution/{phase2_work_id}"
             ).status==404
             logout = employee.request.post(
                 f"{BASE}/api/session/logout", headers={"Origin": BASE}
