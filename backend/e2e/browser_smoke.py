@@ -362,6 +362,8 @@ def main():
             assert explained.value.json()["read_only"] is True
             assert explained.value.json()["citations"][0]["workflow_version_id"]==published_version
             expect(employee.get_by_text("Source-linked guidance")).to_be_visible(timeout=15000)
+            employee.evaluate("window.scrollTo(0,0)")
+            employee.screenshot(path="/tmp/workmate-phase5a-task-guidance.png",full_page=True)
             employee.get_by_role("button",name="What evidence is required?").click()
             expect(employee.get_by_text("no additional mandatory attachment",exact=False)).to_be_visible(timeout=15000)
             assert outsider.request.post(
