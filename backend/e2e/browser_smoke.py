@@ -506,6 +506,61 @@ def main():
             assert manager.request.get(
                 f"{BASE}/api/backend/work/execution/{exception_work_id}"
             ).json()["status"]=="blocked"
+            # Phase 4C: only the assigned case owner may propose a separate
+            # published-SOP task. A different admin authorizes it.
+            manager.get_by_label("Published corrective SOP").select_option(published_version)
+            manager.get_by_label("Corrective worker").select_option("e2e_employee")
+            manager.get_by_label("Scope and verification plan").fill(
+                "Reinspect quarantined cartons using the versioned receiving SOP, "
+                "capture new photographic evidence, and retain the original hold."
+            )
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/corrective")
+                and r.request.method=="POST",timeout=20000
+            ) as proposed:
+                manager.get_by_role("button",name="Submit for independent authorization").click()
+            assert proposed.value.status==201, proposed.value.text()
+            request_id=proposed.value.json()["id"]
+            expect(manager.get_by_text("Request pending")).to_be_visible(timeout=15000)
+            assert manager.request.post(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}/corrective/{request_id}/decision",
+                data={"decision":"approved","decision_note":"Untrusted manager approval attempt"}
+            ).status==403
+            admin.goto(f"{BASE}/work/exceptions")
+            admin.get_by_role("button",name=re.compile("Inspect exception cartons")).click()
+            expect(admin.get_by_text("Request pending")).to_be_visible(timeout=15000)
+            admin.get_by_label("Independent decision and controls").fill(
+                "A separate corrective checklist is authorized; all old quarantined "
+                "items stay on hold pending physical QA and site sign-off."
+            )
+            with admin.expect_response(
+                lambda r: r.url.endswith(
+                    "/api/backend/work/exceptions/"+task_case["id"]+"/corrective/"+request_id+"/decision")
+                and r.request.method=="POST",timeout=20000
+            ) as authorized:
+                admin.get_by_role("button",name="Authorize new task").click()
+            assert authorized.value.status==200,authorized.value.text()
+            fresh_work_id=authorized.value.json()["corrective_work_id"]
+            expect(admin.get_by_text("Request approved")).to_be_visible(timeout=15000)
+            expect(admin.get_by_role("link",name="Open new corrective assignment")).to_be_visible()
+            admin.evaluate("window.scrollTo(0,0)")
+            admin.screenshot(path="/tmp/workmate-phase4c-independent-approval.png",full_page=True)
+            response=employee.request.get(
+                f"{BASE}/api/backend/work/execution/{fresh_work_id}"
+            )
+            assert response.status==200
+            assert response.json()["status"]=="ready"
+            employee.goto(f"{BASE}/work/{fresh_work_id}")
+            employee.get_by_role("button",name="Start guided work").click()
+            fresh_execution=employee.request.get(
+                f"{BASE}/api/backend/work/execution/{fresh_work_id}"
+            ).json()
+            old_execution=manager.request.get(
+                f"{BASE}/api/backend/work/execution/{exception_work_id}"
+            ).json()
+            assert fresh_execution["status"]=="active"
+            assert fresh_execution["session_id"]!=old_execution["session_id"]
+            assert old_execution["status"]=="blocked"
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
