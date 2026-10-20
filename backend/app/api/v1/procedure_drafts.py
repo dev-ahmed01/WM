@@ -34,6 +34,7 @@ class DraftStep(Strict):
 class Outcome(Strict):
     code: str=Field(pattern="^[A-Z][A-Z0-9_]{1,30}$")
     label: str=Field(min_length=3,max_length=120)
+    requires_supervisor_review: bool=False
 
 
 class DraftDecision(Strict):
