@@ -411,8 +411,8 @@ def main():
                     "warning":"Review names and safety terms before sending.",
                 }))
             employee.route("**/api/backend/copilot/voice/transcribe",preview_transcription)
-            expect(employee.get_by_role("button",name="Speak question")).to_be_enabled()
-            employee.get_by_role("button",name="Speak question").click()
+            expect(employee.get_by_role("button",name="Record task question")).to_be_enabled()
+            employee.get_by_role("button",name="Record task question").click()
             expect(employee.get_by_role("button",name="Stop recording question")).to_be_visible()
             employee.get_by_role("button",name="Stop recording question").click()
             expect(employee.get_by_label("Voice transcript review")).to_be_visible(timeout=15000)
