@@ -12,7 +12,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { WORK_TYPES, workTypeLabel, type WorkItem, type WorkQueueResponse, type WorkType, type WorkPriority } from '@/lib/work-items';
 
 type Handover = { id: string; status: string; severity: 'normal' | 'high' | 'critical'; next_action: string; created_at: string; recipient_label: string };
-type TaskCase = { id:string; status: 'open'|'claimed'|'follow_up_requested'|'reviewed'; severity:'high'|'critical'; work_item_id:string };
+type TaskCase = { id:string; status: 'open'|'claimed'|'follow_up_requested'|'reviewed'|'closed'; severity:'high'|'critical'; work_item_id:string };
 type Staff = { id: string; label: string };
 
 export default function ControlRoom() {
@@ -75,7 +75,7 @@ export default function ControlRoom() {
   const priorityCount = openItems.filter(item => item.priority === 'high').length;
   const urgent = handovers.filter(item => item.status === 'submitted' && item.severity !== 'normal').length;
   const assigned = openItems.filter(item => Boolean(item.assigned_to)).length;
-  const activeCases = taskCases.filter(item => item.status==='open'||item.status==='claimed');
+  const activeCases = taskCases.filter(item => item.status!=='closed');
   const ordered = useMemo(() => items.filter(item => item.status !== 'completed').sort((a,b) =>
     Number(b.priority === 'high') - Number(a.priority === 'high') ||
     Date.parse(b.created_at) - Date.parse(a.created_at)
@@ -157,6 +157,7 @@ export default function ControlRoom() {
             <h3 className="text-sm font-semibold">Management tools</h3>
             {[
               {label:'Review task exceptions',href:'/work/exceptions'},
+              {label:'Review integration inbox',href:'/work/integrations'},
               {label:'Review handovers ('+pending+')',href:'/handover/review'},
               ...(user?.role === 'admin' ? [{label:'Procedure studio',href:'/procedure-studio'}] : []),
               {label:'Operational insights',href:'/intelligence-hub'},
