@@ -35,6 +35,7 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('en-IN',{
 });
 const statusText=(status:CaseStatus)=>status.replaceAll('_',' ');
 const active=(value:CaseStatus)=>value==='open'||value==='claimed'||value==='follow_up_requested';
+const unresolved=(item:WorkCase)=>active(item.status)||item.corrective_status==='pending';
 const elapsed=(value:string,now:number)=>{
   const minutes=Math.max(0,Math.floor((now-Date.parse(value))/60000));
   if(minutes<60)return minutes+'m';
@@ -106,9 +107,9 @@ export default function SupervisorExceptionDesk() {
     return()=>{mounted=false;};
   },[loading,user?.sub,user?.department_id]);
 
-  const visible=useMemo(()=>items.filter(item=>showAll||active(item.status)||item.corrective_status==='pending'),[items,showAll]);
-  const openCount=items.filter(x=>active(x.status)||x.corrective_status==='pending').length;
-  const criticalCount=items.filter(x=>active(x.status)&&x.severity==='critical').length;
+  const visible=useMemo(()=>items.filter(item=>showAll||unresolved(item)),[items,showAll]);
+  const openCount=items.filter(unresolved).length;
+  const criticalCount=items.filter(x=>unresolved(x)&&x.severity==='critical').length;
   const canClaim=selected?.status==='open'&&!selected.reviewer_id&&selected.raised_by!==user?.sub;
   const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked');
   const hasContainment=selected?.events.some(event=>event.action==='containment_recorded')||false;
@@ -217,7 +218,7 @@ export default function SupervisorExceptionDesk() {
       {[
         {label:'Awaiting action',value:openCount,icon:Clock3},
         {label:'Critical holds',value:criticalCount,icon:ShieldAlert},
-        {label:'Longest open',value:openCount?elapsed(items.filter(x=>active(x.status)).reduce((old,x)=>Date.parse(x.created_at)<Date.parse(old)?x.created_at:old,items.find(x=>active(x.status))!.created_at),now):'—',icon:Clock3},
+        {label:'Longest open',value:openCount?elapsed(items.filter(unresolved).reduce((old,x)=>Date.parse(x.created_at)<Date.parse(old)?x.created_at:old,items.find(unresolved)!.created_at),now):'—',icon:Clock3},
       ].map(metric=><div key={metric.label} className="rounded-[1.2rem] border border-[#dce7de] bg-white p-5">
         <div className="flex items-center justify-between text-xs text-[#708276]"><span>{metric.label}</span><metric.icon className="h-4 w-4 text-emerald-700"/></div>
         <p className="mt-3 text-3xl font-semibold tabular-nums text-[#173824]">{fetching?'—':metric.value}</p>
