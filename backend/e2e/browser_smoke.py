@@ -350,9 +350,30 @@ def main():
             expect(employee.get_by_role("button",name="Start guided work")).to_be_visible(timeout=15000)
             employee.get_by_role("button",name="Start guided work").click()
             expect(employee.get_by_text("Inspect the inbound trailer seals before unloading.")).to_be_visible(timeout=15000)
+            # Phase 5A: guidance must resolve this real task's CURRENT published
+            # checkpoint, cite its exact ID, and never change execution state.
+            employee.get_by_role("button",name="Ask about this task").click()
+            with employee.expect_response(
+                lambda r:r.url.endswith("/api/backend/work/guidance/"+work_id)
+                and r.request.method=="POST", timeout=20000
+            ) as explained:
+                employee.get_by_role("button",name="Explain this step").click()
+            assert explained.value.status==200
+            assert explained.value.json()["read_only"] is True
+            assert explained.value.json()["citations"][0]["workflow_version_id"]==published_version
+            expect(employee.get_by_text("Source-linked guidance")).to_be_visible(timeout=15000)
+            employee.get_by_role("button",name="What evidence is required?").click()
+            expect(employee.get_by_text("no additional mandatory attachment",exact=False)).to_be_visible(timeout=15000)
+            assert outsider.request.post(
+                f"{BASE}/api/backend/work/guidance/{work_id}",
+                data={"intent":"current_step"}
+            ).status in (403,404)
             employee.get_by_text("I confirm I performed this checkpoint").click()
             employee.get_by_role("button",name="Record checkpoint").click()
             expect(employee.get_by_text("Record visible carton damage for the shift supervisor.")).to_be_visible(timeout=15000)
+            employee.get_by_role("button",name="Ask about this task").click()
+            employee.get_by_role("button",name="What evidence is required?").click()
+            expect(employee.get_by_text("JPEG photograph",exact=False)).to_be_visible(timeout=15000)
             employee.get_by_label("Recorded observation").fill("Carton condition documented in receiving bay.")
             proof_bytes=io.BytesIO()
             Image.effect_noise((160,160),32).convert("RGB").save(proof_bytes,format="JPEG",quality=85)
