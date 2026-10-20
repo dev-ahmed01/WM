@@ -20,6 +20,17 @@ BOOLEAN_GATES = (
     "pilot_rollback_verified", "independent_ai_review_signed_off",
     "security_review_signed_off",
 )
+# Required when the deployment exposes signed inbound and outbound WMS/ERP
+# channels. These are external, independently inspected evidence claims only.
+INTEGRATION_FIELD_GATES = (
+    "integration_ingress_tls_verified",
+    "integration_egress_firewall_verified",
+    "integration_partner_ack_dedup_verified",
+    "integration_secret_rotation_drilled",
+    "integration_dead_letter_recovery_drilled",
+    "integration_external_security_review_signed_off",
+)
+
 COUNTS = {
     "operator_pilot_days": 7,
     "distinct_pilot_operators": 3,
@@ -45,6 +56,13 @@ def evaluate(evidence: dict[str, Any], fingerprint: str) -> dict[str, Any]:
     for key in BOOLEAN_GATES:
         if evidence.get(key) is not True:
             blocked.append(key)
+    scope = evidence.get("bidirectional_integrations_in_scope")
+    if not isinstance(scope,bool):
+        blocked.append("bidirectional_integrations_in_scope")
+    if scope is True:
+        for key in INTEGRATION_FIELD_GATES:
+            if evidence.get(key) is not True:
+                blocked.append(key)
     for key, minimum in COUNTS.items():
         value = evidence.get(key)
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
@@ -62,7 +80,7 @@ def evaluate(evidence: dict[str, Any], fingerprint: str) -> dict[str, Any]:
     return {
         "decision": "GO_FOR_LIMITED_PILOT" if not blocked else "NO_GO",
         "blocked_gates": blocked,
-        "checked_gates": len(BOOLEAN_GATES) + len(COUNTS) + len(ZERO_GATES) + 4,
+        "checked_gates": len(BOOLEAN_GATES) + len(COUNTS) + len(ZERO_GATES) + 5 + (len(INTEGRATION_FIELD_GATES) if scope is True else 0),
         "evidence_sha256": fingerprint,
         "notice": "Self-attested checklist only. An independent release owner must verify evidence and approve rollout.",
     }
