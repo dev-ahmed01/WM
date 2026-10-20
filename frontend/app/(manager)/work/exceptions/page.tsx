@@ -16,6 +16,7 @@ type WorkCase = {
   reason: string; state_id: string | null; decision_option: string | null;
   status: CaseStatus; revision: number; review_note: string | null;
   handover_id?:string|null; handover_status?:string|null;
+  corrective_status?:'pending'|'approved'|'rejected'|null;
   created_at: string; updated_at: string; reviewed_at: string | null;
 };
 type CaseEvent = {id:string;actor_id:string;action:string;note:string;event_seq:number;created_at:string};
@@ -105,8 +106,8 @@ export default function SupervisorExceptionDesk() {
     return()=>{mounted=false;};
   },[loading,user?.sub,user?.department_id]);
 
-  const visible=useMemo(()=>items.filter(item=>showAll||active(item.status)),[items,showAll]);
-  const openCount=items.filter(x=>active(x.status)).length;
+  const visible=useMemo(()=>items.filter(item=>showAll||active(item.status)||item.corrective_status==='pending'),[items,showAll]);
+  const openCount=items.filter(x=>active(x.status)||x.corrective_status==='pending').length;
   const criticalCount=items.filter(x=>active(x.status)&&x.severity==='critical').length;
   const canClaim=selected?.status==='open'&&!selected.reviewer_id&&selected.raised_by!==user?.sub;
   const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked');
@@ -236,7 +237,7 @@ export default function SupervisorExceptionDesk() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-[#20392a]">{item.work_title}</p>
             <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#6d7c71]">{item.reason}</p>
-            <p className="mt-2 text-[10px] font-semibold text-[#708672]">{item.severity.toUpperCase()} · {statusText(item.status)} · {elapsed(item.created_at,now)} since report</p>
+            <p className="mt-2 text-[10px] font-semibold text-[#708672]">{item.severity.toUpperCase()} · {item.corrective_status==='pending'?'Authorization pending':statusText(item.status)} · {elapsed(item.created_at,now)} since report</p>
           </div><ArrowRight className="mt-1 h-4 w-4 text-[#66856c]"/>
         </button>)}</div>:
         <div className="p-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-700"/><p className="mt-3 text-sm font-semibold">No outstanding cases</p><p className="mt-1 text-xs text-[#718473]">Exceptions appear when a work item is blocked.</p></div>}
