@@ -71,7 +71,7 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
         claimed=WorkExceptionRepository.claim(dep,manager,case_id,1)
         assert claimed["revision"]==2
         reviewed=WorkExceptionRepository.review(
-            dep,manager,case_id,2,"follow_up_requested",
+            dep,manager,case_id,2,"reviewed",
             "Continue isolation and require independent QA verification."
         )
         assert reviewed["revision"]==3
@@ -97,6 +97,11 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
             "Reinspect held cartons with a separately recorded checklist and new evidence."
         )
         assert plan["status"]=="pending"
+        # Reviewed cases remain visible to supervisors when a separate
+        # administrator still needs to authorize corrective verification.
+        queue=WorkExceptionRepository.list(dep)
+        pending=next(item for item in queue if item["id"]==case_id)
+        assert pending["corrective_status"]=="pending"
         request_id=plan["id"]
         with pytest.raises(CaseConflict):
             CorrectiveWorkRepository.request(dep,manager,case_id,6,version,worker,
