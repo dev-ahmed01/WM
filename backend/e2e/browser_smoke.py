@@ -677,6 +677,7 @@ def main():
             premature_review=manager.request.post(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/evidence",
                 data={"expected_revision":7,"review_note":"No corrective evidence has been completed yet."},
+                headers={"Origin":BASE},
             )
             assert premature_review.status==409,(premature_review.status,premature_review.text())
             employee.get_by_text("I confirm I performed this checkpoint").click()
@@ -713,6 +714,7 @@ def main():
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}").json()
             rejected_admin=admin.request.post(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/site",
+                headers={"Origin":BASE},
                 data={"expected_revision":case_after_review["revision"],
                       "site_record_reference":"E2E-SITE-QA-2071",
                       "site_acceptance_note":"Personally inspected quarantined receiving cartons after corrective SOP.",
@@ -746,6 +748,7 @@ def main():
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}").json()["status"]=="closed"
             assert manager.request.post(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/evidence",
+                headers={"Origin":BASE},
                 data={"expected_revision":case_after_review["revision"],
                       "review_note":"Duplicate evidence review should be rejected."}
             ).status==409
