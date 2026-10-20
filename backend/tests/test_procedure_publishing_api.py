@@ -31,7 +31,7 @@ def sample():
       ],
       "decision":{"question":"What result was observed after the final checkpoint?",
                   "options":[{"code":"OPT_ACCEPT","label":"Expected condition"},
-                             {"code":"OPT_ISSUE","label":"Damage documented"}]},
+                             {"code":"OPT_ISSUE","label":"Damage documented","requires_supervisor_review":True}]},
     }
 
 
@@ -47,6 +47,10 @@ def test_generated_owd_uses_canonical_validated_engine_and_one_proof_per_step():
     assert sum(len(s.decisions) for s in parsed.workflow.states)==1
     assert len(parsed.workflow.states)==5
     assert len(parsed.workflow.states[2].decisions[0].options)==2
+    holds=[state for state in parsed.workflow.states if state.state_type=="ESCALATION"]
+    assert len(holds)==1 and len(holds[0].safety_rules)==1
+    assert holds[0].safety_rules[0].enforcement_level=="HARD_STOP"
+    assert not holds[0].is_terminal
     check=compile_preview(draft)
     assert check["valid"] is True,check["validation_errors"]
     assert (check["steps"],check["decisions"],check["states"])==(2,1,5)
