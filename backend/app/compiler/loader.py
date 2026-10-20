@@ -6,6 +6,7 @@ Does NOT perform markdown parsing or validation.
 """
 
 import logging
+from contextlib import nullcontext
 from typing import List, Dict, Any, Optional
 
 from app.compiler.models import CompiledWorkflow, LoadResult
@@ -72,7 +73,7 @@ class OWDLoader:
         return 0
 
     @staticmethod
-    def load(compiled_workflow: CompiledWorkflow) -> LoadResult:
+    def load(compiled_workflow: CompiledWorkflow, *, connection=None) -> LoadResult:
         """Executes transactional MERGE/INSERT statements against PostgreSQL KNOWLEDGE_STUDIO tables."""
         if not compiled_workflow or not compiled_workflow.workflow_payload:
             raise OWDLoaderException("Cannot load null or uninitialized CompiledWorkflow payload.")
@@ -106,9 +107,10 @@ class OWDLoader:
 
         conn = None
         try:
-            with get_postgres_connection() as conn:
+            with (get_postgres_connection() if connection is None else nullcontext(connection)) as conn:
                 with conn.cursor() as cur:
-                    cur.execute("BEGIN")
+                    if connection is None:
+                        cur.execute("BEGIN")
                     # 1. Upsert Root Workflow
                     cur.execute(
                         """
@@ -492,7 +494,8 @@ class OWDLoader:
                         or int(invariant[2]) != len(search_metadata)
                     ):
                         raise OWDLoaderException("Post-load workflow invariants failed; transaction will be rolled back.")
-                    cur.execute("COMMIT")
+                    if connection is None:
+                        cur.execute("COMMIT")
 
             logger.info(f"[LOADER SUCCESS] Successfully loaded OWD v1.1 '{wf['workflow_code']}' into PostgreSQL ({len(set(tables_updated))} tables updated).")
             return LoadResult(
@@ -503,7 +506,7 @@ class OWDLoader:
             )
 
         except Exception as e:
-            if conn is not None:
+            if connection is None and conn is not None:
                 try:
                     with conn.cursor() as rollback_cur:
                         rollback_cur.execute("ROLLBACK")
