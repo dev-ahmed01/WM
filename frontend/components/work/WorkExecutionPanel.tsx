@@ -318,7 +318,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             {!step && position.decision_options.length ? (
               <div className="rounded-[1.4rem] border border-[#d7e2d8] p-5 sm:p-6">
                 <p className="text-[10px] font-bold uppercase tracking-[.15em] text-emerald-700">SOP DECISION</p>
-                <h3 className="mt-2 text-lg font-semibold">{position.state?.title}</h3>
+                <h3 className="mt-2 text-lg font-semibold">{position.decision_question || position.state?.title}</h3>
                 <p className="mt-2 text-xs leading-6 text-[#6d796f]">Select only the actual observed outcome. The approved workflow determines the next state.</p>
                 {isAssignee ? <div className="mt-4 space-y-3">
                   <fieldset className="space-y-2"><legend className="sr-only">Approved decision path</legend>
