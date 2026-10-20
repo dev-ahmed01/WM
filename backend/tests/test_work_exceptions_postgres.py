@@ -86,9 +86,48 @@ def test_work_exception_claim_review_isolated_and_never_releases_work():
         with pytest.raises(CaseConflict):
             WorkExceptionRepository.review(dept,manager,case,2,"reviewed",
                                            "Stale repeat review must not pass.")
+        with pytest.raises(CaseConflict):
+            WorkExceptionRepository.action(dept,manager,case,3,"remediation_proposed",
+                                           "Skip containment and resume immediately.")
+        with pytest.raises(CaseConflict):
+            WorkExceptionRepository.action(dept,worker,case,3,"containment_recorded",
+                                           "Worker tries to self-authorize the hold.")
+        containment=WorkExceptionRepository.action(
+            dept,manager,case,3,"containment_recorded",
+            "Affected cartons isolated physically; keep QA hold in place."
+        )
+        assert containment["revision"]==4
+        with pytest.raises(CaseConflict):
+            WorkExceptionRepository.action(dept,manager,case,3,"containment_recorded",
+                                           "Stale event must not be saved again.")
+        proposed=WorkExceptionRepository.action(
+            dept,manager,case,4,"remediation_proposed",
+            "Request certified site supervisor to inspect the damaged carton seal."
+        )
+        assert proposed["revision"]==5
+        with pytest.raises(CaseNotFound):
+            WorkExceptionRepository.handover(other,outsider,case,"Supervisor",
+                "Review damaged goods on the next shift.","")
+        with pytest.raises(CaseNotFound):
+            WorkExceptionRepository.handover(dept,manager,case,"Supervisor",
+                "Review the reported issue.","")
+        handover=WorkExceptionRepository.handover(
+            dept,worker,case,"Next-shift receiving supervisor",
+            "Maintain the isolation and verify the photographic evidence.",
+            "Damaged inbound cartons remain in quarantine."
+        )
+        assert handover["status"]=="submitted" and handover["work_status"]=="blocked"
+        with pytest.raises(CaseConflict):
+            WorkExceptionRepository.handover(
+                dept,worker,case,"Second shift",
+                "Duplicate transfer should be rejected.",""
+            )
         observed=WorkExceptionRepository.get(dept,case)
+        assert observed["handover_id"]==handover["handover_id"]
+        assert observed["handover_status"]=="submitted"
         assert [row["action"] for row in observed["events"]]==[
-            "opened","claimed","follow_up_requested"
+            "opened","claimed","follow_up_requested",
+            "containment_recorded","remediation_proposed","handover_linked"
         ]
         assert observed["work_status"]=="blocked"
         with psycopg.connect(settings.DATABASE_URL) as conn:
@@ -111,6 +150,10 @@ def test_work_exception_claim_review_isolated_and_never_releases_work():
         with psycopg.connect(settings.DATABASE_URL,autocommit=True) as conn:
             with conn.cursor() as cur:
                 if case:
+                    cur.execute("""DELETE FROM workmate_copilot.shift_handover_events
+                        WHERE handover_id IN (SELECT id FROM workmate_copilot.shift_handovers
+                        WHERE work_exception_id=%s)""",(case,))
+                    cur.execute("DELETE FROM workmate_copilot.shift_handovers WHERE work_exception_id=%s",(case,))
                     cur.execute("DELETE FROM workmate_copilot.work_exception_events WHERE case_id=%s",(case,))
                     cur.execute("DELETE FROM workmate_copilot.work_exceptions WHERE id=%s",(case,))
                 cur.execute("DELETE FROM workmate_copilot.work_item_events WHERE work_item_id=%s",(task,))
