@@ -167,6 +167,7 @@ def main():
         employee = None
         outsider = None
         manager = None
+        site_admin = None
         try:
             admin = sign_in(browser, "e2e_admin@workmate.test")
             admin.screenshot(path="/tmp/workmate-phase1-procedure-studio.png", full_page=True)
@@ -668,7 +669,85 @@ def main():
             assert fresh_execution["session_id"]!=old_execution["session_id"]
             assert old_execution["status"]=="blocked"
             employee.evaluate("window.scrollTo(0,0)")
+
             employee.screenshot(path="/tmp/workmate-phase4c-corrective-worker.png",full_page=True)
+            # Phase 4D: finish the separately approved corrective SOP with a
+            # genuine new execution, typed observation and real JPEG attachment.
+            # A completed task alone cannot close the original incident.
+            assert manager.request.post(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/evidence",
+                data={"expected_revision":7,"review_note":"No corrective evidence has been completed yet."},
+            ).status==409
+            employee.get_by_text("I confirm I performed this checkpoint").click()
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("Record visible carton damage for the shift supervisor.")).to_be_visible()
+            employee.get_by_label("Recorded observation").fill(
+                "Corrective reinspection performed, carton kept in segregation and evidence logged."
+            )
+            employee.locator('input[type="file"]').set_input_files({
+                "name":"corrective-inspection.jpg","mimeType":"image/jpeg",
+                "buffer":proof_bytes.getvalue(),
+            })
+            employee.get_by_role("button",name="Record checkpoint").click()
+            employee.get_by_text("Expected outcome recorded").click()
+            employee.get_by_role("button",name="Record decision").click()
+            expect(employee.get_by_text("Published workflow completed")).to_be_visible()
+            assert employee.request.get(f"{BASE}/api/backend/work/execution/{fresh_work_id}").json()["status"]=="completed"
+            manager.goto(f"{BASE}/work/exceptions")
+            manager.get_by_role("button",name=re.compile("Inspect exception cartons")).click()
+            expect(manager.get_by_text("Corrective SOP task: completed",exact=False)).to_be_visible(timeout=15000)
+            manager.get_by_label("Corrective evidence review").fill(
+                "Observed completed corrective steps and retained new carton photograph; "
+                "physical site acceptance still requires independent inspection."
+            )
+            with manager.expect_response(
+                lambda response: response.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/closure/evidence")
+                and response.request.method=="POST",timeout=20000
+            ) as evidence_review:
+                manager.get_by_role("button",name="Record independent evidence review").click()
+            assert evidence_review.value.status==201,evidence_review.value.text()
+            expect(manager.get_by_text("Evidence review recorded",exact=False)).to_be_visible(timeout=15000)
+            # The authorizing admin must NOT be their own final site signer.
+            case_after_review=manager.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}").json()
+            rejected_admin=admin.request.post(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/site",
+                data={"expected_revision":case_after_review["revision"],
+                      "site_record_reference":"E2E-SITE-QA-2071",
+                      "site_acceptance_note":"Personally inspected quarantined receiving cartons after corrective SOP.",
+                      "independent_site_inspection_attested":True},
+            )
+            assert rejected_admin.status==409,rejected_admin.text()
+            assert outsider.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}").status==403
+            site_admin = sign_in(browser,"e2e_site_admin@workmate.test")
+            site_admin.goto(f"{BASE}/work/exceptions")
+            site_admin.get_by_role("button",name=re.compile("Inspect exception cartons")).click()
+            expect(site_admin.get_by_label("External inspection record ID")).to_be_visible(timeout=15000)
+            site_admin.get_by_label("External inspection record ID").fill("E2E-SITE-QA-2071")
+            site_admin.get_by_label("Actual site inspection findings").fill(
+                "Synthetic controlled-site inspection attestation: receiving bay checked; "
+                "quarantine maintained and corrective records independently accepted."
+            )
+            site_admin.get_by_text("I independently inspected the site",exact=False).click()
+            with site_admin.expect_response(
+                lambda response: response.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/closure/site")
+                and response.request.method=="POST",timeout=20000
+            ) as site_accepted:
+                site_admin.get_by_role("button",name="Record site acceptance and close case").click()
+            assert site_accepted.value.status==200,site_accepted.value.text()
+            assert site_accepted.value.json()["status"]=="closed"
+            expect(site_admin.get_by_text("Site acceptance recorded",exact=False)).to_be_visible(timeout=15000)
+            site_admin.screenshot(path="/tmp/workmate-phase4d-governed-closure.png",full_page=True)
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/execution/{exception_work_id}").json()["status"]=="blocked"
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}").json()["status"]=="closed"
+            assert manager.request.post(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/evidence",
+                data={"expected_revision":case_after_review["revision"],
+                      "review_note":"Duplicate evidence review should be rejected."}
+            ).status==409
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
@@ -926,7 +1005,7 @@ def main():
             assert employee.evaluate("async () => (await fetch('/api/session/me')).status") == 401
             print("BROWSER PASSED: real published SOP binding, step confirmation, required JPEG evidence, decision completion, session bypass denial, tenant isolation; reference and handover regression.")
         except Exception:
-            for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider), ("manager", manager)]:
+            for name, page in [("admin", admin), ("employee", employee), ("outsider", outsider), ("manager", manager), ("site_admin", site_admin)]:
                 if page is not None:
                     page.screenshot(path=f"/tmp/workmate-{name}-failure.png", full_page=True)
             raise
