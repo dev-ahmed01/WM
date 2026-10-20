@@ -26,7 +26,7 @@ const formatTime=(value:string)=>new Date(value).toLocaleString('en-IN',{
   timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true,
 });
 const statusText=(status:CaseStatus)=>status.replaceAll('_',' ');
-const active=(value:CaseStatus)=>value==='open'||value==='claimed';
+const active=(value:CaseStatus)=>value==='open'||value==='claimed'||value==='follow_up_requested';
 const elapsed=(value:string,now:number)=>{
   const minutes=Math.max(0,Math.floor((now-Date.parse(value))/60000));
   if(minutes<60)return minutes+'m';
