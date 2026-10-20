@@ -305,6 +305,23 @@ def _decode_evidence(file, spec):
 
 class WorkExecutionRepository:
     @staticmethod
+    def published_in_department(department,version_id):
+        """Fresh PostgreSQL approval recheck for read-only task guidance."""
+        if not version_id:
+            return False
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _start(cur,department)
+                cur.execute("""
+                    SELECT 1 FROM knowledge_studio.workflow_versions v
+                    JOIN knowledge_studio.workflows w ON w.id=v.workflow_id
+                    WHERE v.id=%s AND v.status='published' AND w.department_id=%s
+                """,(version_id,department))
+                published=cur.fetchone() is not None
+                cur.execute("COMMIT")
+                return published
+
+    @staticmethod
     def procedures(department):
         with get_postgres_connection() as conn:
             with conn.cursor() as cur:
