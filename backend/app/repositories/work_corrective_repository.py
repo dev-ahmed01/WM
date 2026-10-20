@@ -101,6 +101,12 @@ class CorrectiveWorkRepository:
                         raise CaseConflict("Corrective work needs a published, executable SOP in this department.")
                     if not _active_employee(cur,department,assignee):
                         raise CaseConflict("Choose an active worker in this department.")
+                    cur.execute("""
+                        SELECT 1 FROM workmate_copilot.work_corrective_requests
+                        WHERE case_id=%s AND department_id=%s
+                    """,(case_id,department))
+                    if cur.fetchone():
+                        raise CaseConflict("This incident already has a corrective request.")
                     identifier="cwr_"+uuid4().hex[:24]
                     cur.execute("""
                       INSERT INTO workmate_copilot.work_corrective_requests
