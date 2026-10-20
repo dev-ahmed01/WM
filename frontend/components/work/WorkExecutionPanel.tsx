@@ -437,7 +437,8 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
           {events.length ? <div className="mt-3 divide-y divide-[#eef2ed]">
             {events.slice(-12).reverse().map(event => <div key={event.id} className="flex items-start justify-between gap-3 py-3 text-xs">
               <div><p className="font-semibold text-[#294434]">{eventLabel[event.action] || event.action.replaceAll('_',' ')}</p><p className="mt-1 break-words text-[11px] text-[#88968b]">Recorded by {event.actor_id}</p></div>
-              <span className="shrink-0 text-[11px] text-[#87958a]">{new Date(event.created_at).toLocaleString()}</span>
+              <span className="shrink-0 text-[11px] text-[#87958a]">{new Date(event.created_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',
+                day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
             </div>)}
           </div> : <p className="mt-3 text-xs text-[#77857b]">No workflow events recorded.</p>}
         </div>
