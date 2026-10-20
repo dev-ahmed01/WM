@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
+import hmac
+import time
 import os
 import re
 import psycopg
@@ -380,6 +383,80 @@ def main():
             assert retry.status==201 and retry.json()["replayed"] is True
             assert retry.json()["work_item_id"]==imported_work
             assert outsider.request.get(f"{BASE}/api/backend/work/items/{imported_work}").status==404
+
+            # Phase 6B: pre-provisioned HMAC secret and unsigned HTTP rejection.
+            # Real FastAPI ingress is called without cookies/authorization.
+            admin.goto(f"{BASE}/work/integrations")
+            admin.get_by_label("Connector signing key ID").fill("e2e_signed_wms")
+            admin.get_by_label("Connector source type").select_option("custom_wms")
+            with admin.expect_response(
+                lambda response:response.url.endswith("/api/backend/work/integrations/sources")
+                    and response.request.method=="POST",timeout=20000
+            ) as connector_created:
+                admin.get_by_role("button",name="Register preconfigured source").click()
+            assert connector_created.value.status==201,connector_created.value.text()
+            assert connector_created.value.json()["status"]=="active"
+            webhook_url="http://127.0.0.1:8000/api/v1/work/integrations/webhooks/e2e_signed_wms"
+            signed_order={
+                "source_system":"custom_wms",
+                "external_event_id":"receipt.signed.8005",
+                "external_work_id":"SIGNED-8005",
+                "title":"Review signed inbound shipment 8005",
+                "work_type":"receiving","priority":"high",
+                "instructions":"Record sealed cartons in the warehouse receiving bay.",
+                "assigned_to":"e2e_employee",
+            }
+            raw=json.dumps(signed_order,separators=(",",":")).encode()
+            stamp=str(int(time.time()))
+            source_secret=b"ci-only-signed-warehouse-secret-has-36-bytes-for-tests"
+            def signature(nonce,payload=raw):
+                mac=hmac.new(source_secret,b"v1\\n"+stamp.encode()+b"\\n"+nonce.encode()+b"\\n"+payload,
+                             hashlib.sha256).hexdigest()
+                return {"X-WM-Timestamp":stamp,"X-WM-Nonce":nonce,
+                        "X-WM-Signature":"v1="+mac,"Content-Type":"application/json"}
+            assert admin.request.post(webhook_url,data=raw).status==401
+            wrong=signature("browser_nonce_bad_123456")
+            wrong["X-WM-Signature"]="v1="+"0"*64
+            assert admin.request.post(webhook_url,data=raw,headers=wrong).status==401
+            first=admin.request.post(webhook_url,data=raw,
+                                     headers=signature("browser_nonce_first_123456"))
+            assert first.status==202,first.text()
+            assert first.json()["status"]=="staged"
+            signed_intake=first.json()["intake_id"]
+            assert admin.request.post(webhook_url,data=raw,
+                headers=signature("browser_nonce_first_123456")).status==409
+            again=admin.request.post(webhook_url,data=raw,
+                                     headers=signature("browser_nonce_retry_123456"))
+            assert again.status==202 and again.json()["status"]=="replayed"
+            assert again.json()["intake_id"]==signed_intake
+            bad_payload=json.dumps({**signed_order,"status":"completed"}).encode()
+            invalid=admin.request.post(webhook_url,data=bad_payload,
+                                       headers=signature("browser_nonce_invalid_123456",bad_payload))
+            assert invalid.status==422
+            manager.goto(f"{BASE}/work/integrations")
+            manager.get_by_role("button",name=re.compile("Review signed inbound shipment 8005")).click()
+            manager.get_by_label("Independent review note").fill(
+                "Receipt verified against signed warehouse source order; SOP remains separate."
+            )
+            with manager.expect_response(
+                lambda response:response.url.endswith(
+                    "/api/backend/work/integrations/intake/"+signed_intake+"/decision")
+                    and response.request.method=="POST",timeout=20000
+            ) as signed_approval:
+                manager.get_by_role("button",name="Accept into queue").click()
+            assert signed_approval.value.status==200,signed_approval.value.text()
+            signed_work=signed_approval.value.json()["work_item_id"]
+            signed_position=manager.request.get(f"{BASE}/api/backend/work/execution/{signed_work}").json()
+            assert signed_position["status"]=="queued" and signed_position["session_id"] is None
+            admin.goto(f"{BASE}/work/integrations")
+            admin.get_by_role("button",name=re.compile("e2e_signed_wms")).click()
+            expect(admin.get_by_text("3 deliveries",exact=False)).to_be_visible(timeout=15000)
+            admin.screenshot(path="/tmp/workmate-phase6b-signed-connector-health.png",full_page=True)
+            admin.get_by_role("button",name="Disable source").click()
+            expect(admin.get_by_role("button",name="Enable source")).to_be_visible(timeout=15000)
+            assert admin.request.post(webhook_url,data=raw,
+                headers=signature("browser_nonce_disabled_123456")).status==401
+            assert outsider.request.get(f"{BASE}/api/backend/work/items/{signed_work}").status==404
             manager.goto(f"{BASE}/knowledge-studio")
             manager.wait_for_url("**/control-room", timeout=12000)
             # Phase 1 real manager intake -> PostgreSQL assignment -> employee-only view.
