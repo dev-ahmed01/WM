@@ -143,6 +143,16 @@ class WorkItemRepository:
                     if not row or row[2] not in ("queued","ready"):
                         cur.execute("ROLLBACK")
                         return None
+                    # Independent admin approval in Phase 4C binds both the
+                    # employee and published procedure. A normal manager
+                    # reassignment must not silently replace the approved worker.
+                    cur.execute("""
+                      SELECT 1 FROM workmate_copilot.work_corrective_requests
+                      WHERE corrective_work_id=%s AND department_id=%s
+                    """,(item_id,department))
+                    if cur.fetchone() is not None:
+                        cur.execute("ROLLBACK")
+                        return None
                     cur.execute("""SELECT 1 FROM security.users u
                       JOIN security.user_roles ur ON ur.user_id=u.id
                       JOIN security.roles r ON r.id=ur.role_id
