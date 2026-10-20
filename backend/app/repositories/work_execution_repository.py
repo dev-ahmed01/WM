@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from app.core.database import get_postgres_connection
 from app.repositories.owd_repository import OWDRepository
+from app.repositories.work_exception_repository import open_case
 
 MAX_EVIDENCE_BYTES = 2 * 1024 * 1024
 SAFE_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
@@ -541,6 +542,36 @@ class WorkExecutionRepository:
                     _event(cur,work_id,department,actor,"decision_recorded",{
                         "from_state_id":state["id"],"option_code":option
                     })
+                    # A published escalation outcome must open a supervisor
+                    # case, not leave the task in misleading "active" status.
+                    if status=="active":
+                        cur.execute("""
+                            SELECT current_state_id FROM workmate_copilot.workflow_sessions
+                            WHERE id=%s
+                        """,(work["execution_session_id"],))
+                        escalated=_graph_state(cur,work["workflow_version_id"],cur.fetchone()[0])
+                        if escalated["state_type"]=="ESCALATION":
+                            cur.execute("""
+                                UPDATE workmate_copilot.workflow_sessions
+                                SET status='paused',updated_at=CURRENT_TIMESTAMP
+                                WHERE id=%s AND status='active'
+                            """,(work["execution_session_id"],))
+                            if cur.rowcount!=1:
+                                raise ExecutionConflict("Unable to secure escalated session.")
+                            cur.execute("""
+                                UPDATE workmate_copilot.work_items
+                                SET status='blocked',updated_at=CURRENT_TIMESTAMP WHERE id=%s
+                            """,(work_id,))
+                            work["status"]="blocked"
+                            case_id=open_case(
+                                cur,work,department,actor,"sop_outcome",
+                                "Published SOP outcome requires supervisor review.",
+                                escalated["id"],option,
+                            )
+                            _event(cur,work_id,department,actor,"blocked",{
+                                "reason":"Published SOP escalation","case_id":case_id,
+                                "state_id":escalated["id"],
+                            })
                     if status=="completed":
                         _event(cur,work_id,department,actor,"completed",
                                {"session_id":work["execution_session_id"]})
@@ -631,6 +662,14 @@ class WorkExecutionRepository:
                     """,(new,work_id))
                     _event(cur,work_id,department,actor,event,{"reason":reason[:500]})
                     work["status"]=new
+                    if new=="blocked":
+                        case_id=open_case(
+                            cur,work,department,actor,"worker_report",reason,
+                        )
+                        _event(cur,work_id,department,actor,"blocked",{
+                            "reason":reason[:500],"case_id":case_id,
+                            "source":"supervisor_exception",
+                        })
                     view=_position(cur,work)
                     cur.execute("COMMIT")
                     return view
