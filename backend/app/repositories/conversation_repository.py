@@ -124,8 +124,8 @@ class ConversationRepository:
             INSERT INTO WORKMATE_COPILOT.conversation_messages (
                 id, conversation_id, sender, message_text, intent,
                 retrieved_state_ids, citations, confidence_score, escalated, created_at
-            ) SELECT %s, %s, %s, %s, %s, TO_ARRAY(PARSE_JSON(%s)),
-                     PARSE_JSON(%s), %s, %s, %s
+            ) SELECT %s, %s, %s, %s, %s, %s::jsonb,
+                     %s::jsonb, %s, %s, %s
         """
         try:
             with get_snowflake_connection() as conn:
@@ -176,14 +176,12 @@ class ConversationRepository:
                     query = """
                         SELECT c.id, c.user_id, c.started_at AS created_at,
                                c.ended_at AS updated_at,
-                               COALESCE(ws.status, IFF(c.ended_at IS NULL, 'active', 'completed')) AS status
+                               COALESCE(ws.status, CASE WHEN c.ended_at IS NULL THEN 'active' ELSE 'completed' END) AS status
                         FROM WORKMATE_COPILOT.conversations c
                         LEFT JOIN (
-                            SELECT conversation_id, status
+                            SELECT DISTINCT ON (conversation_id) conversation_id, status
                             FROM WORKMATE_COPILOT.workflow_sessions
-                            QUALIFY ROW_NUMBER() OVER (
-                                PARTITION BY conversation_id ORDER BY started_at DESC
-                            ) = 1
+                            ORDER BY conversation_id, started_at DESC
                         ) ws ON ws.conversation_id = c.id
                         WHERE c.user_id = %s
                         ORDER BY c.started_at DESC

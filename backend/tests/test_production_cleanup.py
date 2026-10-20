@@ -35,28 +35,20 @@ def test_retrieval_metadata_does_not_fabricate_embedding_or_index_state():
     assert metadata.semantic_search_metadata == {}
 
 
-def test_deployment_order_contains_database_only_prerequisites(monkeypatch):
-    assert deploy_owd_schema.MIGRATION_FILES[-7:] == [
-        "12_runtime_alignment.sql",
-        "13_runtime_prerequisites.sql",
-        "14_runtime_integrity.sql",
-        "15_active_workflow_versions.sql",
-        "16_flexible_owd_authoring_metadata.sql",
-        "17_multilingual_voice.sql",
-        "18_query_resolution_memory.sql",
-    ]
-    assert deploy_owd_schema.ordered_migrations() == deploy_owd_schema.MIGRATION_FILES
-    monkeypatch.setattr(
-        deploy_owd_schema.settings,
-        "SNOWFLAKE_ACCOUNT",
-        "your_snowflake_account_placeholder",
-    )
+def test_postgres_deployment_orders_security_and_pilot_migrations_and_rejects_shared_login():
+    from scripts.migrate_postgres import MIGRATIONS, select_migration_url
+    import pytest
 
-    report = deploy_owd_schema.deploy_migrations()
-
-    assert report["status"] == "FAILED"
-    assert report["failed_statements"]
-    assert report["schemas_created"] == []
+    files = sorted(path.name for path in MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
+    assert files and files == sorted(files)
+    assert "003_security_sessions_rls.sql" in files
+    assert "004_pilot_feedback.sql" in files
+    with pytest.raises(ValueError, match="distinct login"):
+        select_migration_url({
+            "APP_ENV": "staging",
+            "MIGRATION_DATABASE_URL": "postgresql://same:pass@localhost:5432/workmate",
+            "DATABASE_URL": "postgresql://same:pass@localhost:5432/workmate",
+        })
 
 
 def test_active_version_migration_deprecates_stale_retrieval_rows():
@@ -83,12 +75,20 @@ def test_flexible_authoring_migration_preserves_descriptive_metadata():
     assert "review_cycle SET DATA TYPE VARCHAR(512)" in sql
 
 
-def test_deployment_rejects_sanitized_template_credentials(monkeypatch):
-    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_ACCOUNT", "your_snowflake_account")
-    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_USER", "your_snowflake_user")
-    monkeypatch.setattr(deploy_owd_schema.settings, "SNOWFLAKE_PASSWORD", "replace_with_a_local_secret")
+def test_production_configuration_rejects_placeholder_postgres_credentials(monkeypatch):
+    import pytest
+    from app.core.config import Settings
 
-    assert deploy_owd_schema.has_placeholder_credentials() is True
+    monkeypatch.setenv("JWT_SECRET", "a" * 40)
+    monkeypatch.setenv("INTERNAL_WEBHOOK_SECRET", "b" * 40)
+    with pytest.raises(ValueError, match="credential|placeholder|DATABASE_URL"):
+        Settings(
+            _env_file=None, APP_ENV="production",
+            DATABASE_URL="postgresql://workmate:placeholder@database.example:5432/workmate",
+            FRONTEND_ORIGIN="https://workmate.example",
+            AUTH_REVALIDATE_DB=True, AUTH_SESSION_STORE_ENABLED=True,
+            AUTH_RATE_LIMIT_ENABLED=True, POSTGRES_RLS_REFERENCES=True,
+        )
 
 
 def test_deployer_preflights_idempotent_add_column_statements():

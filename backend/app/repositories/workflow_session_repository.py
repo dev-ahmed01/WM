@@ -98,7 +98,7 @@ class WorkflowSessionRepository:
             INSERT INTO WORKMATE_COPILOT.workflow_sessions (
                 id, conversation_id, workflow_version_id, current_state_id,
                 user_id, status, session_context, started_at, updated_at
-            ) SELECT %s, %s, %s, %s, %s, 'active', PARSE_JSON(%s), %s, %s
+            ) SELECT %s, %s, %s, %s, %s, 'active', %s::jsonb, %s, %s
         """
         try:
             with get_snowflake_connection() as conn:
@@ -139,15 +139,23 @@ class WorkflowSessionRepository:
                 with conn.cursor() as cur:
                     cur.execute("BEGIN")
                     try:
+                        cur.execute(
+                            "SELECT 1 FROM workmate_copilot.work_items WHERE execution_session_id=%s",
+                            (session_id,),
+                        )
+                        if cur.fetchone():
+                            raise DatabaseException(
+                                message="Task execution requires its atomic evidence gate."
+                            )
                         target_state_id = next_state_id or expected_state_id
                         completed_at = now if new_status == "completed" else None
                         cur.execute(
                             """
                             UPDATE WORKMATE_COPILOT.workflow_sessions
-                            SET previous_state_id = IFF(%s <> current_state_id, current_state_id, previous_state_id),
+                            SET previous_state_id = CASE WHEN %s <> current_state_id THEN current_state_id ELSE previous_state_id END,
                                 current_state_id = %s,
                                 status = %s,
-                                session_context = PARSE_JSON(%s),
+                                session_context = %s::jsonb,
                                 updated_at = %s,
                                 completed_at = %s
                             WHERE id = %s
@@ -176,10 +184,19 @@ class WorkflowSessionRepository:
                                 """
                                 INSERT INTO WORKMATE_COPILOT.workflow_step_executions
                                     (id, session_id, step_id, status, input_payload, executed_at)
-                                SELECT %s, %s, %s, 'PASSED', PARSE_JSON(%s), %s
+                                SELECT %s, %s, %s, 'PASSED', %s::jsonb, %s
                                 """,
                                 (execution_id, session_id, step_id, json.dumps(session_context), now),
                             )
+                        cur.execute(
+                            """INSERT INTO shared.audit_logs
+                               (id, user_id, role, action, resource, ip_address,
+                                status_code, created_at)
+                               SELECT %s, s.user_id, 'workflow', 'WORKFLOW_PROGRESS',
+                                      %s, 'internal', 200, CURRENT_TIMESTAMP
+                               FROM WORKMATE_COPILOT.workflow_sessions s WHERE s.id=%s""",
+                            (uuid.uuid4().hex, f"session:{session_id}:step:{step_id or '-'}", session_id),
+                        )
                         cur.execute("COMMIT")
                     except Exception:
                         cur.execute("ROLLBACK")
@@ -202,7 +219,7 @@ class WorkflowSessionRepository:
         query = """
             UPDATE WORKMATE_COPILOT.workflow_sessions
             SET status = %s,
-                session_context = PARSE_JSON(%s),
+                session_context = %s::jsonb,
                 updated_at = %s,
                 completed_at = COALESCE(%s, completed_at)
             WHERE id = %s AND status = %s
@@ -210,17 +227,38 @@ class WorkflowSessionRepository:
         try:
             with get_snowflake_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        query,
-                        (
-                            new_status,
-                            json.dumps(session_context),
-                            now,
-                            completed_at,
-                            session_id,
-                            expected_status,
-                        ),
-                    )
-                    return cur.rowcount == 1
+                    cur.execute("BEGIN")
+                    try:
+                        cur.execute(
+                            "SELECT 1 FROM workmate_copilot.work_items WHERE execution_session_id=%s",
+                            (session_id,),
+                        )
+                        if cur.fetchone():
+                            raise DatabaseException(
+                                message="Task session status changes require the work API."
+                            )
+                        cur.execute(
+                            query,
+                            (new_status, json.dumps(session_context), now,
+                             completed_at, session_id, expected_status),
+                        )
+                        changed = cur.rowcount == 1
+                        if changed:
+                            cur.execute(
+                                """INSERT INTO shared.audit_logs
+                                   (id,user_id,role,action,resource,ip_address,
+                                    status_code,created_at)
+                                   SELECT %s,s.user_id,'workflow',%s,%s,'internal',
+                                          200,CURRENT_TIMESTAMP
+                                   FROM WORKMATE_COPILOT.workflow_sessions s
+                                   WHERE s.id=%s""",
+                                (uuid.uuid4().hex, f"WORKFLOW_STATUS_{new_status.upper()}",
+                                 f"session:{session_id}", session_id),
+                            )
+                        cur.execute("COMMIT")
+                        return changed
+                    except Exception:
+                        cur.execute("ROLLBACK")
+                        raise
         except Exception as exc:
             raise DatabaseException(message=f"Failed to update session status: {exc}") from exc

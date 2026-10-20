@@ -1,0 +1,72 @@
+[
+  {
+    "id": "en001",
+    "language": "en",
+    "reference": "Inspect the security seal",
+    "hypothesis": "Inspect the security seal",
+    "detected_language": "en"
+  },
+  {
+    "id": "en002",
+    "language": "en",
+    "reference": "Pause the workflow",
+    "hypothesis": "Pause workflow",
+    "detected_language": "en"
+  },
+  {
+    "id": "en003",
+    "language": "en",
+    "reference": "What is the carton barcode",
+    "hypothesis": "What is the carton barcode",
+    "detected_language": "en"
+  },
+  {
+    "id": "hi001",
+    "language": "hi",
+    "reference": "पैकेज क्षतिग्रस्त है",
+    "hypothesis": "पैकेज क्षतिग्रस्त है",
+    "detected_language": "hi"
+  },
+  {
+    "id": "hi002",
+    "language": "hi",
+    "reference": "सील की जांच करें",
+    "hypothesis": "सील जांच करें",
+    "detected_language": "hi"
+  },
+  {
+    "id": "hi003",
+    "language": "hi",
+    "reference": "अगला चरण बताइए",
+    "hypothesis": "चरण बताइए",
+    "detected_language": "hi"
+  },
+  {
+    "id": "mix001",
+    "language": "hinglish",
+    "reference": "Pallet का barcode scan करो",
+    "hypothesis": "Pallet का barcode scan करो",
+    "detected_language": "hi"
+  },
+  {
+    "id": "mix002",
+    "language": "hinglish",
+    "reference": "Damaged carton को quarantine करो",
+    "hypothesis": "Damaged carton को quarantine करो",
+    "detected_language": "hi"
+  },
+  {
+    "id": "mix003",
+    "language": "hinglish",
+    "reference": "अगला step क्या है",
+    "hypothesis": "step क्या है",
+    "detected_language": "hi"
+  },
+  {
+    "id": "mix004",
+    "language": "hinglish",
+    "reference": "Confirm the bin location फिर proceed करो",
+    "hypothesis": "Confirm bin location फिर proceed करो",
+    "detected_language": "hi"
+  }
+]

@@ -124,7 +124,7 @@ class FasterWhisperSpeechRecognitionService:
                     condition_on_previous_text=False,
                     initial_prompt=(
                         settings.WHISPER_HINDI_PROMPT
-                        if requested_language != "en"
+                        if requested_language == "hi"
                         else None
                     ),
                     # A fixed language already removes the cost and uncertainty

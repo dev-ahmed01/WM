@@ -262,8 +262,9 @@ OWNER_TOKEN = create_access_token("usr_owner", "employee", "dept_ops")
 OTHER_TOKEN = create_access_token("usr_other", "employee", "dept_ops")
 
 
+@patch("app.api.v1.copilot_session._task_bound", return_value=False)
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_employee_cannot_read_another_users_session(mock_get):
+def test_employee_cannot_read_another_users_session(mock_get, _task_guard):
     mock_get.return_value = session_row()
     response = client.get(
         "/api/v1/copilot/session/sess_1",
@@ -273,8 +274,9 @@ def test_employee_cannot_read_another_users_session(mock_get):
 
 
 @patch("app.api.v1.copilot_session.WorkflowStateService.pause_session")
+@patch("app.api.v1.copilot_session._task_bound", return_value=False)
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_owner_can_pause_session(mock_get, mock_pause):
+def test_owner_can_pause_session(mock_get, _task_guard, mock_pause):
     mock_get.return_value = session_row()
     mock_pause.return_value = WorkflowSession(**session_row(status="paused"))
     response = client.post(
@@ -286,8 +288,9 @@ def test_owner_can_pause_session(mock_get, mock_pause):
 
 
 @patch("app.api.v1.copilot_session.WorkflowStateService.mark_step_complete")
+@patch("app.api.v1.copilot_session._task_bound", return_value=False)
 @patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
-def test_owner_advance_completes_real_step_explicitly(mock_get, mock_advance):
+def test_owner_advance_completes_real_step_explicitly(mock_get, _task_guard, mock_advance):
     mock_get.return_value = session_row()
     mock_advance.return_value = WorkflowSession(**session_row())
     with patch(
@@ -317,3 +320,16 @@ def test_owner_advance_completes_real_step_explicitly(mock_get, mock_advance):
             "decision_option": "Damaged",
         },
     )
+
+@patch("app.api.v1.copilot_session._task_bound", return_value=True)
+@patch("app.api.v1.copilot_session.WorkflowSessionRepository.get_by_id")
+def test_task_bound_session_is_rejected_by_legacy_session_routes(mock_get, task_guard):
+    mock_get.return_value = session_row()
+    response = client.post(
+        "/api/v1/copilot/session/sess_1/advance",
+        headers={"Authorization": f"Bearer {OWNER_TOKEN}"},
+        json={"decision_option":"OPT_OK"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["error_code"] == "WORK_EXECUTION_ONLY"
+    task_guard.assert_called_once_with("sess_1")

@@ -11,12 +11,9 @@ def test_get_settings_cached_instance():
 
 
 def test_settings_fields_present():
-    assert hasattr(settings, "SNOWFLAKE_ACCOUNT")
-    assert hasattr(settings, "SNOWFLAKE_USER")
-    assert hasattr(settings, "SNOWFLAKE_PASSWORD")
-    assert hasattr(settings, "SNOWFLAKE_WAREHOUSE")
-    assert hasattr(settings, "SNOWFLAKE_DATABASE")
-    assert hasattr(settings, "SNOWFLAKE_SCHEMA")
+    assert hasattr(settings, "DATABASE_URL")
+    assert hasattr(settings, "POSTGRES_RLS_REFERENCES")
+    assert hasattr(settings, "AUTH_SESSION_STORE_ENABLED")
     assert hasattr(settings, "JWT_SECRET")
     assert hasattr(settings, "JWT_ALGORITHM")
     assert hasattr(settings, "JWT_ACCESS_EXPIRE_MINUTES")
@@ -35,11 +32,10 @@ def test_local_ai_is_default_provider():
 
 def test_credentials_have_no_checked_in_defaults():
     required = {
-        "SNOWFLAKE_ACCOUNT",
-        "SNOWFLAKE_USER",
-        "SNOWFLAKE_PASSWORD",
-        "JWT_SECRET",
+         "JWT_SECRET",
         "INTERNAL_WEBHOOK_SECRET",
     }
 
     assert all(Settings.model_fields[name].is_required() for name in required)
+    assert "localhost" in Settings.model_fields["DATABASE_URL"].default
+    assert Settings.model_fields["AUTH_SESSION_STORE_ENABLED"].default is False

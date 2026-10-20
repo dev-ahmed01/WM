@@ -9,13 +9,15 @@ from app.models.workflow_session import WorkflowDecisionOption
 class Citation(BaseModel):
     document_id: str
     document_title: str
-    version_number: int
+    version_number: Optional[int]
     # Search results may identify either a numeric step ordinal or a stable
     # state/step key. Do not coerce UUID-like identifiers to integers.
     step_number: Optional[Union[int, str]] = None
     chunk_id: str
     excerpt: str
     state_id: Optional[str] = None
+    source_type: Literal["workflow", "reference"] = "workflow"
+    section_anchor: Optional[str] = None
 
 
 class CopilotMessageRequest(BaseModel):
@@ -24,6 +26,7 @@ class CopilotMessageRequest(BaseModel):
     selected_workflow_code: Optional[str] = None
     original_query: Optional[str] = None
     response_language: Optional[Literal["en", "hi"]] = None
+    mode: Literal["workflow", "reference"] = "workflow"
 
 
 class SopSuggestion(BaseModel):

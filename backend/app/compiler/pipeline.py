@@ -37,6 +37,7 @@ class OWDCompilerPipeline:
         skip_loader: bool = False,
         prepared_document: Optional[OWDDocument] = None,
         source_filename: str = "",
+        load_connection=None,
     ) -> Dict[str, Any]:
         """Executes Parser -> Validator -> Compiler -> Loader pipeline and returns detailed compilation report."""
         logger.info("[STAGE 0 INIT] Processing OWD Markdown (%d characters)", len(markdown_text))
@@ -140,7 +141,7 @@ class OWDCompilerPipeline:
 
         if not skip_loader:
             try:
-                load_res: LoadResult = OWDLoader.load(compiled_wf)
+                load_res: LoadResult = OWDLoader.load(compiled_wf, connection=load_connection)
                 tables_updated = load_res.tables_updated
                 deployment_status = "PUBLISHED"
                 logger.info(f"[STAGE 4 LOAD COMPLETE] OWDLoader.load succeeded. Tables updated: {tables_updated}")

@@ -1,0 +1,180 @@
+"""Supervisor case authorization, optimistic claiming and safe error handling."""
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from app.core.security import create_access_token
+from app.main import app
+from app.repositories.work_exception_repository import CaseConflict,CaseNotFound
+
+client=TestClient(app)
+
+def auth(role="manager",dept="receiving",actor="supervisor"):
+    return {"Authorization":"Bearer "+create_access_token(actor,role,dept)}
+
+def test_case_queue_requires_supervisor_and_department_scope():
+    assert client.get("/api/v1/work/exceptions").status_code==401
+    assert client.get("/api/v1/work/exceptions",headers=auth("employee")).status_code==403
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.list",return_value=[]) as items:
+        result=client.get("/api/v1/work/exceptions?limit=100",headers=auth())
+    assert result.status_code==200 and result.json()["items"]==[]
+    assert items.call_args.args==("receiving",100)
+
+
+def test_employee_cannot_view_or_review_incident_even_if_own_task():
+    url="/api/v1/work/exceptions/case_one"
+    for method,tail,payload in [
+        ("get","",None),("post","/claim",{"expected_revision":1}),
+        ("post","/review",{"expected_revision":1,"decision":"reviewed",
+                           "review_note":"Reviewed reported seal damage."}),
+    ]:
+        response=getattr(client,method)(url+tail,headers=auth("employee"),
+                                        **({"json":payload} if payload else {}))
+        assert response.status_code==403
+
+
+def test_claim_and_review_require_literal_decision_and_expected_revision():
+    path="/api/v1/work/exceptions/case_one"
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.claim",
+               return_value={"id":"case_one","revision":2,"status":"claimed"}) as claim:
+        result=client.post(path+"/claim",headers=auth(),json={"expected_revision":1})
+    assert result.status_code==200 and claim.call_args.args==("receiving","supervisor","case_one",1)
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.review",
+               return_value={"status":"follow_up_requested","revision":3}) as review:
+        result=client.post(path+"/review",headers=auth(),json={
+            "expected_revision":2,"decision":"follow_up_requested",
+            "review_note":"Contain the shipment pending a physical review.",
+        })
+    assert result.status_code==200
+    assert review.call_args.args[0:5]==("receiving","supervisor","case_one",2,"follow_up_requested")
+    bad=[
+       {"expected_revision":2,"decision":"release","review_note":"Unsafe shortcut"},
+       {"expected_revision":2,"decision":"reviewed","review_note":"ok"},
+       {"expected_revision":2,"decision":"reviewed","review_note":"Reviewed case","status":"completed"},
+       {"expected_revision":0,"decision":"reviewed","review_note":"Reviewed case"},
+    ]
+    for payload in bad:
+        assert client.post(path+"/review",headers=auth(),json=payload).status_code==422
+
+
+def test_cases_hide_foreign_scope_and_keep_database_errors_private():
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.get",side_effect=CaseNotFound()):
+        assert client.get("/api/v1/work/exceptions/foreign",headers=auth()).status_code==404
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.claim",
+               side_effect=CaseConflict("Already owned.")):
+        assert client.post("/api/v1/work/exceptions/case_one/claim",headers=auth(),
+                           json={"expected_revision":1}).status_code==409
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.get",
+               side_effect=RuntimeError("postgresql://private:password@db-server")):
+        result=client.get("/api/v1/work/exceptions/case_one",headers=auth())
+    assert result.status_code==503 and "db-server" not in result.text
+
+def test_containment_requires_manager_revision_and_forbids_arbitrary_release():
+    path="/api/v1/work/exceptions/case_one/action"
+    valid={"expected_revision":3,"kind":"containment_recorded",
+           "note":"The affected cartons have been segregated from the shipment."}
+    assert client.post(path,headers=auth("employee"),json=valid).status_code==403
+    for injected in ({"kind":"release"}, {"status":"completed"},
+                     {"department_id":"other"}):
+        assert client.post(path,headers=auth(),json={**valid,**injected}).status_code==422
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.action",
+               return_value={"revision":4,"status":"follow_up_requested"}) as action:
+        result=client.post(path,headers=auth(),json=valid)
+    assert result.status_code==200
+    assert action.call_args.args==("receiving","supervisor","case_one",3,
+                                   "containment_recorded",valid["note"])
+
+
+def test_linked_handover_requires_owner_and_forbids_forged_identity_fields():
+    path="/api/v1/work/exceptions/case_one/handover"
+    valid={"recipient_label":"Next-shift supervisor",
+           "next_action":"Keep the damaged cartons isolated for QA review.",
+           "notes":"Photographs recorded in task checkpoint."}
+    for bad in ({"department_id":"other"},{"conversation_id":"forged"},
+                {"work_id":"other"},{"status":"completed"}):
+        assert client.post(path,headers=auth("employee"),json={**valid,**bad}).status_code==422
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.handover",
+               return_value={"handover_id":"hov_real","status":"submitted"}) as handover:
+        result=client.post(path,headers=auth("employee","receiving","operator1"),json=valid)
+    assert result.status_code==201
+    assert handover.call_args.args==("receiving","operator1","case_one",
+                                    valid["recipient_label"],valid["next_action"],valid["notes"])
+
+def test_corrective_request_requires_manager_and_cannot_forge_clearance():
+    base="/api/v1/work/exceptions/case_one/corrective"
+    payload={"expected_revision":5,"workflow_version_id":"published_v1",
+             "assigned_to":"worker_1",
+             "plan_note":"Re-inspect held cartons with a separately approved receiving SOP."}
+    assert client.post(base,headers=auth("employee"),json=payload).status_code==403
+    for extra in ({"status":"completed"},{"case_id":"other"},
+                  {"approved_by":"self"},{"release_original":True}):
+        assert client.post(base,headers=auth(),json={**payload,**extra}).status_code==422
+    with patch("app.api.v1.work_exceptions.CorrectiveWorkRepository.request",
+               return_value={"id":"cwr_1","status":"pending"}) as create:
+        result=client.post(base,headers=auth(),json=payload)
+    assert result.status_code==201
+    assert create.call_args.args==("receiving","supervisor","case_one",5,
+                                  "published_v1","worker_1",payload["plan_note"])
+
+
+def test_corrective_approval_requires_admin_and_explicit_decision():
+    path="/api/v1/work/exceptions/case_one/corrective/cwr_1/decision"
+    decision={"decision":"approved",
+              "decision_note":"Separate SOP verification is appropriate. Original hold remains."}
+    assert client.post(path,headers=auth("manager"),json=decision).status_code==403
+    assert client.post(path,headers=auth("employee"),json=decision).status_code==403
+    for extra in ({"status":"ready"},{"resume_task":True},{"department_id":"foreign"}):
+        assert client.post(path,headers=auth("admin"),json={**decision,**extra}).status_code==422
+    assert client.post(path,headers=auth("admin"),json={"decision":"released",
+           "decision_note":decision["decision_note"]}).status_code==422
+    with patch("app.api.v1.work_exceptions.CorrectiveWorkRepository.decide",
+               return_value={"status":"approved","corrective_work_id":"wrk_new"}) as approve:
+        result=client.post(path,headers=auth("admin","receiving","admin2"),json=decision)
+    assert result.status_code==200
+    assert approve.call_args.args==("receiving","admin2","case_one","cwr_1",
+                                    "approved",decision["decision_note"])
+
+
+def test_case_closure_requires_distinct_role_and_literal_site_attestation():
+    base="/api/v1/work/exceptions/case_one/closure"
+    review={"expected_revision":7,
+            "review_note":"Reviewed the fresh corrective session and its retained photo records."}
+    assert client.post(base+"/evidence",headers=auth("employee"),json=review).status_code==403
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",
+               return_value={"id":"cls_one","evidence_reviewed_by":"supervisor"}) as reviewed:
+        result=client.post(base+"/evidence",headers=auth(),json=review)
+    assert result.status_code==201
+    assert reviewed.call_args.args==("receiving","supervisor","case_one",7,review["review_note"])
+    for injected in ({"release_original":True},{"work_id":"other"},{"verification_status":"VERIFIED"}):
+        assert client.post(base+"/evidence",headers=auth(),json={**review,**injected}).status_code==422
+    acceptance={
+        "expected_revision":8,"site_record_reference":"SITE-QA-2071",
+        "site_acceptance_note":"Personally inspected receiving bay and checked quarantined cartons on site.",
+        "independent_site_inspection_attested":True,
+    }
+    assert client.post(base+"/site",headers=auth("manager"),json=acceptance).status_code==403
+    assert client.post(base+"/site",headers=auth("employee"),json=acceptance).status_code==403
+    for injected in (
+        {"release_original":True}, {"site_record_reference":"x"},
+        {"independent_site_inspection_attested":False},
+        {"original_task_status":"completed"},
+    ):
+        assert client.post(base+"/site",headers=auth("admin"),json={**acceptance,**injected}).status_code==422
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.accept_site",
+               return_value={"status":"closed","original_work_status":"blocked"}) as accepted:
+        result=client.post(base+"/site",headers=auth("admin","receiving","site_signer"),json=acceptance)
+    assert result.status_code==200 and result.json()["original_work_status"]=="blocked"
+    assert accepted.call_args.args==(
+        "receiving","site_signer","case_one",8,"SITE-QA-2071",
+        acceptance["site_acceptance_note"],True,
+    )
+
+
+def test_case_closure_does_not_leak_cross_department_or_storage_errors():
+    request={"expected_revision":7,"review_note":"A separate reviewer examined the recorded corrective evidence."}
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",side_effect=CaseNotFound()):
+        assert client.post("/api/v1/work/exceptions/hidden/closure/evidence",
+                           headers=auth(),json=request).status_code==404
+    with patch("app.api.v1.work_exceptions.CaseClosureRepository.review_evidence",
+               side_effect=RuntimeError("postgresql://secret:password@internalhost")):
+        response=client.post("/api/v1/work/exceptions/case_one/closure/evidence",
+                             headers=auth(),json=request)
+    assert response.status_code==503 and "internalhost" not in response.text

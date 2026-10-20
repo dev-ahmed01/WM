@@ -1,6 +1,7 @@
 """Security primitives: Password hashing with bcrypt & JWT token management."""
 
 import bcrypt
+from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from jose import ExpiredSignatureError, JWTError, jwt
@@ -69,6 +70,7 @@ def create_refresh_token(
     payload = {
         "sub": str(user_id),
         "type": "refresh",
+        "jti": uuid4().hex,
         "iat": now,
         "exp": expire,
     }

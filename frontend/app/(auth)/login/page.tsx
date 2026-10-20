@@ -3,8 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
-import { getRoleRedirectPath, parseJwt } from '@/lib/auth';
+import { getRoleRedirectPath, loadUserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 
 export default function LoginPage() {
@@ -19,13 +18,14 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const response = await apiClient<{ access_token: string; refresh_token?: string }>('/auth/login', {
-        method: 'POST',
+      const result = await fetch('/api/session/login', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: username, password }),
       });
-      localStorage.setItem('token', response.access_token);
-      if (response.refresh_token) localStorage.setItem('refresh_token', response.refresh_token);
-      router.push(getRoleRedirectPath(parseJwt(response.access_token)?.role));
+      if (!result.ok) throw new Error(result.status === 401 ? 'Invalid credentials.' : 'Sign-in is unavailable.');
+      const profile = await loadUserClaims();
+      router.push(getRoleRedirectPath(profile?.role));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Invalid credentials');
     } finally {
