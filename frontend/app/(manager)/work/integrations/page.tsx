@@ -6,6 +6,7 @@ import { ArrowRight, CheckCircle2, FileInput, RefreshCw, ShieldCheck } from 'luc
 import { useRequireRole } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { IntegrationSourcesPanel } from '@/components/work/IntegrationSourcesPanel';
 
 type System = 'sap'|'oracle'|'odoo'|'custom_wms';
 type Type = 'receiving'|'putaway'|'stock_count'|'picking'|'dispatch'|'other';
@@ -206,6 +207,7 @@ export default function IntegrationInbox(){
         </div>
       </section>
     </div>
-    <p className="text-xs text-[#738275]">Authenticated adapter staging only. No live vendor connector or automatic workflow execution is enabled.</p>
+    {user?.role==='admin'?<IntegrationSourcesPanel/>:null}
+    <p className="text-xs text-[#738275]">Signed custom connectors require separately configured secrets. Native vendor SDKs, bidirectional synchronization and automatic SOP execution remain disabled.</p>
   </div>;
 }
