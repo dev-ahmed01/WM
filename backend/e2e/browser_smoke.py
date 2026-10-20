@@ -228,6 +228,25 @@ def main():
                 admin.get_by_role("button",name="Publish reviewed workflow").click()
             assert publication.value.status==200,publication.value.text()
             published_version=publication.value.json()["version_id"]
+            # Verify both evidence policy and supervisor hard stop survived
+            # the actual canonical PostgreSQL compiler/loader.
+            with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                with db.cursor() as cur:
+                    cur.execute("""
+                        SELECT COUNT(*) FROM knowledge_studio.workflow_evidence_specs e
+                        JOIN knowledge_studio.workflow_steps st ON st.id=e.step_id
+                        JOIN knowledge_studio.workflow_states state ON state.id=st.state_id
+                        WHERE state.workflow_version_id=%s
+                          AND e.evidence_type='PHOTO_JPEG' AND e.is_required=TRUE
+                    """,(published_version,))
+                    assert cur.fetchone()[0]==1
+                    cur.execute("""
+                        SELECT COUNT(*) FROM knowledge_studio.workflow_rules rule
+                        JOIN knowledge_studio.workflow_states state ON state.id=rule.state_id
+                        WHERE state.workflow_version_id=%s AND state.state_type='ESCALATION'
+                          AND rule.enforcement_level='HARD_STOP'
+                    """,(published_version,))
+                    assert cur.fetchone()[0]==1
             expect(admin.get_by_text("Published version:",exact=False)).to_be_visible(timeout=15000)
             admin.screenshot(path="/tmp/workmate-phase3b-published-workflow.png",full_page=True)
             status=admin.request.get(f"{BASE}/api/backend/procedure/drafts/{imported_id}")
