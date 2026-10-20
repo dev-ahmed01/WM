@@ -674,10 +674,11 @@ def main():
             # Phase 4D: finish the separately approved corrective SOP with a
             # genuine new execution, typed observation and real JPEG attachment.
             # A completed task alone cannot close the original incident.
-            assert manager.request.post(
+            premature_review=manager.request.post(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}/closure/evidence",
                 data={"expected_revision":7,"review_note":"No corrective evidence has been completed yet."},
-            ).status==409
+            )
+            assert premature_review.status==409,(premature_review.status,premature_review.text())
             employee.get_by_text("I confirm I performed this checkpoint").click()
             employee.get_by_role("button",name="Record checkpoint").click()
             expect(employee.get_by_text("Record visible carton damage for the shift supervisor.")).to_be_visible()
