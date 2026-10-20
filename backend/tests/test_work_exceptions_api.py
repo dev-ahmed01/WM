@@ -97,3 +97,37 @@ def test_linked_handover_requires_owner_and_forbids_forged_identity_fields():
     assert result.status_code==201
     assert handover.call_args.args==("receiving","operator1","case_one",
                                     valid["recipient_label"],valid["next_action"],valid["notes"])
+
+def test_corrective_request_requires_manager_and_cannot_forge_clearance():
+    base="/api/v1/work/exceptions/case_one/corrective"
+    payload={"expected_revision":5,"workflow_version_id":"published_v1",
+             "assigned_to":"worker_1",
+             "plan_note":"Re-inspect held cartons with a separately approved receiving SOP."}
+    assert client.post(base,headers=auth("employee"),json=payload).status_code==403
+    for extra in ({"status":"completed"},{"case_id":"other"},
+                  {"approved_by":"self"},{"release_original":True}):
+        assert client.post(base,headers=auth(),json={**payload,**extra}).status_code==422
+    with patch("app.api.v1.work_exceptions.CorrectiveWorkRepository.request",
+               return_value={"id":"cwr_1","status":"pending"}) as create:
+        result=client.post(base,headers=auth(),json=payload)
+    assert result.status_code==201
+    assert create.call_args.args==("receiving","supervisor","case_one",5,
+                                  "published_v1","worker_1",payload["plan_note"])
+
+
+def test_corrective_approval_requires_admin_and_explicit_decision():
+    path="/api/v1/work/exceptions/case_one/corrective/cwr_1/decision"
+    decision={"decision":"approved",
+              "decision_note":"Separate SOP verification is appropriate. Original hold remains."}
+    assert client.post(path,headers=auth("manager"),json=decision).status_code==403
+    assert client.post(path,headers=auth("employee"),json=decision).status_code==403
+    for extra in ({"status":"ready"},{"resume_task":True},{"department_id":"foreign"}):
+        assert client.post(path,headers=auth("admin"),json={**decision,**extra}).status_code==422
+    assert client.post(path,headers=auth("admin"),json={"decision":"released",
+           "decision_note":decision["decision_note"]}).status_code==422
+    with patch("app.api.v1.work_exceptions.CorrectiveWorkRepository.decide",
+               return_value={"status":"approved","corrective_work_id":"wrk_new"}) as approve:
+        result=client.post(path,headers=auth("admin","receiving","admin2"),json=decision)
+    assert result.status_code==200
+    assert approve.call_args.args==("receiving","admin2","case_one","cwr_1",
+                                    "approved",decision["decision_note"])
