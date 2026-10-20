@@ -76,6 +76,45 @@ def _canonical(payload):
     return json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 
+def stage_in_transaction(cur,department,actor,payload):
+    """Share canonical source deduplication with the signed webhook transaction."""
+    digest=hashlib.sha256(_canonical(payload).encode("utf-8")).hexdigest()
+    identifier="int_"+uuid4().hex[:24]
+    cur.execute("""
+      INSERT INTO workmate_copilot.work_integration_intake
+        (id,department_id,source_system,external_event_id,external_work_id,
+         payload_digest,normalized_payload,submitted_by)
+      VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+      ON CONFLICT DO NOTHING RETURNING """+_columns(),(
+        identifier,department,payload["source_system"],payload["external_event_id"],
+        payload["external_work_id"],digest,_canonical(payload),actor,
+    ))
+    created=_record(cur)
+    if created:
+        
+        return {**_readable(created),"replayed":False}
+    # Resolve both unique constraints. Retrying the SAME event with
+    # the SAME normalized bytes is safe, even after acceptance.
+    cur.execute("""
+      SELECT """+_columns()+"""
+      FROM workmate_copilot.work_integration_intake
+      WHERE department_id=%s AND source_system=%s
+        AND (external_event_id=%s OR external_work_id=%s)
+      FOR UPDATE
+    """,(department,payload["source_system"],payload["external_event_id"],
+         payload["external_work_id"]))
+    existing=_record(cur)
+    if (existing and existing["external_event_id"]==payload["external_event_id"]
+        and existing["external_work_id"]==payload["external_work_id"]
+        and existing["payload_digest"]==digest
+        and existing["normalized_payload"]==payload):
+        
+        return {**_readable(existing),"replayed":True}
+    raise IntegrationConflict(
+        "Source event or business work ID was already submitted with different content."
+    )
+
+
 class IntegrationIntakeRepository:
     @staticmethod
     def stage(department,actor,payload):
@@ -88,40 +127,9 @@ class IntegrationIntakeRepository:
                 try:
                     if not _active_manager(cur,department,actor):
                         raise IntegrationConflict("Only active department managers may stage work.")
-                    identifier="int_"+uuid4().hex[:24]
-                    cur.execute("""
-                      INSERT INTO workmate_copilot.work_integration_intake
-                        (id,department_id,source_system,external_event_id,external_work_id,
-                         payload_digest,normalized_payload,submitted_by)
-                      VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
-                      ON CONFLICT DO NOTHING RETURNING """+_columns(),(
-                        identifier,department,payload["source_system"],payload["external_event_id"],
-                        payload["external_work_id"],digest,_canonical(payload),actor,
-                    ))
-                    created=_record(cur)
-                    if created:
-                        cur.execute("COMMIT")
-                        return {**_readable(created),"replayed":False}
-                    # Resolve both unique constraints. Retrying the SAME event with
-                    # the SAME normalized bytes is safe, even after acceptance.
-                    cur.execute("""
-                      SELECT """+_columns()+"""
-                      FROM workmate_copilot.work_integration_intake
-                      WHERE department_id=%s AND source_system=%s
-                        AND (external_event_id=%s OR external_work_id=%s)
-                      FOR UPDATE
-                    """,(department,payload["source_system"],payload["external_event_id"],
-                         payload["external_work_id"]))
-                    existing=_record(cur)
-                    if (existing and existing["external_event_id"]==payload["external_event_id"]
-                        and existing["external_work_id"]==payload["external_work_id"]
-                        and existing["payload_digest"]==digest
-                        and existing["normalized_payload"]==payload):
-                        cur.execute("COMMIT")
-                        return {**_readable(existing),"replayed":True}
-                    raise IntegrationConflict(
-                        "Source event or business work ID was already submitted with different content."
-                    )
+                    result=stage_in_transaction(cur,department,actor,payload)
+                    cur.execute("COMMIT")
+                    return result
                 except Exception:
                     cur.execute("ROLLBACK")
                     raise
