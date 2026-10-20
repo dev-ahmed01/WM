@@ -95,6 +95,33 @@ class OutboxRepository:
             with conn.cursor() as cur:
                 cur.execute("BEGIN")
                 try:
+                    # A worker can die after taking its FINAL lease. Expire
+                    # exhausted jobs into human-recoverable dead-letter state;
+                    # otherwise they would remain leased forever.
+                    cur.execute("""
+                      SELECT id,department_id,attempts
+                      FROM workmate_copilot.work_integration_outbox
+                      WHERE status='leased' AND attempts>=5
+                        AND lease_expires_at<CURRENT_TIMESTAMP
+                      FOR UPDATE SKIP LOCKED LIMIT %s
+                    """,(limit,))
+                    expired=cur.fetchall()
+                    for expired_id,expired_dept,attempt_no in expired:
+                        cur.execute("""
+                          INSERT INTO workmate_copilot.work_integration_outbox_attempts
+                            (id,department_id,outbox_id,attempt_number,result,code)
+                          SELECT %s,%s,%s,%s,'dead','lease_expired'
+                          WHERE NOT EXISTS(
+                            SELECT 1 FROM workmate_copilot.work_integration_outbox_attempts
+                            WHERE outbox_id=%s AND attempt_number=%s)
+                        """,(uuid4().hex,expired_dept,expired_id,attempt_no,
+                             expired_id,attempt_no))
+                        cur.execute("""
+                          UPDATE workmate_copilot.work_integration_outbox
+                          SET status='dead',lease_token=NULL,lease_expires_at=NULL,
+                              last_error_code='lease_expired',updated_at=CURRENT_TIMESTAMP
+                          WHERE id=%s
+                        """,(expired_id,))
                     cur.execute("""
                       SELECT o.id,o.source_id,o.department_id,o.payload,o.attempts
                       FROM workmate_copilot.work_integration_outbox o
