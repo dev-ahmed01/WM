@@ -195,12 +195,12 @@ def main():
             with admin.expect_download() as original_download:
                 admin.get_by_role("link",name="Download original").click()
             assert b"Inspect the inbound trailer seals" in original_download.value.path().read_bytes()
-            assert admin.get_by_role("checkbox").count()==2
-            for checkbox in admin.get_by_role("checkbox").all():
+            step_checks=admin.get_by_label("Checked against original source")
+            assert step_checks.count()==2
+            for checkbox in step_checks.all():
                 checkbox.check()
             # Phase 3B: configure an actual conditional outcome branch and
             # a photo-evidence requirement using the visual editor.
-            admin.get_by_label("Required supporting evidence").count()
             admin.locator('select[id^="evidence-"]').nth(1).select_option("PHOTO_JPEG")
             admin.get_by_text("Require final outcome selection").click()
             admin.get_by_role("button",name="Save revision").click()
