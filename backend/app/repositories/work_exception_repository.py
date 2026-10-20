@@ -77,15 +77,19 @@ class WorkExceptionRepository:
                 cur.execute("""
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
                            w.assigned_to AS work_assignee,w.workflow_version_id,
-                           h.id AS handover_id,h.status AS handover_status
+                           h.id AS handover_id,h.status AS handover_status,
+                           cr.status AS corrective_status
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
                     LEFT JOIN workmate_copilot.shift_handovers h
                       ON h.work_exception_id=c.id AND h.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_corrective_requests cr
+                      ON cr.case_id=c.id AND cr.department_id=c.department_id
                     WHERE c.department_id=%s
                     ORDER BY
-                      CASE WHEN c.status IN ('open','claimed','follow_up_requested') THEN 0 ELSE 1 END,
+                      CASE WHEN c.status IN ('open','claimed','follow_up_requested')
+                                OR cr.status='pending' THEN 0 ELSE 1 END,
                       CASE WHEN c.severity='critical' THEN 0 ELSE 1 END,
                       c.created_at ASC
                     LIMIT %s
@@ -102,12 +106,15 @@ class WorkExceptionRepository:
                 cur.execute("""
                     SELECT c.*,w.title AS work_title,w.status AS work_status,
                            w.assigned_to AS work_assignee,w.workflow_version_id,
-                           h.id AS handover_id,h.status AS handover_status
+                           h.id AS handover_id,h.status AS handover_status,
+                           cr.status AS corrective_status
                     FROM workmate_copilot.work_exceptions c
                     JOIN workmate_copilot.work_items w
                       ON w.id=c.work_item_id AND w.department_id=c.department_id
                     LEFT JOIN workmate_copilot.shift_handovers h
                       ON h.work_exception_id=c.id AND h.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_corrective_requests cr
+                      ON cr.case_id=c.id AND cr.department_id=c.department_id
                     WHERE c.id=%s AND c.department_id=%s
                 """,(case_id,department))
                 case=_row(cur)
