@@ -370,6 +370,83 @@ def main():
             assert outsider.request.get(
                 f"{BASE}/api/backend/work/execution/{work_id}"
             ).status==404
+            # Phase 4A: the unsafe outcome remains blocked and creates an
+            # actual task-linked case, reviewed by a separate supervisor.
+            manager.goto(f"{BASE}/control-room")
+            manager.get_by_role("button",name="New assignment").click()
+            manager.get_by_label("Task title").fill("Inspect exception cartons at inbound bay")
+            manager.get_by_label("Work type").select_option("receiving")
+            manager.get_by_label("Priority").select_option("high")
+            manager.get_by_label("Assign employee").select_option("e2e_employee")
+            with manager.expect_response(
+                lambda response: response.url.endswith("/api/backend/work/items")
+                and response.request.method=="POST",timeout=20000,
+            ) as exception_task:
+                manager.get_by_role("button",name="Queue assignment").click()
+            assert exception_task.value.status==201
+            exception_work_id=exception_task.value.json()["id"]
+            manager.goto(f"{BASE}/work/{exception_work_id}")
+            manager.get_by_label("Published procedure").select_option(published_version)
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/execution/"+exception_work_id+"/bind")
+                and r.request.method=="POST", timeout=20000
+            ) as linked:
+                manager.get_by_role("button",name="Link published SOP").click()
+            assert linked.value.status==200
+            employee.goto(f"{BASE}/work/{exception_work_id}")
+            employee.get_by_role("button",name="Start guided work").click()
+            expect(employee.get_by_text("Inspect the inbound trailer seals before unloading.")).to_be_visible()
+            employee.get_by_text("I confirm I performed this checkpoint").click()
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("Record visible carton damage for the shift supervisor.")).to_be_visible()
+            employee.get_by_label("Recorded observation").fill("Damaged corner carton photographed and held.")
+            employee.locator('input[type="file"]').set_input_files({
+                "name":"exception-cartons.jpg","mimeType":"image/jpeg",
+                "buffer":proof_bytes.getvalue(),
+            })
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("What outcome was observed at the end of this procedure?")).to_be_visible()
+            employee.get_by_text("An exception was documented").click()
+            with employee.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/execution/"+exception_work_id+"/decision")
+                and r.request.method=="POST",timeout=20000
+            ) as exceptional:
+                employee.get_by_role("button",name="Record decision").click()
+            assert exceptional.value.status==200
+            assert exceptional.value.json()["status"]=="blocked"
+            assert employee.request.post(
+                f"{BASE}/api/backend/work/execution/{exception_work_id}/resume",
+                headers={"Origin":BASE}
+            ).status==409
+            assert outsider.request.get(
+                f"{BASE}/api/backend/work/execution/{exception_work_id}"
+            ).status==404
+            manager.goto(f"{BASE}/work/exceptions")
+            expect(manager.get_by_role("heading",name="Task exceptions")).to_be_visible(timeout=15000)
+            manager.get_by_role("button",name=re.compile("Inspect exception cartons")).click()
+            expect(manager.get_by_text("Execution remains blocked")).to_be_visible()
+            manager.screenshot(path="/tmp/workmate-phase4a-supervisor-case.png",full_page=True)
+            case_list=manager.request.get(f"{BASE}/api/backend/work/exceptions").json()["items"]
+            task_case=next(c for c in case_list if c["work_item_id"]==exception_work_id)
+            assert task_case["severity"]=="critical" and task_case["status"]=="open"
+            assert employee.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
+            ).status==403
+            manager.get_by_role("button",name="Take ownership").click()
+            expect(manager.get_by_text("Review owner")).to_be_visible()
+            manager.get_by_label("Supervisor review note").fill(
+                "Quarantine the damaged goods; assign physical QA review next shift."
+            )
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/review")
+                and r.request.method=="POST",timeout=20000
+            ) as case_review:
+                manager.get_by_role("button",name="Request follow-up").click()
+            assert case_review.value.status==200
+            assert case_review.value.json()["status"]=="follow_up_requested"
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/execution/{exception_work_id}"
+            ).json()["status"]=="blocked"
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
