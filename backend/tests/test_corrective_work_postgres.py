@@ -8,13 +8,14 @@ from app.repositories.work_exception_repository import (
 )
 from app.repositories.work_corrective_repository import CorrectiveWorkRepository
 from app.repositories.work_execution_repository import WorkExecutionRepository
+from app.repositories.work_item_repository import WorkItemRepository
 
 
 @pytest.mark.live_integration
 def test_independent_corrective_authorization_preserves_original_hold_and_rls():
     k=uuid4().hex[:9]
     dep,other="corr_a_"+k,"corr_b_"+k
-    manager,worker,approver,outsider=[p+k for p in ("corr_m_","corr_w_","corr_a_","corr_o_")]
+    manager,worker,approver,outsider,alternate=[p+k for p in ("corr_m_","corr_w_","corr_a_","corr_o_","corr_alt_")]
     role="role_corr_"+k
     flow,version,first,last,step=[p+k for p in ("flow_","ver_","state_","end_","step_")]
     conv,sess,origin=[p+k for p in ("conv_","sess_","wrk_")]
@@ -26,10 +27,11 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
                 cur.execute("INSERT INTO security.departments(id,code,name) VALUES(%s,%s,%s)",
                             (d,d.upper(),d))
             cur.execute("INSERT INTO security.roles(id,name,permission_set) VALUES(%s,'employee','{}'::jsonb)",(role,))
-            for u,d in ((manager,dep),(worker,dep),(approver,dep),(outsider,other)):
+            for u,d in ((manager,dep),(worker,dep),(approver,dep),(outsider,other),(alternate,dep)):
                 cur.execute("""INSERT INTO security.users(id,email,hashed_password,department_id)
                     VALUES(%s,%s,'synthetic',%s)""",(u,u+"@example.test",d))
             cur.execute("INSERT INTO security.user_roles(user_id,role_id) VALUES(%s,%s)",(worker,role))
+            cur.execute("INSERT INTO security.user_roles(user_id,role_id) VALUES(%s,%s)",(alternate,role))
             cur.execute("""INSERT INTO knowledge_studio.workflows
                 (id,workflow_code,title,department_id,category,created_by)
                 VALUES(%s,%s,'Corrective receiving SOP',%s,'receiving',%s)""",
@@ -121,6 +123,9 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
         )
         new_work=approval["corrective_work_id"]
         assert approval["status"]=="approved" and new_work.startswith("wrk_")
+        # A regular supervisor may not swap the employee approved by a
+        # separate administrator while the corrective task is ready.
+        assert WorkItemRepository.assign(dep,manager,new_work,alternate) is None
         with pytest.raises(CaseConflict):
             CorrectiveWorkRepository.decide(dep,approver,case_id,request_id,"approved",
                 "Replay of authorization is prohibited.")
@@ -166,6 +171,6 @@ def test_independent_corrective_authorization_preserves_original_hold_and_rls():
                 cur.execute("DELETE FROM knowledge_studio.workflow_versions WHERE id=%s",(version,))
                 cur.execute("DELETE FROM knowledge_studio.workflows WHERE id=%s",(flow,))
                 cur.execute("DELETE FROM security.user_roles WHERE role_id=%s",(role,))
-                cur.execute("DELETE FROM security.users WHERE id=ANY(%s)",([manager,worker,approver,outsider],))
+                cur.execute("DELETE FROM security.users WHERE id=ANY(%s)",([manager,worker,approver,outsider,alternate],))
                 cur.execute("DELETE FROM security.roles WHERE id=%s",(role,))
                 cur.execute("DELETE FROM security.departments WHERE id=ANY(%s)",([dep,other],))
