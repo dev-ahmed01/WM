@@ -66,3 +66,34 @@ def test_cases_hide_foreign_scope_and_keep_database_errors_private():
                side_effect=RuntimeError("postgresql://private:password@db-server")):
         result=client.get("/api/v1/work/exceptions/case_one",headers=auth())
     assert result.status_code==503 and "db-server" not in result.text
+
+def test_containment_requires_manager_revision_and_forbids_arbitrary_release():
+    path="/api/v1/work/exceptions/case_one/action"
+    valid={"expected_revision":3,"kind":"containment_recorded",
+           "note":"The affected cartons have been segregated from the shipment."}
+    assert client.post(path,headers=auth("employee"),json=valid).status_code==403
+    for injected in ({"kind":"release"}, {"status":"completed"},
+                     {"department_id":"other"}):
+        assert client.post(path,headers=auth(),json={**valid,**injected}).status_code==422
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.action",
+               return_value={"revision":4,"status":"follow_up_requested"}) as action:
+        result=client.post(path,headers=auth(),json=valid)
+    assert result.status_code==200
+    assert action.call_args.args==("receiving","supervisor","case_one",3,
+                                   "containment_recorded",valid["note"])
+
+
+def test_linked_handover_requires_owner_and_forbids_forged_identity_fields():
+    path="/api/v1/work/exceptions/case_one/handover"
+    valid={"recipient_label":"Next-shift supervisor",
+           "next_action":"Keep the damaged cartons isolated for QA review.",
+           "notes":"Photographs recorded in task checkpoint."}
+    for bad in ({"department_id":"other"},{"conversation_id":"forged"},
+                {"work_id":"other"},{"status":"completed"}):
+        assert client.post(path,headers=auth("employee"),json={**valid,**bad}).status_code==422
+    with patch("app.api.v1.work_exceptions.WorkExceptionRepository.handover",
+               return_value={"handover_id":"hov_real","status":"submitted"}) as handover:
+        result=client.post(path,headers=auth("employee","receiving","operator1"),json=valid)
+    assert result.status_code==201
+    assert handover.call_args.args==("receiving","operator1","case_one",
+                                    valid["recipient_label"],valid["next_action"],valid["notes"])
