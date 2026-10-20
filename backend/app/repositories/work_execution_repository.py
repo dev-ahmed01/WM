@@ -660,7 +660,8 @@ class WorkExecutionRepository:
                       UPDATE workmate_copilot.work_items SET status=%s,
                         updated_at=CURRENT_TIMESTAMP WHERE id=%s
                     """,(new,work_id))
-                    _event(cur,work_id,department,actor,event,{"reason":reason[:500]})
+                    if new!="blocked":
+                        _event(cur,work_id,department,actor,event,{"reason":reason[:500]})
                     work["status"]=new
                     if new=="blocked":
                         case_id=open_case(
