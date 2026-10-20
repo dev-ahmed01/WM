@@ -39,6 +39,13 @@ class IncomingWork(Strict):
             raise ValueError("Invalid task text")
         return value
 
+    @field_validator("title")
+    @classmethod
+    def require_title(cls,value:str):
+        if len(value)<5:
+            raise ValueError("Task title is too short")
+        return value
+
 
 class IntakeDecision(Strict):
     decision:Literal["accepted","rejected"]
