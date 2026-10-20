@@ -639,6 +639,30 @@ def main():
                 target_handover.get_by_role("button", name="Request follow-up").click()
             assert reviewed.value.status == 200, reviewed.value.text()
             assert reviewed.value.json()["status"] == "follow_up_requested"
+            # Explicitly review the *linked* task handover independently.
+            linked_card=manager.locator("article").filter(has_text="Next-shift supervisor")
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/handover/"+linked_handover+"/claim")
+                and r.request.method=="POST",timeout=20000
+            ) as linked_claim:
+                linked_card.get_by_role("button",name="Take ownership").click()
+            assert linked_claim.value.status==200
+            expect(linked_card.get_by_label("Reviewer note (required)")).to_be_visible(timeout=15000)
+            linked_card.get_by_label("Reviewer note (required)").fill(
+                "Acknowledged shift context; cartons stay quarantined for independent QA."
+            )
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/handover/"+linked_handover+"/review")
+                and r.request.method=="POST",timeout=20000
+            ) as linked_review:
+                linked_card.get_by_role("button",name="Acknowledge receipt").click()
+            assert linked_review.value.status==200
+            assert linked_review.value.json()["status"]=="acknowledged"
+            case_after_handover=manager.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
+            ).json()
+            assert case_after_handover["handover_status"]=="acknowledged"
+            assert case_after_handover["work_status"]=="blocked"
             outsider_answer = ask_reference(
                 outsider, "security seal damaged cartons quarantine goods supervisor",
             )
