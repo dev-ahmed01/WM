@@ -106,9 +106,9 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const role = user?.role || 'employee';
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
   const sections = [
-    { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/copilot','/copilot/handover'].includes(item.href)) },
+    { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/work/exceptions','/copilot','/copilot/handover'].includes(item.href)) },
     { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/procedure-studio'].includes(item.href)) },
-    { title: 'Supervise', items: visibleItems.filter(item => ['/work/exceptions','/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
+    { title: 'Supervise', items: visibleItems.filter(item => ['/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
   ];
 
   return (
