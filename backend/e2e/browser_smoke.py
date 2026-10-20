@@ -310,6 +310,40 @@ def main():
             expect(employee.get_by_role("heading", name="Work procedure")).to_be_visible()
             expect(employee.get_by_text("No published procedure linked")).to_be_visible()
             assert outsider.request.get(f"{BASE}/api/backend/work/items/{work_id}").status == 404
+            # Phase 3B acceptance: bind the generated, genuinely published
+            # workflow to a real assignment and execute both source-derived steps.
+            manager.goto(f"{BASE}/work/{work_id}")
+            expect(manager.get_by_role("heading",name="Work procedure")).to_be_visible()
+            manager.get_by_label("Published procedure").select_option(published_version)
+            with manager.expect_response(
+                lambda response: response.url.endswith(f"/api/backend/work/execution/{work_id}/bind")
+                and response.request.method=="POST",timeout=20000,
+            ) as bound:
+                manager.get_by_role("button",name="Link published SOP").click()
+            assert bound.value.status==200,bound.value.text()
+            employee.goto(f"{BASE}/work/{work_id}")
+            expect(employee.get_by_role("button",name="Start guided work")).to_be_visible(timeout=15000)
+            employee.get_by_role("button",name="Start guided work").click()
+            expect(employee.get_by_text("Inspect the inbound trailer seals before unloading.")).to_be_visible(timeout=15000)
+            employee.get_by_text("I confirm I performed this checkpoint").click()
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("Record visible carton damage for the shift supervisor.")).to_be_visible(timeout=15000)
+            employee.get_by_label("Recorded observation").fill("Carton condition documented in receiving bay.")
+            proof_bytes=io.BytesIO()
+            Image.effect_noise((160,160),32).convert("RGB").save(proof_bytes,format="JPEG",quality=85)
+            employee.locator('input[type="file"]').set_input_files({
+                "name":"checked-cartons.jpg","mimeType":"image/jpeg",
+                "buffer":proof_bytes.getvalue(),
+            })
+            employee.get_by_role("button",name="Record checkpoint").click()
+            expect(employee.get_by_text("What outcome was observed at the end of this procedure?")).to_be_visible(timeout=15000)
+            employee.get_by_text("Expected outcome recorded").click()
+            employee.get_by_role("button",name="Record decision").click()
+            expect(employee.get_by_text("Published workflow completed")).to_be_visible(timeout=15000)
+            employee.screenshot(path="/tmp/workmate-phase3b-worker-execution.png",full_page=True)
+            assert outsider.request.get(
+                f"{BASE}/api/backend/work/execution/{work_id}"
+            ).status==404
             manager.goto(f"{BASE}/control-room")
             manager.screenshot(path="/tmp/workmate-phase1-control-room.png", full_page=True)
             manager.goto(f"{BASE}/pilot")
