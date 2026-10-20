@@ -4,6 +4,7 @@ from pydantic import BaseModel,ConfigDict,Field
 from starlette.concurrency import run_in_threadpool
 from typing import Literal
 from app.middleware.rbac_middleware import require_role
+from app.repositories.work_corrective_repository import CorrectiveWorkRepository
 from app.repositories.work_exception_repository import (
     WorkExceptionRepository,CaseNotFound,CaseConflict,
 )
@@ -36,6 +37,19 @@ class ShiftTransfer(Strict):
     recipient_label:str=Field(min_length=2,max_length=100)
     next_action:str=Field(min_length=5,max_length=1500)
     notes:str=Field(default="",max_length=1500)
+
+
+class CorrectiveRequest(Strict):
+    expected_revision:int=Field(ge=1)
+    workflow_version_id:str=Field(min_length=4,max_length=64)
+    assigned_to:str=Field(min_length=1,max_length=64)
+    plan_note:str=Field(min_length=20,max_length=1000)
+
+
+class CorrectiveDecision(Strict):
+    decision:Literal["approved","rejected"]
+    decision_note:str=Field(min_length=16,max_length=1000)
+
 
 
 def who(user):
@@ -108,3 +122,27 @@ async def submit_task_shift_handover(
     department,actor=who(user)
     return await call(WorkExceptionRepository.handover,department,actor,case_id,
                       payload.recipient_label,payload.next_action,payload.notes)
+
+@router.post("/{case_id}/corrective",status_code=201)
+async def request_corrective_task(
+    case_id:str,payload:CorrectiveRequest,
+    user:dict=Depends(require_role("admin","manager")),
+):
+    department,actor=who(user)
+    return await call(
+        CorrectiveWorkRepository.request,department,actor,case_id,
+        payload.expected_revision,payload.workflow_version_id,
+        payload.assigned_to,payload.plan_note,
+    )
+
+
+@router.post("/{case_id}/corrective/{request_id}/decision")
+async def decide_corrective_task(
+    case_id:str,request_id:str,payload:CorrectiveDecision,
+    user:dict=Depends(require_role("admin")),
+):
+    department,actor=who(user)
+    return await call(
+        CorrectiveWorkRepository.decide,department,actor,
+        case_id,request_id,payload.decision,payload.decision_note,
+    )
