@@ -7,7 +7,7 @@ from app.main import app
 client = TestClient(app)
 
 
-@patch("app.main.ping_snowflake_connection")
+@patch("app.main.ping_postgres_connection")
 def test_health_check_connected(mock_ping):
     mock_ping.return_value = True
     response = client.get("/health")
@@ -18,7 +18,7 @@ def test_health_check_connected(mock_ping):
     assert "version" in data
 
 
-@patch("app.main.ping_snowflake_connection")
+@patch("app.main.ping_postgres_connection")
 def test_health_check_unreachable_graceful(mock_ping):
     mock_ping.return_value = False
     response = client.get("/health")
@@ -56,3 +56,19 @@ def test_ai_health_is_degraded_when_required_model_is_missing(mock_health):
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
     assert response.json()["local"]["missing_models"] == ["nomic-embed-text"]
+
+
+@patch("app.main.ping_postgres_connection")
+def test_postgres_readiness_is_503_when_database_is_down(mock_ping):
+    mock_ping.return_value = False
+    response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+
+
+@patch("app.main.ping_postgres_connection")
+def test_postgres_readiness_succeeds_only_when_connected(mock_ping):
+    mock_ping.return_value = True
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "database": "connected"}

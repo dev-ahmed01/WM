@@ -30,6 +30,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-hin \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
@@ -44,6 +47,10 @@ RUN mkdir -p ${PIPER_VOICE_DIR} /app/data/voice/audio /app/data/voice/whisper &&
       en_US-lessac-medium hi_IN-pratham-medium
 
 COPY backend/app ./app
+COPY backend/migrations /app/backend/migrations
+COPY scripts/migrate_postgres.py /app/scripts/migrate_postgres.py
+COPY scripts/grant_pg_runtime.py /app/scripts/grant_pg_runtime.py
+COPY scripts/verify_runtime_database.py /app/scripts/verify_runtime_database.py
 
 EXPOSE 8000
 

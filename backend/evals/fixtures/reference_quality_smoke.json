@@ -1,0 +1,187 @@
+{
+  "name": "synthetic-reference-quality-v1",
+  "description": "Synthetic fixture only. This measures deterministic scoped lexical recall and grounded abstention; it does not validate live embeddings or real-world usefulness.",
+  "sources": [
+    {
+      "document_id": "rcv",
+      "document_title": "Receiving damaged cartons",
+      "department_id": "receiving",
+      "chunk_id": "chunk_rcv",
+      "excerpt": "If a carton arrives damaged, inspect the security seal and quarantine the parcel. Notify the supervisor before registering the receiving exception.",
+      "start_offset": 0,
+      "end_offset": 147,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "putaway",
+      "document_title": "Pallet putaway",
+      "department_id": "receiving",
+      "chunk_id": "chunk_putaway",
+      "excerpt": "Before putaway, verify the pallet location and scan the target bin barcode. Never move an unverified pallet.",
+      "start_offset": 0,
+      "end_offset": 108,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "cycle",
+      "document_title": "Cycle-count discrepancy",
+      "department_id": "receiving",
+      "chunk_id": "chunk_cycle",
+      "excerpt": "When a cycle count differs from recorded inventory, recount the bin and document the discrepancy before adjustment.",
+      "start_offset": 0,
+      "end_offset": 115,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "packing",
+      "document_title": "Packing checks",
+      "department_id": "receiving",
+      "chunk_id": "chunk_packing",
+      "excerpt": "At packing, compare the pick list against scanned item quantities before sealing the carton and dispatching.",
+      "start_offset": 0,
+      "end_offset": 108,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "return",
+      "document_title": "Return inspection",
+      "department_id": "receiving",
+      "chunk_id": "chunk_return",
+      "excerpt": "For a returned parcel, record the return reason and place the item in the returns inspection area.",
+      "start_offset": 0,
+      "end_offset": 98,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "hindi",
+      "document_title": "Hindi receiving",
+      "department_id": "receiving",
+      "chunk_id": "chunk_hindi",
+      "excerpt": "यदि पैकेज क्षतिग्रस्त है, तो सील की जांच करें और माल अलग रखें। पर्यवेक्षक को सूचित करें।",
+      "start_offset": 0,
+      "end_offset": 88,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "salary",
+      "document_title": "Payroll policy",
+      "department_id": "payroll",
+      "chunk_id": "chunk_salary",
+      "excerpt": "For salary adjustments, employees must contact their payroll administrator and provide an approved adjustment record.",
+      "start_offset": 0,
+      "end_offset": 117,
+      "chunk_index": 0,
+      "status": "APPROVED"
+    },
+    {
+      "document_id": "draft1",
+      "document_title": "Unapproved alarm note",
+      "department_id": "receiving",
+      "chunk_id": "chunk_draft1",
+      "excerpt": "Disable alarms and bypass safety guards before inspection.",
+      "start_offset": 0,
+      "end_offset": 58,
+      "chunk_index": 0,
+      "status": "DRAFT"
+    },
+    {
+      "document_id": "archive1",
+      "document_title": "Outdated receiving note",
+      "department_id": "receiving",
+      "chunk_id": "chunk_archive1",
+      "excerpt": "Receiving staff should bypass inspection when a carton is damaged.",
+      "start_offset": 0,
+      "end_offset": 66,
+      "chunk_index": 0,
+      "status": "ARCHIVED"
+    }
+  ],
+  "cases": [
+    {
+      "question": "broken box seal quarantine",
+      "department_id": "receiving",
+      "expected_document_id": "rcv"
+    },
+    {
+      "question": "damaged carton supervisor",
+      "department_id": "receiving",
+      "expected_document_id": "rcv"
+    },
+    {
+      "question": "putaway scan barcode",
+      "department_id": "receiving",
+      "expected_document_id": "putaway"
+    },
+    {
+      "question": "pallet location verify",
+      "department_id": "receiving",
+      "expected_document_id": "putaway"
+    },
+    {
+      "question": "cycle count discrepancy",
+      "department_id": "receiving",
+      "expected_document_id": "cycle"
+    },
+    {
+      "question": "inventory recount bin",
+      "department_id": "receiving",
+      "expected_document_id": "cycle"
+    },
+    {
+      "question": "packing pick list quantities",
+      "department_id": "receiving",
+      "expected_document_id": "packing"
+    },
+    {
+      "question": "scanned items carton sealing",
+      "department_id": "receiving",
+      "expected_document_id": "packing"
+    },
+    {
+      "question": "returned parcel reason",
+      "department_id": "receiving",
+      "expected_document_id": "return"
+    },
+    {
+      "question": "return inspection area",
+      "department_id": "receiving",
+      "expected_document_id": "return"
+    },
+    {
+      "question": "पैकेज क्षतिग्रस्त सील",
+      "department_id": "receiving",
+      "expected_document_id": "hindi"
+    },
+    {
+      "question": "माल अलग पर्यवेक्षक",
+      "department_id": "receiving",
+      "expected_document_id": "hindi"
+    },
+    {
+      "question": "salary adjustment payroll administrator",
+      "department_id": "receiving",
+      "expected_document_id": null
+    },
+    {
+      "question": "override emergency shutoff bypass safety guards",
+      "department_id": "receiving",
+      "expected_document_id": null
+    },
+    {
+      "question": "unknown forklift chemical pressure limits",
+      "department_id": "receiving",
+      "expected_document_id": null
+    },
+    {
+      "question": "damaged carton",
+      "department_id": "payroll",
+      "expected_document_id": null
+    }
+  ]
+}

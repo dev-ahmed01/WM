@@ -13,6 +13,7 @@ from app.models.workflow_session import (
     WorkflowSession,
 )
 from app.repositories.workflow_session_repository import WorkflowSessionRepository
+from app.core.database import get_postgres_connection
 from app.services.workflow_state import WorkflowStateService
 
 router = APIRouter(prefix="/copilot/session", tags=["Copilot Session State"])
@@ -41,7 +42,24 @@ def _owned_session(session_id: str, current_user: Dict[str, Any]) -> Dict[str, A
                 "details": None,
             },
         )
+    if _task_bound(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error_code":"WORK_EXECUTION_ONLY",
+                    "message":"Use the assigned work item to record evidence and progress."},
+        )
     return session
+
+
+def _task_bound(session_id: str) -> bool:
+    """Check the durable task link, never a request-supplied claim."""
+    with get_postgres_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM workmate_copilot.work_items WHERE execution_session_id=%s",
+                (session_id,),
+            )
+            return cur.fetchone() is not None
 
 
 @router.get("/{id}", response_model=WorkflowSession, summary="Get workflow session details")

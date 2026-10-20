@@ -88,3 +88,59 @@ def test_require_own_department_admin_bypass():
     token = create_access_token("admin_user", "admin", "dept_it")
     res = client.get("/dept/dept_hr", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
+
+
+def test_db_revalidation_rejects_disabled_and_relocated_account(monkeypatch):
+    from app.repositories.user_repository import UserRepository
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AUTH_REVALIDATE_DB", True)
+    token = create_access_token("employee_r", "employee", "dept_old")
+    monkeypatch.setattr(UserRepository, "get_user_by_id", lambda _: None)
+    no_user = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert no_user.status_code == 401
+    assert no_user.json()["detail"]["error_code"] == "AUTH_STALE"
+    monkeypatch.setattr(UserRepository, "get_user_by_id", lambda _: {
+        "id": "employee_r", "role": "employee", "department_id": "dept_new",
+    })
+    moved = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert moved.status_code == 401
+    assert moved.json()["detail"]["error_code"] == "AUTH_STALE"
+
+
+def test_db_revalidation_invalidates_stale_admin_privilege(monkeypatch):
+    from app.repositories.user_repository import UserRepository
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AUTH_REVALIDATE_DB", True)
+    monkeypatch.setattr(UserRepository, "get_user_by_id", lambda _: {
+        "id": "admin_old", "role": "employee", "department_id": "dept_ops",
+    })
+    token = create_access_token("admin_old", "admin", "dept_ops")
+    response = client.get("/admin-only", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    assert response.json()["detail"]["error_code"] == "AUTH_STALE"
+
+
+def test_db_revalidation_fails_closed_during_postgres_outage(monkeypatch):
+    from app.repositories.user_repository import UserRepository
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AUTH_REVALIDATE_DB", True)
+    def unavailable(_):
+        raise ConnectionError("sensitive PostgreSQL hostname")
+    monkeypatch.setattr(UserRepository, "get_user_by_id", unavailable)
+    token = create_access_token("employee_r", "employee", "dept_ops")
+    response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 503
+    assert "sensitive PostgreSQL hostname" not in response.text
+    assert response.json()["detail"]["error_code"] == "AUTH_VERIFICATION_UNAVAILABLE"
+
+
+def test_db_revalidation_allows_unchanged_account(monkeypatch):
+    from app.repositories.user_repository import UserRepository
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AUTH_REVALIDATE_DB", True)
+    monkeypatch.setattr(UserRepository, "get_user_by_id", lambda _: {
+        "id": "employee_r", "role": "employee", "department_id": "dept_ops",
+    })
+    token = create_access_token("employee_r", "employee", "dept_ops")
+    response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200

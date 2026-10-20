@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: workmate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workmate_dev_only}
+      POSTGRES_DB: workmate
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workmate -d workmate"]
+      interval: 5s
+      retries: 15
+    restart: unless-stopped
+
   frontend:
     build:
       context: .
@@ -6,6 +22,9 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     container_name: workmate_frontend
+    environment:
+      WORKMATE_INTERNAL_API_URL: http://backend:8000/api/v1
+      APP_ENV: dev
     ports:
       - "3000:3000"
     depends_on:
@@ -64,11 +83,15 @@ services:
     environment:
       LOCAL_AI_BASE_URL: http://ollama:11434
       VOICE_PREWARM_MODELS: "true"
+      DATABASE_URL: postgresql://workmate:${POSTGRES_PASSWORD:-workmate_dev_only}@postgres:5432/workmate
     depends_on:
+      postgres:
+        condition: service_healthy
       ollama:
         condition: service_healthy
       ollama-model-init:
         condition: service_completed_successfully
+    command: ["sh", "-c", "python scripts/migrate_postgres.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     volumes:
       - ./backend/app:/app/app
       - voice_whisper_data:/app/data/voice/whisper
@@ -82,6 +105,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   ollama_data:
   voice_whisper_data:
   voice_audio_data:
