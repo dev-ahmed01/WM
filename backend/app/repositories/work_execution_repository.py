@@ -236,7 +236,15 @@ def _position(cur, work):
         """,(state["id"],))
         answer=cur.fetchone()
         question=answer[0] if answer else None
-    return {"work_id":work["id"],"status":work["status"],
+    case_id=None
+    if work["status"]=="blocked":
+        cur.execute("""
+            SELECT id FROM workmate_copilot.work_exceptions
+            WHERE work_item_id=%s AND department_id=%s
+        """,(work["id"],work["department_id"]))
+        result=cur.fetchone()
+        case_id=result[0] if result else None
+    return {"work_id":work["id"],"status":work["status"],"case_id":case_id,
             "workflow_version_id":work["workflow_version_id"],
             "session_id":session_id,"state":state,"step":step,
             "decision_options":choices,"decision_question":question,
