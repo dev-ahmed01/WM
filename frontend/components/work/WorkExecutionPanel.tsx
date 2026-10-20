@@ -41,6 +41,7 @@ const eventLabel: Record<string, string> = {
   started: 'Execution started', step_recorded: 'Step evidence recorded',
   decision_recorded: 'Decision selected', state_advanced: 'State entered', paused: 'Execution paused',
   resumed: 'Execution resumed', blocked: 'Work blocked', completed: 'SOP completed',
+  handover_linked:'Shift handover linked',containment_recorded:'Containment recorded',remediation_proposed:'Remediation proposed',
 };
 
 export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged }: Props) {
@@ -59,6 +60,11 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [blockReason, setBlockReason] = useState('');
   const [decision, setDecision] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState('Next-shift supervisor');
+  const [transferAction, setTransferAction] = useState('');
+  const [transferNotes, setTransferNotes] = useState('');
+  const [transferSaved, setTransferSaved] = useState('');
+
 
   const refresh = useCallback(async () => {
     setError('');
@@ -129,6 +135,23 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
     } finally {
       setWorking(false);
     }
+  };
+
+  const handoverCase = async () => {
+    if(!position?.case_id || !isAssignee || working || transferAction.trim().length<5)return;
+    setWorking(true);setError('');
+    try{
+      const response=await apiClient<{handover_id:string}>(
+        '/work/exceptions/'+encodeURIComponent(position.case_id)+'/handover',
+        {method:'POST',body:JSON.stringify({
+          recipient_label:transferRecipient.trim(),next_action:transferAction.trim(),
+          notes:transferNotes.trim(),
+        })}
+      );
+      setTransferSaved(response.handover_id);
+      await refresh();
+    }catch(caught){setError(caught instanceof Error?caught.message:'Handover was not saved.');}
+    finally{setWorking(false);}
   };
 
   const recordStep = async () => {
@@ -257,6 +280,31 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
               </div>
               <p className="mt-2 text-xs leading-6 text-amber-900">This assignment cannot resume from the worker screen. Evidence and the recorded SOP state are retained for review.</p>
               {position.case_id ? <p className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-950">Supervisor case: {position.case_id}</p> : null}
+              {isAssignee && position.case_id ? <div className="mt-4 space-y-3 border-t border-amber-200 pt-4">
+                <h3 className="text-xs font-bold text-amber-950">Transfer blocked work to the next shift</h3>
+                {transferSaved ? <p className="rounded-xl bg-white p-3 text-xs font-semibold text-emerald-900">Shift handover saved: {transferSaved}. The case remains blocked.</p> : <>
+                  <div><label htmlFor="incident-recipient" className="wm-label">Recipient</label>
+                    <input id="incident-recipient" maxLength={100} className="wm-input bg-white"
+                      value={transferRecipient} onChange={e=>setTransferRecipient(e.target.value)}/>
+                  </div>
+                  <div><label htmlFor="incident-next-action" className="wm-label">Required next-shift action</label>
+                    <textarea id="incident-next-action" maxLength={1500} rows={2}
+                      className="wm-input bg-white" value={transferAction}
+                      onChange={e=>setTransferAction(e.target.value)}
+                      placeholder="Keep received goods on hold and inspect seal evidence."/>
+                  </div>
+                  <div><label htmlFor="incident-notes" className="wm-label">Context (optional)</label>
+                    <textarea id="incident-notes" maxLength={1500} rows={2}
+                      className="wm-input bg-white" value={transferNotes}
+                      onChange={e=>setTransferNotes(e.target.value)}/>
+                  </div>
+                  <button type="button" disabled={working||transferRecipient.trim().length<2||transferAction.trim().length<5}
+                    onClick={()=>void handoverCase()} className="min-h-11 rounded-xl bg-amber-900 px-4 text-xs font-semibold text-white disabled:opacity-50">
+                    Submit linked shift handover
+                  </button>
+                  <p className="text-[11px] leading-5 text-amber-800">One handover per incident. It transfers context; it does not authorize a restart.</p>
+                </>}
+              </div> : null}
               {canManage ? <Link href="/work/exceptions" className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-900">Open supervisor case desk <ArrowRight className="h-4 w-4"/></Link> : null}
             </div>
           ) : null}
