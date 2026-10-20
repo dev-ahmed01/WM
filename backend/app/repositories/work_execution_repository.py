@@ -237,14 +237,20 @@ def _position(cur, work):
         answer=cur.fetchone()
         question=answer[0] if answer else None
     case_id=None
+    handover_id=None
     if work["status"]=="blocked":
         cur.execute("""
-            SELECT id FROM workmate_copilot.work_exceptions
-            WHERE work_item_id=%s AND department_id=%s
+            SELECT c.id,h.id
+            FROM workmate_copilot.work_exceptions c
+            LEFT JOIN workmate_copilot.shift_handovers h
+              ON h.work_exception_id=c.id AND h.department_id=c.department_id
+            WHERE c.work_item_id=%s AND c.department_id=%s
         """,(work["id"],work["department_id"]))
         result=cur.fetchone()
-        case_id=result[0] if result else None
-    return {"work_id":work["id"],"status":work["status"],"case_id":case_id,
+        if result:
+            case_id,handover_id=result
+    return {"work_id":work["id"],"status":work["status"],
+            "case_id":case_id,"handover_id":handover_id,
             "workflow_version_id":work["workflow_version_id"],
             "session_id":session_id,"state":state,"step":step,
             "decision_options":choices,"decision_question":question,
