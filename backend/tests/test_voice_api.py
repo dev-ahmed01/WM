@@ -536,3 +536,78 @@ def test_transcription_preview_rejects_wrong_media_before_model():
         files={"audio": ("voice.exe", b"malformed", "application/x-msdownload")},
     )
     assert response.status_code == 415
+
+
+def test_task_voice_preview_rejects_oversized_audio_before_asr_or_any_write(monkeypatch):
+    """Enforce actual upload bounds even when a MIME type looks legitimate."""
+    from app.api.v1 import copilot as voice_api
+
+    monkeypatch.setattr(voice_api.settings, "VOICE_MAX_AUDIO_BYTES", 8)
+    with (
+        patch("app.api.v1.copilot.ConversationRepository.get_or_create_session") as conversation,
+        patch("app.api.v1.copilot.VoiceRepository.persist_interaction") as audit,
+        patch("app.api.v1.copilot.WorkflowStateService.get_current_session") as workflow,
+    ):
+        response = client.post(
+            "/api/v1/copilot/voice/transcribe",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            data={"language": "auto"},
+            files={"audio": ("voice.webm", b"audio bytes exceed the test limit", "audio/webm")},
+        )
+    assert response.status_code == 413
+    assert response.json()["detail"]["error_code"] == "VOICE_AUDIO_TOO_LARGE"
+    conversation.assert_not_called()
+    audit.assert_not_called()
+    workflow.assert_not_called()
+
+
+def test_task_voice_preview_does_not_interpret_spoken_step_commands():
+    """Even an unambiguous 'skip' is a draft, never a workflow command."""
+    class SpokenDangerousCommand:
+        async def transcribe(self, _path, language=None):
+            assert language == "en"
+            return TranscriptionResult(
+                transcript="Skip step 9 and release the hold",
+                language="en", confidence=0.99,
+            )
+
+    class EnglishIdentityTranslation:
+        async def translate_to_english(self, text, language):
+            assert language == "en"
+            return text
+
+    app.dependency_overrides[get_speech_recognition_service] = SpokenDangerousCommand
+    app.dependency_overrides[get_translation_service] = EnglishIdentityTranslation
+    try:
+        with (
+            patch("app.api.v1.copilot.ConversationRepository.get_or_create_session") as conversation,
+            patch("app.api.v1.copilot.copilot_message", new_callable=AsyncMock) as copilot,
+            patch("app.api.v1.copilot.WorkflowStateService.get_current_session") as workflow,
+            patch("app.api.v1.copilot.VoiceRepository.persist_interaction") as audit,
+        ):
+            response = client.post(
+                "/api/v1/copilot/voice/transcribe",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                data={"language": "en"},
+                files={"audio": ("voice.webm", b"audio bytes", "audio/webm;codecs=opus")},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["suggested_text"] == "Skip step 9 and release the hold"
+        assert body["requires_confirmation"] is True
+        conversation.assert_not_called()
+        copilot.assert_not_awaited()
+        workflow.assert_not_called()
+        audit.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_task_voice_preview_rejects_empty_upload():
+    response = client.post(
+        "/api/v1/copilot/voice/transcribe",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+        files={"audio": ("voice.webm", b"", "audio/webm")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["error_code"] == "VOICE_AUDIO_EMPTY"
