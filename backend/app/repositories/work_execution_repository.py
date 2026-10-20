@@ -194,7 +194,8 @@ def _position(cur, work):
     if not session_id:
         return {"work_id":work["id"],"status":work["status"],
                 "workflow_version_id":work["workflow_version_id"],"session_id":None,
-                "state":None,"step":None,"decision_options":[],"safety_gates":[],"completed_steps":0,"total_steps":0}
+                "state":None,"step":None,"decision_options":[],"decision_question":None,
+                "safety_gates":[],"completed_steps":0,"total_steps":0}
     cur.execute("""
       SELECT current_state_id,status FROM workmate_copilot.workflow_sessions
       WHERE id=%s
@@ -225,10 +226,19 @@ def _position(cur, work):
       WHERE session_id=%s AND status='PASSED'
     """, (session_id,))
     done = cur.fetchone()[0]
+    choices=_options(cur,state["id"]) if not step else []
+    question=None
+    if choices:
+        cur.execute("""
+            SELECT question FROM knowledge_studio.workflow_decisions
+            WHERE state_id=%s ORDER BY id LIMIT 1
+        """,(state["id"],))
+        answer=cur.fetchone()
+        question=answer[0] if answer else None
     return {"work_id":work["id"],"status":work["status"],
             "workflow_version_id":work["workflow_version_id"],
             "session_id":session_id,"state":state,"step":step,
-            "decision_options":_options(cur,state["id"]) if not step else [],
+            "decision_options":choices,"decision_question":question,
             "safety_gates":gates,
             "completed_steps":done,"total_steps":total}
 
