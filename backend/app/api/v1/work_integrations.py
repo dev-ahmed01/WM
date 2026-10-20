@@ -24,6 +24,10 @@ from app.repositories.work_integration_outbox_repository import (
     OutboxRepository,OutboxConflict,OutboxNotFound,
 )
 
+from app.repositories.work_integration_operations_repository import (
+    IntegrationOperationsRepository,OperationsNotFound,OperationsConflict,
+)
+
 router=APIRouter(prefix="/work/integrations",tags=["Warehouse integrations"])
 
 class Strict(BaseModel):
@@ -79,6 +83,12 @@ async def call(fn,*args):
     except OutboxConflict as exc:
         raise HTTPException(409,detail={
             "error_code":"OUTBOX_CONFLICT","message":str(exc),
+        }) from exc
+    except OperationsNotFound as exc:
+        raise HTTPException(404,detail={"error_code":"INTEGRATION_OPERATIONS_NOT_FOUND"}) from exc
+    except OperationsConflict as exc:
+        raise HTTPException(409,detail={
+            "error_code":"INTEGRATION_OPERATIONS_CONFLICT","message":str(exc),
         }) from exc
     except IntegrationConflict as exc:
         raise HTTPException(409,detail={
@@ -220,4 +230,32 @@ async def recover_outbox_event(
     dept,actor=who(user)
     return await call(
         OutboxRepository.recover,dept,actor,event_id,payload.justification.strip(),
+    )
+
+class OperationsAction(Strict):
+    source_id:str=Field(min_length=6,max_length=64,pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{5,63}$")
+    issue_code:Literal[
+      "dead_outbound","stale_outbound","expired_lease","invalid_inbound",
+      "pending_review","signing_key_missing","outbound_unconfigured",
+      "connector_disabled","no_recent_receipt"
+    ]
+    action:Literal["acknowledged","remediation_logged"]
+    justification:str=Field(min_length=16,max_length=1000)
+
+
+@router.get("/operations/readiness")
+async def connector_operational_readiness(user:dict=Depends(require_role("admin"))):
+    dept,actor=who(user)
+    return await call(IntegrationOperationsRepository.snapshot,dept,actor)
+
+
+@router.post("/operations/actions",status_code=201)
+async def connector_operational_action(
+    payload:OperationsAction,user:dict=Depends(require_role("admin")),
+):
+    dept,actor=who(user)
+    return await call(
+        IntegrationOperationsRepository.record_response,
+        dept,actor,payload.source_id,payload.issue_code,payload.action,
+        payload.justification.strip(),
     )
