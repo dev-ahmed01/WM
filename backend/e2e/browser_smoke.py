@@ -432,6 +432,8 @@ def main():
             assert handover_created.value.status==201
             linked_handover=handover_created.value.json()["handover_id"]
             expect(employee.get_by_text("Shift handover saved:",exact=False)).to_be_visible(timeout=15000)
+            employee.evaluate("window.scrollTo(0,0)")
+            employee.screenshot(path="/tmp/workmate-phase4b-worker-handover.png",full_page=True)
             assert employee.request.post(
                 f"{BASE}/api/backend/work/execution/{exception_work_id}/resume",
                 headers={"Origin":BASE}
@@ -492,6 +494,9 @@ def main():
             ) as proposal:
                 manager.get_by_role("button",name="Propose remediation").click()
             assert proposal.value.status==200
+            expect(manager.get_by_text("remediation proposed",exact=True)).to_be_visible(timeout=15000)
+            manager.evaluate("window.scrollTo(0,0)")
+            manager.screenshot(path="/tmp/workmate-phase4b-supervisor-continuity.png",full_page=True)
             assert manager.request.get(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
             ).json()["handover_id"]==linked_handover
