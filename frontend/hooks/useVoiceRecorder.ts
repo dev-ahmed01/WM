@@ -14,6 +14,8 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
   const chunksRef = useRef<Blob[]>([]);
   const handlerRef = useRef(onRecording);
   const discardRef = useRef(false);
+  const generationRef = useRef(0);
+  const startingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [isSupported, setIsSupported] = useState(false);
@@ -57,6 +59,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
     return () => {
       if (permissionStatus) permissionStatus.onchange = null;
       discardRef.current = true;
+      generationRef.current += 1; // Invalidates a pending microphone permission dialog.
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
       recorderRef.current = null;
       releaseStream();
@@ -70,6 +73,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
   // Sending a typed message must not also submit an in-progress voice clip.
   const cancelListening = useCallback(() => {
     discardRef.current = true;
+    generationRef.current += 1;
     stopListening();
   }, [stopListening]);
 
@@ -82,6 +86,9 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       setError('Voice recording is not supported in this browser.');
       return;
     }
+    if (startingRef.current || recorderRef.current?.state === 'recording') return;
+    startingRef.current = true;
+    const generation = ++generationRef.current;
     try {
       setError(null);
       setInputLevel(0);
@@ -91,6 +98,10 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
+      if (generation !== generationRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       setPermissionState('granted');
       const mimeType = preferredMimeType();
@@ -163,6 +174,7 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       };
       animationFrameRef.current = requestAnimationFrame(monitorSilence);
     } catch (cause) {
+      if (generation !== generationRef.current) return;
       releaseStream();
       setIsListening(false);
       const denied = cause instanceof DOMException && cause.name === 'NotAllowedError';
@@ -170,6 +182,8 @@ export function useVoiceRecorder(onRecording: (audio: Blob) => void) {
       setError(denied
         ? 'Microphone access was denied. Allow microphone access and try again.'
         : 'No working microphone could be opened.');
+    } finally {
+      startingRef.current = false;
     }
   }, [releaseStream]);
 
