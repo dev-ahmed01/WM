@@ -31,6 +31,7 @@ jobs:
       INTERNAL_WEBHOOK_SECRET: browser-ci-only-webhook-secret
       WORKMATE_BROWSER_SMOKE: '1'
       WORKMATE_E2E_PASSWORD: browser-qa-only-strong-password-2026
+      WORKMATE_CONNECTOR_SECRETS_JSON: '{"e2e_signed_wms":"ci-only-signed-warehouse-secret-has-36-bytes-for-tests"}'
       AUTH_REVALIDATE_DB: 'true'
       AUTH_SESSION_STORE_ENABLED: 'true'
       AUTH_RATE_LIMIT_ENABLED: 'true'
@@ -129,6 +130,7 @@ jobs:
             /tmp/workmate-phase5b-*.png
             /tmp/workmate-phase4d-*.png
             /tmp/workmate-phase6a-*.png
+            /tmp/workmate-phase6b-*.png
           if-no-files-found: warn
           retention-days: 3
 
