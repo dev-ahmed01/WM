@@ -414,6 +414,24 @@ def main():
                 employee.get_by_role("button",name="Record decision").click()
             assert exceptional.value.status==200
             assert exceptional.value.json()["status"]=="blocked"
+            # Phase 4B: source worker files an authentic shift handover using
+            # the bound, paused SOP session; no manual conversation ID supplied.
+            expect(employee.get_by_label("Required next-shift action")).to_be_visible(timeout=15000)
+            employee.get_by_label("Required next-shift action").fill(
+                "Keep damaged cartons quarantined and review photos at next shift."
+            )
+            employee.get_by_label("Context (optional)").fill(
+                "Damaged corner documented in the second receiving checkpoint."
+            )
+            with employee.expect_response(
+                lambda r: "/api/backend/work/exceptions/" in r.url
+                and r.url.endswith("/handover") and r.request.method=="POST",
+                timeout=20000
+            ) as handover_created:
+                employee.get_by_role("button",name="Submit linked shift handover").click()
+            assert handover_created.value.status==201
+            linked_handover=handover_created.value.json()["handover_id"]
+            expect(employee.get_by_text("Shift handover saved:",exact=False)).to_be_visible(timeout=15000)
             assert employee.request.post(
                 f"{BASE}/api/backend/work/execution/{exception_work_id}/resume",
                 headers={"Origin":BASE}
@@ -429,6 +447,8 @@ def main():
             case_list=manager.request.get(f"{BASE}/api/backend/work/exceptions").json()["items"]
             task_case=next(c for c in case_list if c["work_item_id"]==exception_work_id)
             assert task_case["severity"]=="critical" and task_case["status"]=="open"
+            assert task_case["handover_id"]==linked_handover
+            expect(manager.get_by_text("Linked handover:",exact=False)).to_be_visible()
             assert employee.request.get(
                 f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
             ).status==403
@@ -450,6 +470,28 @@ def main():
                 manager.get_by_role("button",name="Request follow-up").click()
             assert case_review.value.status==200
             assert case_review.value.json()["status"]=="follow_up_requested"
+            manager.get_by_label("Operational action note").fill(
+                "Goods isolated in receiving bay four with shift supervisor informed."
+            )
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/action")
+                and r.request.method=="POST",timeout=20000
+            ) as contained:
+                manager.get_by_role("button",name="Record containment").click()
+            assert contained.value.status==200
+            manager.get_by_label("Operational action note").fill(
+                "Schedule authorized site QA inspection and independent written sign-off."
+            )
+            expect(manager.get_by_role("button",name="Propose remediation")).to_be_enabled(timeout=15000)
+            with manager.expect_response(
+                lambda r: r.url.endswith("/api/backend/work/exceptions/"+task_case["id"]+"/action")
+                and r.request.method=="POST",timeout=20000
+            ) as proposal:
+                manager.get_by_role("button",name="Propose remediation").click()
+            assert proposal.value.status==200
+            assert manager.request.get(
+                f"{BASE}/api/backend/work/exceptions/{task_case['id']}"
+            ).json()["handover_id"]==linked_handover
             assert manager.request.get(
                 f"{BASE}/api/backend/work/execution/{exception_work_id}"
             ).json()["status"]=="blocked"
