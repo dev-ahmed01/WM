@@ -20,7 +20,14 @@ type WorkCase = {
 };
 type CaseEvent = {id:string;actor_id:string;action:string;note:string;event_seq:number;created_at:string};
 type WorkEvent = {id:string;actor_id:string;action:string;event_payload:Record<string,unknown>;created_at:string};
-type CaseDetail = WorkCase & {events:CaseEvent[];work_events:WorkEvent[]};
+type CorrectivePlan={id:string;status:'pending'|'approved'|'rejected';proposed_by:string;
+  proposed_at:string;workflow_version_id:string;assigned_to:string;
+  procedure_title:string;plan_note:string;decided_by:string|null;
+  decision_note:string|null;decided_at:string|null;corrective_work_id:string|null};
+type PublishedProcedure={workflow_version_id:string;title:string;version_number:number};
+type WorkerOption={id:string;label:string};
+type CaseDetail = WorkCase & {events:CaseEvent[];work_events:WorkEvent[];
+  corrective_request:CorrectivePlan|null};
 
 const formatTime=(value:string)=>new Date(value).toLocaleString('en-IN',{
   timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true,
@@ -47,6 +54,12 @@ export default function SupervisorExceptionDesk() {
   const [showAll,setShowAll]=useState(false);
   const [now,setNow]=useState(()=>Date.now());
   const [actionNote,setActionNote]=useState('');
+  const [correctionNote,setCorrectionNote]=useState('');
+  const [decisionNote,setDecisionNote]=useState('');
+  const [correctionVersion,setCorrectionVersion]=useState('');
+  const [correctionAssignee,setCorrectionAssignee]=useState('');
+  const [procedures,setProcedures]=useState<PublishedProcedure[]>([]);
+  const [assignees,setAssignees]=useState<WorkerOption[]>([]);
 
   const refresh=useCallback(async()=>{
     setFetching(true);setError('');
@@ -80,12 +93,34 @@ export default function SupervisorExceptionDesk() {
     const interval=setInterval(()=>setNow(Date.now()),60000);
     return()=>clearInterval(interval);
   },[]);
+  useEffect(()=>{
+    if(loading||!user)return;
+    let mounted=true;
+    void Promise.all([
+      apiClient<{items:PublishedProcedure[]}>('/work/execution/procedures'),
+      apiClient<{items:WorkerOption[]}>('/work/items/assignees'),
+    ]).then(([p,a])=>{
+      if(mounted){setProcedures(p.items||[]);setAssignees(a.items||[]);}
+    }).catch(()=>{if(mounted)setActionError('Approved procedures or worker directory could not be loaded.');});
+    return()=>{mounted=false;};
+  },[loading,user?.sub,user?.department_id]);
+
   const visible=useMemo(()=>items.filter(item=>showAll||active(item.status)),[items,showAll]);
   const openCount=items.filter(x=>active(x.status)).length;
   const criticalCount=items.filter(x=>active(x.status)&&x.severity==='critical').length;
   const canClaim=selected?.status==='open'&&!selected.reviewer_id&&selected.raised_by!==user?.sub;
   const canRecord=Boolean(selected&&selected.reviewer_id===user?.sub&&selected.raised_by!==user?.sub&&selected.work_status==='blocked');
   const hasContainment=selected?.events.some(event=>event.action==='containment_recorded')||false;
+  const hasRemediation=selected?.events.some(event=>event.action==='remediation_proposed')||false;
+  const canPropose=Boolean(canRecord&&hasContainment&&hasRemediation
+    &&(selected?.status==='reviewed'||selected?.status==='follow_up_requested')
+    &&!selected?.corrective_request);
+  const canIndependentlyApprove=Boolean(selected?.corrective_request?.status==='pending'
+    &&user?.role==='admin'
+    &&user?.sub!==selected.corrective_request.proposed_by
+    &&user?.sub!==selected.reviewer_id
+    &&user?.sub!==selected.raised_by
+    &&user?.sub!==selected.corrective_request.assigned_to);
   const canReview=Boolean(selected&&(selected.status==='open'||selected.status==='claimed')&&selected.raised_by!==user?.sub&&
     (!selected.reviewer_id||selected.reviewer_id===user?.sub));
 
@@ -124,6 +159,42 @@ export default function SupervisorExceptionDesk() {
       ]);
       setSelected(detail);setItems(list.items||[]);setActionNote('');
     }catch(caught){setActionError(caught instanceof Error?caught.message:'Containment action was not recorded.');}
+    finally{setWorking(false);}
+  }
+
+  async function saveCorrectivePlan(){
+    if(!selected||!canPropose||working||!correctionVersion||!correctionAssignee
+      ||correctionNote.trim().length<20)return;
+    setWorking(true);setActionError('');
+    try{
+      await apiClient('/work/exceptions/'+encodeURIComponent(selected.id)+'/corrective',{
+        method:'POST',body:JSON.stringify({
+          expected_revision:selected.revision,
+          workflow_version_id:correctionVersion,
+          assigned_to:correctionAssignee,plan_note:correctionNote.trim(),
+        }),
+      });
+      const details=await apiClient<CaseDetail>('/work/exceptions/'+encodeURIComponent(selected.id));
+      setSelected(details);setCorrectionNote('');
+    }catch(err){setActionError(err instanceof Error?err.message:'Corrective request not saved.');}
+    finally{setWorking(false);}
+  }
+
+  async function decideCorrective(decision:'approved'|'rejected'){
+    if(!selected?.corrective_request||!canIndependentlyApprove||working||decisionNote.trim().length<16)return;
+    setWorking(true);setActionError('');
+    try{
+      await apiClient(
+        '/work/exceptions/'+encodeURIComponent(selected.id)+'/corrective/'
+          +encodeURIComponent(selected.corrective_request.id)+'/decision',{
+          method:'POST',body:JSON.stringify({decision,decision_note:decisionNote.trim()}),
+        });
+      const [detail,list]=await Promise.all([
+        apiClient<CaseDetail>('/work/exceptions/'+encodeURIComponent(selected.id)),
+        apiClient<{items:WorkCase[]}>('/work/exceptions?limit=100'),
+      ]);
+      setSelected(detail);setItems(list.items||[]);setDecisionNote('');
+    }catch(err){setActionError(err instanceof Error?err.message:'Independent decision not recorded.');}
     finally{setWorking(false);}
   }
 
@@ -222,6 +293,54 @@ export default function SupervisorExceptionDesk() {
                 className="min-h-11 rounded-xl border border-[#bcd9c4] px-4 text-xs font-semibold text-[#28593c] disabled:opacity-50">Propose remediation</button>
             </div>
           </div>:null}
+          <div className="space-y-3 border-t border-[#e6eee6] pt-5">
+            <h3 className="text-sm font-semibold">Independent corrective work</h3>
+            <p className="text-xs leading-5 text-[#6c806f]">A second administrator must authorize any new task. Approval does not release the original blocked assignment.</p>
+            {selected.corrective_request ? <div className="space-y-2 rounded-xl bg-[#f3f8f3] p-4">
+              <p className="text-xs font-bold capitalize text-[#254b32]">Request {selected.corrective_request.status}</p>
+              <p className="text-xs text-[#4b6553]">{selected.corrective_request.procedure_title} · {selected.corrective_request.workflow_version_id}</p>
+              <p className="text-xs leading-5 text-[#526c59]">{selected.corrective_request.plan_note}</p>
+              <p className="text-xs text-[#778678]">Proposed by {selected.corrective_request.proposed_by}</p>
+              {selected.corrective_request.decision_note?<p className="text-xs font-semibold text-[#41604a]">Decision: {selected.corrective_request.decision_note}</p>:null}
+              {selected.corrective_request.corrective_work_id?<Link className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900"
+                href={'/work/'+encodeURIComponent(selected.corrective_request.corrective_work_id)}>Open new corrective assignment <ArrowRight className="h-4 w-4"/></Link>:null}
+              {canIndependentlyApprove?<div className="mt-4 space-y-3 border-t border-[#dbe7df] pt-4">
+                <label htmlFor="independent-approval-note" className="wm-label">Independent decision and controls</label>
+                <textarea id="independent-approval-note" rows={3} minLength={16} maxLength={1000}
+                  className="wm-input" value={decisionNote} onChange={e=>setDecisionNote(e.target.value)}
+                  placeholder="Confirm this published SOP is appropriate for corrective verification. Site clearance remains separate."/>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={working||decisionNote.trim().length<16}
+                    onClick={()=>void decideCorrective('approved')}
+                    className="min-h-11 rounded-xl bg-[#155a40] px-4 text-xs font-semibold text-white disabled:opacity-50">Authorize new task</button>
+                  <button type="button" disabled={working||decisionNote.trim().length<16}
+                    onClick={()=>void decideCorrective('rejected')}
+                    className="min-h-11 rounded-xl border border-[#bdcdbd] px-4 text-xs font-semibold text-[#325a3b] disabled:opacity-50">Reject proposal</button>
+                </div>
+              </div>:null}
+            </div> : canPropose?<div className="space-y-3 rounded-xl border border-[#e3eae2] p-4">
+              <div><label htmlFor="corrective-procedure" className="wm-label">Published corrective SOP</label>
+                <select id="corrective-procedure" value={correctionVersion} onChange={e=>setCorrectionVersion(e.target.value)} className="wm-input">
+                  <option value="">Choose approved procedure</option>
+                  {procedures.map(p=><option key={p.workflow_version_id} value={p.workflow_version_id}>{p.title} · v{p.version_number}</option>)}
+                </select></div>
+              <div><label htmlFor="corrective-assignee" className="wm-label">Corrective worker</label>
+                <select id="corrective-assignee" value={correctionAssignee} onChange={e=>setCorrectionAssignee(e.target.value)} className="wm-input">
+                  <option value="">Choose active worker</option>
+                  {assignees.map(worker=><option key={worker.id} value={worker.id}>{worker.label}</option>)}
+                </select></div>
+              <div><label htmlFor="corrective-plan-note" className="wm-label">Scope and verification plan</label>
+                <textarea id="corrective-plan-note" rows={3} minLength={20} maxLength={1000} className="wm-input"
+                  value={correctionNote} onChange={e=>setCorrectionNote(e.target.value)}
+                  placeholder="Inspect quarantined goods using approved SOP and record fresh evidence."/>
+              </div>
+              <button type="button" disabled={working||!correctionVersion||!correctionAssignee||correctionNote.trim().length<20}
+                onClick={()=>void saveCorrectivePlan()}
+                className="min-h-11 rounded-xl border border-[#bcd9c4] bg-[#eaf5ed] px-4 text-xs font-bold text-[#235737] disabled:opacity-50">
+                Submit for independent authorization
+              </button>
+            </div>:<p className="text-xs text-[#75877a]">A reviewed incident with recorded containment and remediation is required before requesting corrective work.</p>}
+          </div>
           {actionError?<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{actionError}</p>:null}
           {canClaim?<button type="button" disabled={working} onClick={()=>void updateCase('claim')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#bad6c0] bg-[#f0f8f1] px-4 text-xs font-semibold text-emerald-900 disabled:opacity-50"><UserRoundCheck className="h-4 w-4"/>Take ownership</button>:null}
           {canReview?<div className="border-t border-[#e6eee6] pt-5">
