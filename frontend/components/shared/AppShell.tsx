@@ -4,152 +4,121 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Activity, BarChart3, BookOpenText, Bot, Building2, ChevronDown,
-  ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut, AlertTriangle,
-  Menu, Search, ShieldCheck, X,
+  BarChart3, BookOpenText, Bot, ChevronDown, ClipboardList, LayoutDashboard,
+  LogOut, Menu, ShieldCheck, X,
 } from 'lucide-react';
 import { loadUserClaims, getUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { cn } from '@/lib/utils';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-interface NavItem {
-  label: string;
-  description: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: Array<'admin' | 'manager' | 'employee'>;
-}
+type Role = 'admin' | 'manager' | 'employee';
+type Area = 'work' | 'operations' | 'assistant' | 'procedures' | 'insights';
+type NavItem = {
+  area: Area; label: string; href: string;
+  icon: React.ComponentType<{ className?: string }>; roles: Role[];
+};
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'My work', description: 'Your assigned queue', href: '/workspace', icon: ClipboardList, roles: ['admin','manager','employee'] },
-  { label: 'Control room', description: 'Department overview', href: '/control-room', icon: LayoutDashboard, roles: ['admin','manager'] },
-  { label: 'SOP guidance', description: 'Contextual AI assistance', href: '/copilot', icon: Bot, roles: ['admin','manager','employee'] },
-  { label: 'Shift handover', description: 'Transfer open context', href: '/copilot/handover', icon: ClipboardCheck, roles: ['admin','manager','employee'] },
-  { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
-  { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
-  { label: 'Procedure Studio', description: 'Manage governed SOPs', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
-  { label: 'Task exceptions', description: 'Blocked work and reviews', href: '/work/exceptions', icon: AlertTriangle, roles: ['admin','manager'] },
-  { label: 'Shift reviews', description: 'Department handovers', href: '/handover/review', icon: ClipboardCheck, roles: ['admin','manager'] },
-  { label: 'Intelligence', description: 'Actual operational metrics', href: '/intelligence-hub', icon: BarChart3, roles: ['admin','manager'] },
-  { label: 'Pilot evaluation', description: 'Private quality signals', href: '/pilot', icon: Activity, roles: ['admin','manager'] },
+const NAV: NavItem[] = [
+  { area: 'work', label: 'My work', href: '/workspace', icon: ClipboardList, roles: ['admin', 'manager', 'employee'] },
+  { area: 'operations', label: 'Operations', href: '/control-room', icon: LayoutDashboard, roles: ['admin', 'manager'] },
+  { area: 'assistant', label: 'WorkMate Assist', href: '/copilot', icon: Bot, roles: ['admin', 'manager', 'employee'] },
+  { area: 'procedures', label: 'Procedures', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
+  { area: 'insights', label: 'Insights', href: '/intelligence-hub', icon: BarChart3, roles: ['admin', 'manager'] },
 ];
 
-function isActiveRoute(pathname: string, href: string) {
-  if (href === '/copilot') return pathname === href;
-  if (href === '/knowledge-studio') return !pathname.startsWith('/knowledge-studio/references') && (pathname === href || pathname.startsWith(`${href}/`));
-  return pathname === href || pathname.startsWith(`${href}/`);
+function getArea(pathname: string): Area {
+  if (pathname === '/copilot/handover') return 'work';
+  if (pathname.startsWith('/work/exceptions') || pathname.startsWith('/work/integrations') || pathname.startsWith('/handover/review') || pathname.startsWith('/control-room')) return 'operations';
+  if (pathname.startsWith('/procedure-studio') || pathname.startsWith('/knowledge-studio')) return 'procedures';
+  if (pathname.startsWith('/intelligence-hub') || pathname.startsWith('/pilot')) return 'insights';
+  if (pathname.startsWith('/copilot')) return 'assistant';
+  return 'work';
 }
 
-function Brand() {
-  return (
-    <Link href="/workspace" className="group flex items-center gap-3 rounded-xl focus-visible:outline-offset-4" aria-label="WorkMate home">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9edcf] text-sm font-extrabold tracking-tight text-[#0d3725] shadow-sm transition group-hover:bg-white">
-        WM
-      </span>
-      <span>
-        <span className="block text-base font-bold tracking-tight text-white">WorkMate</span>
-        <span className="block text-[10px] font-medium uppercase tracking-[0.13em] text-[#8cb39c]">Frontline execution</span>
-      </span>
-    </Link>
-  );
+type Tab = { label: string; href: string; roles: Role[] };
+const TABS: Record<Area, Tab[]> = {
+  work: [
+    { label: 'Queue', href: '/workspace', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Shift handover', href: '/copilot/handover', roles: ['admin', 'manager', 'employee'] },
+  ],
+  operations: [
+    { label: 'Control room', href: '/control-room', roles: ['admin', 'manager'] },
+    { label: 'Exceptions', href: '/work/exceptions', roles: ['admin', 'manager'] },
+    { label: 'Shift reviews', href: '/handover/review', roles: ['admin', 'manager'] },
+    { label: 'Integrations', href: '/work/integrations', roles: ['admin', 'manager'] },
+  ],
+  assistant: [
+    { label: 'Ask WorkMate', href: '/copilot', roles: ['admin', 'manager', 'employee'] },
+    { label: 'Sources', href: '/copilot/sources', roles: ['admin', 'manager', 'employee'] },
+    { label: 'History', href: '/copilot/history', roles: ['admin', 'manager', 'employee'] },
+  ],
+  procedures: [
+    { label: 'Overview', href: '/procedure-studio', roles: ['admin'] },
+    { label: 'Drafts', href: '/procedure-studio/drafts', roles: ['admin'] },
+    { label: 'Published SOPs', href: '/knowledge-studio', roles: ['admin'] },
+    { label: 'References', href: '/knowledge-studio/references', roles: ['admin'] },
+  ],
+  insights: [
+    { label: 'Metrics', href: '/intelligence-hub', roles: ['admin', 'manager'] },
+    { label: 'Pilot', href: '/pilot', roles: ['admin', 'manager'] },
+  ],
+};
+
+function tabActive(path: string, tab: Tab) {
+  if (tab.href === '/copilot' || tab.href === '/procedure-studio' || tab.href === '/knowledge-studio') return path === tab.href;
+  return path === tab.href || path.startsWith(tab.href + '/');
 }
 
-function UserMenu({ user, onLogout, compact = false }: { user: UserClaims; onLogout: () => void; compact?: boolean }) {
+function UserMenu({ user, logout }: { user: UserClaims; logout: () => void }) {
+  const readable = user.sub.startsWith('usr_') ? user.role + ' account' : user.sub;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'flex w-full items-center gap-3 rounded-xl border border-border bg-white p-2.5 text-left transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-            compact && 'border-border bg-white hover:bg-muted',
-          )}
-        >
-          <span className={cn('grid h-9 w-9 flex-none place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-800', compact && 'bg-emerald-100 text-emerald-800')}>
-            {user.sub.slice(0, 1).toUpperCase()}
+        <button type="button" className="flex w-full min-w-0 items-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-3 py-3 text-left text-white hover:bg-white/15 focus-visible:outline-offset-2">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#b9edcf] text-sm font-bold text-[#123728]">{user.role.slice(0, 1).toUpperCase()}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold capitalize">{readable}</span>
+            <span className="block truncate text-xs text-[#a6c5b3]">{user.department_id}</span>
           </span>
-          <span className={cn('min-w-0 flex-1', compact && 'hidden sm:block')}>
-            <span className={cn('block truncate text-xs font-semibold text-foreground')}>{user.sub}</span>
-            <span className={cn('mt-0.5 block truncate text-[11px] capitalize text-muted-foreground')}>{user.role} · {user.department_id}</span>
-          </span>
-          <ChevronDown className={cn('h-4 w-4 flex-none text-slate-500', compact && 'hidden sm:block')} aria-hidden="true" />
+          <ChevronDown className="h-4 w-4 text-[#a6c5b3]" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="top" className="w-64 rounded-xl border-border p-1.5 shadow-lift">
-        <DropdownMenuLabel className="p-3 font-normal">
-          <p className="truncate text-sm font-semibold text-foreground">{user.sub}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold capitalize text-emerald-800"><ShieldCheck className="h-3 w-3" />{user.role}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="h-3 w-3" />{user.department_id}</span>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onLogout} className="rounded-lg px-3 py-2 text-red-600 focus:bg-red-50 focus:text-red-700">
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
+      <DropdownMenuContent align="end" side="top" className="w-56">
+        <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-700">
+          <LogOut className="mr-2 h-4 w-4" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: string; user: UserClaims | null; onNavigate?: () => void; onLogout: () => void }) {
-  const role = user?.role || 'employee';
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
-  const sections = [
-    { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/work/exceptions','/copilot','/copilot/handover'].includes(item.href)) },
-    { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/procedure-studio'].includes(item.href)) },
-    { title: 'Supervise', items: visibleItems.filter(item => ['/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
-  ];
-
+function Sidebar({ pathname, user, close, logout }: { pathname: string; user: UserClaims; close?: () => void; logout: () => void }) {
+  const area = getArea(pathname);
   return (
-    <div className="flex h-full flex-col bg-[#102b23] px-3 py-5 text-white">
-      <div className="px-3 pb-8 pt-1"><Brand /></div>
-      <nav className="flex-1 space-y-7 overflow-y-auto px-1" aria-label="Primary navigation">
-        {sections.filter((section) => section.items.length > 0).map((section) => (
-          <div key={section.title}>
-            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#77a18a]">{section.title}</p>
-            <div className="space-y-1">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const active = isActiveRoute(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'group flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 transition focus-visible:outline-offset-2',
-                      active
-                        ? 'border-[#7bd4a4]/20 bg-[#28533c] text-white'
-                        : 'border-transparent text-[#b4c7b9] hover:border-[#4c765b] hover:bg-[#1b4130] hover:text-white',
-                    )}
-                  >
-                    <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-[#b7efd1]' : 'text-[#83a591]')} aria-hidden="true" />
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold">{item.label}</span>
-                      <span className="block truncate text-[11px] text-[#87a592]">{item.description}</span>
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+    <div className="flex h-full min-h-0 flex-col bg-[#102b23] px-4 py-6 text-white">
+      <Link href="/workspace" onClick={close} className="flex items-center gap-3 px-2" aria-label="WorkMate home">
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#b9edcf] text-base font-extrabold text-[#102b23]">WM</span>
+        <span className="font-heading text-xl font-bold tracking-tight">WorkMate</span>
+      </Link>
+      <nav aria-label="Primary navigation" className="mt-12 flex min-h-0 flex-1 flex-col gap-1.5">
+        {NAV.filter(item => item.roles.includes(user.role)).map(item => {
+          const Icon = item.icon;
+          const active = area === item.area;
+          return (
+            <Link key={item.area} href={item.href} onClick={close} aria-current={active ? 'page' : undefined}
+              className={cn('flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-colors',
+                active ? 'bg-[#28533c] text-white' : 'text-[#b5cbbd] hover:bg-white/10 hover:text-white')}>
+              <Icon className="h-[18px] w-[18px] shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
-      <div className="space-y-3 border-t border-[#2d4c3a] px-1 pt-4">
-        <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold text-[#b0d9bc]"><ShieldCheck className="h-4 w-4" />Governed procedures</div>
-        {user ? <UserMenu user={user} onLogout={onLogout} /> : null}
+      <div className="border-t border-white/10 pt-4">
+        <UserMenu user={user} logout={logout} />
       </div>
     </div>
   );
@@ -158,8 +127,6 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  // Do not render an employee sidebar or Sign in action while an admin/manager
-  // session is still loading. Keep cached identity visible between modules.
   const [user, setUser] = useState<UserClaims | null>(() => getUserClaims());
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -176,55 +143,50 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname, router]);
 
   if (pathname === '/login' || pathname.startsWith('/login/')) return <>{children}</>;
-  if (!user) return <div className="min-h-screen grid place-items-center bg-[#f8faf8]"><LoadingState label="Opening workspace" /></div>;
+  if (!user) return <div className="grid min-h-screen place-items-center"><LoadingState label="Opening WorkMate" /></div>;
 
-  const handleLogout = () => {
-    void fetch('/api/session/logout', {
-      method: 'POST', credentials: 'same-origin',
-    }).finally(() => {
+  const logout = () => {
+    void fetch('/api/session/logout', { method: 'POST', credentials: 'same-origin' }).finally(() => {
       clearCachedUser();
       setUser(null);
       router.replace('/login');
     });
   };
-
-  const activeItem = NAV_ITEMS.find((item) => isActiveRoute(pathname, item.href));
-
+  const area = getArea(pathname);
+  const visibleTabs = TABS[area].filter(tab => tab.roles.includes(user.role));
+  const label = NAV.find(item => item.area === area)?.label ?? 'WorkMate';
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[#244b35] lg:block">
-        <SidebarContent pathname={pathname} user={user} onLogout={handleLogout} />
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 lg:block">
+        <Sidebar pathname={pathname} user={user} logout={logout} />
       </aside>
-
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <button className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />
-          <aside className="relative h-full w-[min(19rem,88vw)] shadow-2xl">
-            <button type="button" className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-emerald-100 hover:text-emerald-900" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
-              <X className="h-5 w-5" />
-            </button>
-            <SidebarContent pathname={pathname} user={user} onNavigate={() => setMobileOpen(false)} onLogout={handleLogout} />
+          <button className="absolute inset-0 bg-slate-950/60" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />
+          <aside className="relative h-full w-[min(19rem,85vw)]">
+            <button type="button" className="absolute right-3 top-3 z-10 rounded-lg p-2 text-white" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X className="h-5 w-5" /></button>
+            <Sidebar pathname={pathname} user={user} close={() => setMobileOpen(false)} logout={logout} />
           </aside>
         </div>
       ) : null}
-
-      <div className="min-h-screen lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div>
-              <p className="text-xs font-semibold text-foreground">{activeItem?.label || 'Operational workspace'}</p>
-              <p className="hidden text-[10px] text-muted-foreground sm:block">{activeItem?.description || 'WorkMate verified operations'}</p>
-            </div>
+      <div className="min-h-screen lg:pl-60">
+        <header className="sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur-xl">
+          <div className="flex h-16 items-center gap-3 px-5 sm:px-8">
+            <button type="button" className="rounded-lg p-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="h-5 w-5" /></button>
+            <span className="font-heading text-base font-bold">{label}</span>
+            <span className="ml-auto hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"><ShieldCheck className="h-4 w-4 text-emerald-700" /> Controlled workflows</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-800 sm:inline-flex">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verified context
-            </span>
-            {user ? <div className="w-14 sm:w-56"><UserMenu user={user} onLogout={handleLogout} compact /></div> : <Button asChild size="sm"><Link href="/login">Sign in</Link></Button>}
-          </div>
+          {visibleTabs.length > 1 ? (
+            <nav className="flex min-h-11 items-center gap-1 overflow-x-auto px-5 sm:px-8" aria-label={label + ' views'}>
+              {visibleTabs.map(tab => (
+                <Link key={tab.href} href={tab.href} aria-current={tabActive(pathname, tab) ? 'page' : undefined}
+                  className={cn('whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors',
+                    tabActive(pathname, tab) ? 'border-emerald-700 text-emerald-900' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+                  {tab.label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </header>
         <main className="min-w-0">{children}</main>
       </div>
