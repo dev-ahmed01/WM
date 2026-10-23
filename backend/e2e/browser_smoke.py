@@ -99,7 +99,7 @@ def sign_in(browser, email):
         if "admin" not in email and "manager" not in email:
             expect(page.get_by_role("heading", name="Today's work")).to_be_visible()
             # Guided assistance is accessible from work, but never auto-sends.
-            page.get_by_role("link", name=re.compile("Ask about your work")).click()
+            page.get_by_role("link", name="WorkMate Assist").click()
             expect(page.get_by_role("heading", name="Operational Copilot")).to_be_visible()
             expect(page.locator("textarea")).to_be_visible()
     except Exception as exc:
