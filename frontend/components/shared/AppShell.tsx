@@ -25,7 +25,7 @@ const NAV: NavItem[] = [
   { area: 'work', label: 'My work', href: '/workspace', icon: ClipboardList, roles: ['admin', 'manager', 'employee'] },
   { area: 'operations', label: 'Operations', href: '/control-room', icon: LayoutDashboard, roles: ['admin', 'manager'] },
   { area: 'assistant', label: 'WorkMate Assist', href: '/copilot', icon: Bot, roles: ['admin', 'manager', 'employee'] },
-  { area: 'procedures', label: 'Procedures', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
+  { area: 'procedures', label: 'Procedures', href: '/procedure-studio/drafts', icon: BookOpenText, roles: ['admin'] },
   { area: 'insights', label: 'Insights', href: '/intelligence-hub', icon: BarChart3, roles: ['admin', 'manager'] },
 ];
 
@@ -56,7 +56,6 @@ const TABS: Record<Area, Tab[]> = {
     { label: 'History', href: '/copilot/history', roles: ['admin', 'manager', 'employee'] },
   ],
   procedures: [
-    { label: 'Overview', href: '/procedure-studio', roles: ['admin'] },
     { label: 'Drafts', href: '/procedure-studio/drafts', roles: ['admin'] },
     { label: 'Published SOPs', href: '/knowledge-studio', roles: ['admin'] },
     { label: 'References', href: '/knowledge-studio/references', roles: ['admin'] },
