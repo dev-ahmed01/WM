@@ -99,7 +99,7 @@ def sign_in(browser, email):
         if "admin" not in email and "manager" not in email:
             expect(page.get_by_role("heading", name="Today's work")).to_be_visible()
             # Guided assistance is accessible from work, but never auto-sends.
-            page.get_by_role("link", name=re.compile("Ask about your work")).click()
+            page.get_by_role("link", name="WorkMate Assist").click()
             expect(page.get_by_role("heading", name="Operational Copilot")).to_be_visible()
             expect(page.locator("textarea")).to_be_visible()
     except Exception as exc:
@@ -1037,7 +1037,7 @@ def main():
             # Shift handover is read-only; the reviewer exports an explicit
             # local draft from a real saved conversation and workflow status.
             employee.goto(f"{BASE}/copilot/handover")
-            expect(employee.get_by_role("heading", name="Pass on the context, not the confusion.")).to_be_visible()
+            expect(employee.get_by_role("heading", name="Shift handover")).to_be_visible()
             chosen_session = employee.locator("#handover-session")
             expect(chosen_session.locator(f'option[value="{approved_answer["conversation_id"]}"]')).to_be_attached(timeout=15000)
             chosen_session.select_option(approved_answer["conversation_id"])

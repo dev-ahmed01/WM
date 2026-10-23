@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import type { WorkItem, WorkQueueResponse } from '@/lib/work-items';
 
 type AnalyticsRow = Record<string, any>;
 
@@ -20,6 +21,8 @@ function EmptyMetric({ children }: { children: React.ReactNode }) {
 
 export default function IntelligenceHubPage() {
   const { loading } = useRequireRole(['manager', 'admin']);
+  const [workItems, setWorkItems] = useState<WorkItem[]>([]);
+  const [workError, setWorkError] = useState('');
   const [sopUsage, setSopUsage] = useState<AnalyticsRow[]>([]);
   const [confusingProcedures, setConfusingProcedures] = useState<AnalyticsRow[]>([]);
   const [departmentAdoption, setDepartmentAdoption] = useState<AnalyticsRow[]>([]);
@@ -34,6 +37,9 @@ export default function IntelligenceHubPage() {
 
   useEffect(() => {
     if (loading) return;
+    void apiClient<WorkQueueResponse>('/work/items')
+      .then(result => setWorkItems(result.items || []))
+      .catch(error => setWorkError(error instanceof Error ? error.message : 'Work queue unavailable.'));
     Promise.all([
       apiClient<AnalyticsRow[]>('/analytics/sop-usage'),
       apiClient<AnalyticsRow[]>('/analytics/confusing-procedures'),
@@ -78,10 +84,25 @@ export default function IntelligenceHubPage() {
 
   return (
     <div className="wm-page space-y-7">
-      <PageHeader eyebrow="Operational intelligence" title="Manager overview" description="A focused view of SOP adoption, confidence, confusion, and human escalation across active operations." />
+      <PageHeader eyebrow="Warehouse operations" title="Insights" />
 
       {fetchError ? <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-5 w-5 flex-none" /><div><p className="font-semibold">Some analytics are unavailable</p><p className="mt-1">{fetchError}</p></div></div> : null}
 
+      {workError ? <p role="alert" className="text-sm text-red-800">{workError}</p> : null}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Current warehouse work">
+        {[
+          { title: 'Queued work', value: workItems.filter(item => item.status === 'queued').length },
+          { title: 'Assigned', value: workItems.filter(item => item.status !== 'completed' && item.assigned_to).length },
+          { title: 'High priority', value: workItems.filter(item => item.status !== 'completed' && item.priority === 'high').length },
+          { title: 'Blocked', value: workItems.filter(item => item.status === 'blocked').length },
+        ].map(metric => (
+          <div key={metric.title} className="rounded-2xl border bg-white p-5">
+            <p className="text-xs text-muted-foreground">{metric.title}</p>
+            <p className="mt-2 text-3xl font-semibold tabular-nums">{workError ? '—' : metric.value}</p>
+          </div>
+        ))}
+      </section>
+      <h2 className="text-xl font-semibold">SOP quality</h2>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Operational metrics">
         <MetricCard title="SOP executions" value={fetchError ? 'N/A' : totalExecutions || 'No data'} />
         <MetricCard title="Response confidence" value={fetchError ? 'N/A' : avgConfidence} />

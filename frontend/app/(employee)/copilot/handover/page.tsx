@@ -175,21 +175,11 @@ export default function ShiftHandoverPage() {
 
   return (
     <div className="wm-page max-w-6xl space-y-7 pb-12">
-      <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-emerald-700"><ArrowLeft className="h-4 w-4" />Operations desk</Link>
-      <section className="relative overflow-hidden rounded-[1.75rem] bg-[#112f2a] p-7 text-white sm:p-9">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-emerald-300/10 blur-3xl" />
-        <div className="relative">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-100"><ClipboardCheck className="h-3.5 w-3.5" /> Continuity / shift transfer</span>
-          <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Pass on the context, not the confusion.</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/70">Build a handover from your recorded session, its current workflow state, and the actions that still need attention. Nothing is automatically completed or sent.</p>
-        </div>
-      </section>
+      <header><h1 className="text-3xl font-semibold">Shift handover</h1></header>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.82fr)]">
         <section className="wm-panel p-5 sm:p-7" aria-labelledby="compose-handover">
-          <div className="flex items-center gap-2 text-emerald-700"><History className="h-4 w-4" /><span className="wm-eyebrow">Source of truth</span></div>
           <h2 id="compose-handover" className="mt-2 text-xl font-semibold tracking-tight">Prepare a handover</h2>
-          <p className="mt-1.5 text-xs leading-6 text-muted-foreground">Choose a real session you own. Check the recorded state, then add your own next actions.</p>
 
           {error ? <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{error}</div> : null}
           <div className="mt-6">
@@ -239,7 +229,7 @@ export default function ShiftHandoverPage() {
             <button type="button" disabled={!canExport} onClick={download} className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-xs font-semibold hover:bg-muted disabled:opacity-50"><Download className="h-4 w-4" />Download .txt</button>
           </div>
           {notice ? <p role="status" className="mt-3 text-xs text-emerald-800">{notice}</p> : null}
-          <p className="mt-4 text-[11px] leading-5 text-muted-foreground">Copy and download stay local. Submit for review saves the record and an audit event to PostgreSQL. It does not contact the recipient, complete a workflow, or approve a safety decision.</p>
+          <p className="mt-4 text-[11px] text-muted-foreground">Submitting records a handover for supervisor review; it does not approve or complete work.</p>
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-24">
@@ -257,7 +247,7 @@ export default function ShiftHandoverPage() {
               {chosen ? <Link href={'/copilot?session=' + encodeURIComponent(chosen.id)} className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:underline">Reopen this session <ArrowRight className="h-3.5 w-3.5" /></Link> : null}
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /><p className="text-xs leading-6 text-emerald-950/80">A handover summarizes context; it never replaces a published SOP or a supervisor's approval.</p></div>
+
         </aside>
       </div>
     </div>

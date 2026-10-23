@@ -36,11 +36,15 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   if (body && body.byteLength > maxBodyBytes) {
     return jsonError(413, 'BODY_TOO_LARGE', 'Upload exceeds the 26 MB proxy limit.');
   }
+  // Local CPU inference can exceed the normal API timeout. Keep bounded long
+  // requests exclusive to Copilot, rather than timing out unrelated operations.
+  const isInference = path[0] === 'copilot' && (path[1] === 'message' || path[1] === 'voice');
+  const requestTimeoutMs = isInference ? 120000 : 25000;
   async function send(access: string) {
     safeHeaders.set('Authorization', `Bearer ${access}`);
     return fetch(dest, {
       method: request.method, headers: safeHeaders,
-      body, cache: 'no-store', signal: AbortSignal.timeout(25000),
+      body, cache: 'no-store', signal: AbortSignal.timeout(requestTimeoutMs),
     });
   }
   try {
@@ -60,8 +64,16 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     if (refreshed && response.ok) setAuthCookies(reply, refreshed.access, refreshed.refresh);
     if (response.status === 401) clearAuthCookies(reply);
     return reply;
-  } catch {
-    return jsonError(502, 'BACKEND_UNAVAILABLE', 'The backend is temporarily unavailable.');
+  } catch (error) {
+    const name = error instanceof Error ? error.name : 'UnknownError';
+    // Never log cookies, authorization headers, request bodies or SOP text.
+    console.error('WorkMate backend proxy failure', { route: path[0], kind: name });
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      return jsonError(504, 'BACKEND_TIMEOUT', isInference
+        ? 'Copilot response timed out. Check the local model and retry.'
+        : 'The backend request timed out. Please retry.');
+    }
+    return jsonError(502, 'BACKEND_UNAVAILABLE', 'Unable to connect to the WorkMate API. Check backend status.');
   }
 }
 
