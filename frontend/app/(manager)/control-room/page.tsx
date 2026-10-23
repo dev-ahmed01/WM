@@ -108,7 +108,7 @@ export default function ControlRoom() {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[.18em] text-emerald-700">OPERATIONS / {user?.department_id}</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-.05em] text-[#182c22] sm:text-[2.6rem]">Control room</h1>
-          <p className="mt-2 text-sm text-[#728078]">Department tasks, blocked execution and shift follow-ups.</p>
+          
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => void load()} disabled={fetching} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#d9e4db] bg-white px-4 text-xs font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" />Refresh</button>
@@ -130,8 +130,8 @@ export default function ControlRoom() {
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,.7fr)]">
         <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-[#d9e4db] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] p-5 sm:px-6">
-            <div><h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2><p className="mt-1 text-xs text-[#708177]">Priority-first · active work and queued assignments</p></div>
-            <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700">View all <ArrowRight className="h-4 w-4" /></Link>
+            <h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2>
+            
           </div>
           {fetching ? <div className="p-8"><LoadingState label="Loading work queue" /></div> : ordered.length ? (
             <div className="divide-y divide-[#edf0eb]">
@@ -144,32 +144,23 @@ export default function ControlRoom() {
                 </div>
               </Link>)}
             </div>
-          ) : <div className="px-6 py-12 text-center"><Inbox className="mx-auto h-7 w-7 text-[#6e9680]" /><p className="mt-3 text-sm font-semibold">The queue is clear</p><p className="mt-2 text-xs text-[#76887c]">Create an assignment to begin tracking work.</p></div>}
+          ) : <div className="px-6 py-12 text-center"><Inbox className="mx-auto h-7 w-7 text-[#6e9680]" /><p className="mt-3 text-sm font-semibold">The queue is clear</p></div>}
         </section>
         <aside className="space-y-4">
-          <Link href="/work/exceptions" className="group block rounded-[1.5rem] border border-[#214b35] bg-[#143c2b] p-6 text-white">
-            <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.13em] text-[#b5e8c9]"><AlertTriangle className="h-4 w-4" />Exception desk</span>
-            <p className="mt-5 text-4xl font-semibold tracking-tight">{fetching || error ? '—' : activeCases.length}</p>
-            <p className="mt-1 text-sm text-[#c7decf]">Awaiting human review</p>
-            <div className="mt-5 flex items-center justify-between border-t border-white/15 pt-4 text-xs"><span>{activeCases.filter(item => item.severity==='critical').length} critical holds</span><ArrowUpRight className="h-5 w-5 transition group-hover:translate-x-1" /></div>
-          </Link>
-          <div className="rounded-[1.4rem] border border-[#dce6dd] bg-white p-5">
-            <h3 className="text-sm font-semibold">Management tools</h3>
-            {[
-              {label:'Review task exceptions',href:'/work/exceptions'},
-              {label:'Review integration inbox',href:'/work/integrations'},
-              {label:'Review handovers ('+pending+')',href:'/handover/review'},
-              ...(user?.role === 'admin' ? [{label:'Procedure studio',href:'/procedure-studio'}] : []),
-              {label:'Operational insights',href:'/intelligence-hub'},
-            ].map(item => <Link href={item.href} key={item.href} className="flex min-h-12 items-center justify-between border-b border-[#edf1ec] text-xs font-semibold text-[#496452] last:border-0 hover:text-emerald-800">{item.label}<ArrowRight className="h-4 w-4" /></Link>)}
+          <div className="rounded-[1.5rem] border border-[#214b35] bg-[#143c2b] p-6 text-white">
+            <span className="text-xs font-semibold text-[#b5e8c9]">Open exceptions</span>
+            <p className="mt-3 text-4xl font-semibold">{fetching || error ? '—' : activeCases.length}</p>
+            <div className="mt-4 flex justify-between border-t border-white/15 pt-4 text-xs text-[#c7decf]">
+              <span>Critical: {activeCases.filter(item => item.severity === 'critical').length}</span>
+              <span>Handover reviews: {pending}</span>
+            </div>
           </div>
-          <div className="flex gap-3 rounded-xl border border-[#dce5dc] bg-[#f4f8f4] p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700" /><p className="text-xs leading-6 text-[#69766e]">Queue metrics show created tasks, not completed work or proven productivity gains.</p></div>
         </aside>
       </div>
 
       {open ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091a13]/60 px-4 py-8" role="presentation">
         <div role="dialog" aria-modal="true" aria-labelledby="new-work-title" className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[1.7rem] bg-white p-6 shadow-2xl sm:p-8">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">WORK INTAKE</p><h2 id="new-work-title" className="mt-2 text-2xl font-semibold tracking-tight">Create assignment</h2><p className="mt-1 text-xs leading-5 text-[#77857a]">Queue work for your department, then bind a published SOP before execution.</p></div><button type="button" aria-label="Close assignment" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
+          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">WORK INTAKE</p><h2 id="new-work-title" className="mt-2 text-2xl font-semibold tracking-tight">Create assignment</h2></div><button type="button" aria-label="Close assignment" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
           <form onSubmit={event => void submit(event)} className="mt-6 space-y-4">
             <div><label htmlFor="wi-title" className="wm-label">Task title</label><input id="wi-title" className="wm-input" required minLength={5} maxLength={180} value={title} onChange={event => setTitle(event.target.value)} placeholder="Inspect inbound shipment 101" /></div>
             <div className="grid gap-4 sm:grid-cols-2">
