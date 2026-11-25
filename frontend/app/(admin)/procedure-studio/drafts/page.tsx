@@ -94,7 +94,7 @@ export default function ProcedureDraftsPage() {
       <section className="overflow-hidden rounded-[1.6rem] border border-[#d9e4db] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eef2ed] p-6">
           <div><h2 className="text-lg font-semibold">Draft library</h2><p className="mt-1 text-xs text-[#748476]">Saved document conversions and revisions</p></div>
-          <button type="button" onClick={()=>void load()} disabled={fetching} className="rounded-lg border border-[#e0e9e1] p-2"><RefreshCw className="h-4 w-4 text-emerald-800" /></button>
+          <button type="button" aria-label="Refresh draft list" title="Refresh draft list" onClick={()=>void load()} disabled={fetching} className="rounded-lg border border-[#e0e9e1] p-2"><RefreshCw className="h-4 w-4 text-emerald-800" /></button>
         </div>
         {error?<p role="alert" className="m-4 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">{error}</p>:null}
         {fetching?<div className="p-6"><LoadingState label="Reading your drafts"/></div>:

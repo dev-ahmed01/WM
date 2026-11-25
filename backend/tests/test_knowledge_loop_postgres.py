@@ -162,6 +162,10 @@ def test_unanswered_question_to_published_sop(scratch):
         assert "recalibrate" in text or "labeller" in text, found
         assert "won't guess" not in found["answer"]
 
+    # Migrations re-run on every deploy; they must not break on rows this loop created
+    # (draft events 'approved'/'returned', gaps, published drafts).
+    _migrate(scratch)
+
 
 @pytest.mark.live_integration
 def test_manager_can_return_a_draft_and_edit_voids_approval(scratch):

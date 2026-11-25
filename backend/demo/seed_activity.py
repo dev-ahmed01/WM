@@ -106,6 +106,20 @@ def main() -> int:
             else:
                 summary["errors"].append(("bind " + item["external_reference"], status, body))
 
+    # A real exception case: the receiving associate starts the inbound task and reports a blocker.
+    _, items = c.call("demo_manager_hyd", "GET", "/work/items?limit=100")
+    inbound = next((i for i in items.get("items", []) if i.get("external_reference") == "DEMO-WI-001"), None)
+    summary["cases"] = 0
+    if inbound and inbound.get("status") in ("ready", "queued") and inbound.get("workflow_version_id"):
+        st, _b = c.call("demo_receiving", "POST", f"/work/execution/{inbound['id']}/start")
+        if st == 200:
+            st, body = c.call("demo_receiving", "POST", f"/work/execution/{inbound['id']}/block",
+                              {"reason": "Seal number on the trailer does not match the delivery note (demo)."})
+            if st == 200:
+                summary["cases"] += 1
+            else:
+                summary["errors"].append(("block", st, body))
+
     _, hist = c.call("demo_picker", "GET", "/copilot/history")
     if not hist.get("sessions"):
         last_conv = {}

@@ -23,7 +23,7 @@ ALTER TABLE knowledge_studio.procedure_draft_events
  DROP CONSTRAINT IF EXISTS procedure_draft_events_action_check;
 ALTER TABLE knowledge_studio.procedure_draft_events
  ADD CONSTRAINT procedure_draft_events_action_check CHECK(
-   action IN ('imported','edited','reviewed','published')
+   action IN ('imported','edited','reviewed','approved','returned','published')
  );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_procedure_drafts_published_version
  ON knowledge_studio.procedure_drafts(published_version_id)

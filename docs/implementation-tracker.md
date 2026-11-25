@@ -82,6 +82,12 @@ no admin/manager console for knowledge-gap escalations beyond the Intelligence H
   model stages and the voice/Hindi parts of the pilot gate were deleted. Migrations are unchanged (tables remain, unused).
 - Verified: backend 539+ pass (live DB tests on), frontend `tsc` and `next build` (28 routes) pass, RBAC golden regenerated (102 ops).
 
+## Session 2026-11-25 (final): all scenarios + desktop
+- `docs/acceptance-scenarios.md`: scenarios A–J automated on a scratch DB (B removed with voice); 549 pass / 1 skip / 0 fail.
+- New: assistant discrepancy action (propose -> confirm -> record), `/work/exceptions/mine` + employee "Issues you reported" card,
+  relevance guard on in-workflow "explain", migration 009 re-runnability fix, accessibility label fix. 28/28 desktop routes clean.
+- **Top open item:** direct OWD upload in Knowledge Studio bypasses the manager approval gate.
+
 ## Open issues / blockers
 - Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).
 - Out-of-scope questions show unrelated "closest SOP" suggestions and create no escalation.
