@@ -1,12 +1,5 @@
 import React from 'react';
-import { ArrowUp, Mic, MicOff } from 'lucide-react';
-import type { VoiceLanguage } from '@/lib/api-client';
-
-const VOICE_LANGUAGES: Array<{ value: VoiceLanguage; label: string }> = [
-  { value: 'auto', label: 'English + Hindi · Auto' },
-  { value: 'en', label: 'English' },
-  { value: 'hi', label: 'हिन्दी · Hindi' },
-];
+import { ArrowUp } from 'lucide-react';
 
 interface ChatComposerProps {
   value: string;
@@ -14,28 +7,11 @@ interface ChatComposerProps {
   answerMode: 'workflow' | 'reference';
   onAnswerModeChange: (mode: 'workflow' | 'reference') => void;
   busy: boolean;
-  listening: boolean;
-  voiceProcessing: boolean;
-  voiceInputLevel: number;
-  voiceRecordingSeconds: number;
-  microphonePermission: PermissionState | 'unknown';
-  speechSupported: boolean;
-  speechError: string | null;
-  voiceLanguage: VoiceLanguage;
-  detectedLanguage?: string;
-  transcriptPreview?: string;
   onChange: (value: string) => void;
   onSend: () => void;
-  onToggleListening: () => void;
-  onVoiceLanguageChange: (language: VoiceLanguage) => void;
 }
 
-export function ChatComposer({
-  value, placeholder, answerMode, onAnswerModeChange, busy, listening, voiceProcessing, voiceInputLevel,
-  voiceRecordingSeconds, microphonePermission, speechSupported, speechError,
-  voiceLanguage, detectedLanguage, transcriptPreview, onChange, onSend,
-  onToggleListening, onVoiceLanguageChange,
-}: ChatComposerProps) {
+export function ChatComposer({ value, placeholder, answerMode, onAnswerModeChange, busy, onChange, onSend }: ChatComposerProps) {
   return (
     <footer className="border-t border-border/80 bg-white/95 p-3 backdrop-blur-xl sm:p-4">
       <div className="mx-auto max-w-4xl">
@@ -44,14 +20,14 @@ export function ChatComposer({
             <button
               type="button"
               aria-pressed={answerMode === 'workflow'}
-              disabled={busy || listening}
+              disabled={busy}
               onClick={() => onAnswerModeChange('workflow')}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${answerMode === 'workflow' ? 'bg-white text-emerald-800 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >SOP guidance</button>
             <button
               type="button"
               aria-pressed={answerMode === 'reference'}
-              disabled={busy || listening}
+              disabled={busy}
               onClick={() => onAnswerModeChange('reference')}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${answerMode === 'reference' ? 'bg-white text-emerald-800 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >Ask documents</button>
@@ -64,7 +40,7 @@ export function ChatComposer({
             value={value}
             disabled={busy}
             placeholder={placeholder}
-            aria-describedby="composer-help voice-input-status"
+            aria-describedby="composer-help"
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -75,41 +51,9 @@ export function ChatComposer({
             className="max-h-36 min-h-[3.25rem] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
           />
           <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={onToggleListening}
-                disabled={busy || !speechSupported || answerMode === 'reference'}
-                aria-label={answerMode === 'reference' ? 'Voice input is available in SOP guidance mode' : !speechSupported ? 'Voice input is not supported in this browser' : listening ? 'Stop voice input' : 'Start voice input'}
-                aria-pressed={listening}
-                className={`flex h-9 flex-none items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-35 ${listening ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
-              >
-                {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                {listening ? 'Stop' : 'Speak'}
-              </button>
-              {listening ? (
-                <div className="flex w-24 items-center gap-2" aria-label={`Microphone level ${Math.round(voiceInputLevel * 100)} percent`}>
-                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-                    <span className="block h-full rounded-full bg-red-500 transition-[width] duration-100" style={{ width: `${Math.max(4, voiceInputLevel * 100)}%` }} />
-                  </span>
-                  <span className="w-7 font-mono text-[10px] text-red-700">{voiceRecordingSeconds.toFixed(1)}s</span>
-                </div>
-              ) : null}
-              <label>
-                <span className="sr-only">Voice language</span>
-                <select
-                  value={voiceLanguage}
-                  disabled={busy || listening}
-                  onChange={(event) => onVoiceLanguageChange(event.target.value as VoiceLanguage)}
-                  className="h-9 max-w-[11rem] rounded-xl border border-border bg-muted/50 px-2 text-[11px] font-medium text-foreground outline-none transition focus:border-emerald-500 disabled:opacity-50"
-                >
-                  {VOICE_LANGUAGES.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-              <span id="composer-help" className="hidden text-[10px] text-muted-foreground sm:block">Enter to send · Shift + Enter for a new line</span>
-            </div>
+            <span id="composer-help" className="text-[10px] text-muted-foreground">
+              {answerMode === 'reference' ? 'Answers quote approved department documents. Switch to SOP guidance to complete steps.' : 'Enter to send · Shift + Enter for a new line'}
+            </span>
             <button
               type="button"
               onClick={onSend}
@@ -120,17 +64,6 @@ export function ChatComposer({
               <ArrowUp className="h-4 w-4" />
             </button>
           </div>
-        </div>
-        <div id="voice-input-status" aria-live="polite" className={`min-h-5 px-2 pt-1.5 text-[10px] ${speechError ? 'text-red-600' : 'text-muted-foreground'}`}>
-          {speechError || (microphonePermission === 'denied'
-            ? 'Microphone access is blocked. In Chrome, select the site controls beside the address, allow Microphone, then reload.'
-            : listening
-            ? 'Listening… speak naturally. Your recording sends automatically after you pause.'
-            : voiceProcessing
-              ? 'Recording received. Preparing an editable transcript; nothing will be sent until you confirm.'
-              : transcriptPreview
-                ? `Transcript preview${detectedLanguage ? ` · ${detectedLanguage.toUpperCase()}` : ''}: ${transcriptPreview}`
-                : answerMode === 'reference' ? 'Answers quote approved department documents. Switch to SOP guidance to use voice or complete steps.' : 'Speak in English, Hindi, or a mix. Review and edit the transcript before pressing Send.')}
         </div>
       </div>
     </footer>

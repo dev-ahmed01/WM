@@ -94,6 +94,8 @@ def render(sop: Sop) -> str:
         w(f"expected_outcome: {_clean(outcome)}.")
         if safety:
             w("safety_note: Stop and ask your supervisor if you are not trained or the situation is unsafe.")
+        w(f"common_failure: {_clean(sop.exc_condition)}.")
+        w(f"recovery_action: {_clean(sop.exc_action)}. Escalate to {sop.escalate_to}.")
         w("estimated_time: 2 mins")
         w("retry_policy: MAX_RETRIES_1")
         w(f"completion_criteria: {_clean(outcome)}.")

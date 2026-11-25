@@ -93,14 +93,13 @@ def test_postgres_schema_auth_source_storage_and_reference_approval():
 
 
 @pytest.mark.live_integration
-def test_postgres_compiler_conversation_and_voice_lifecycle():
-    """A real compiled SOP, chat message and voice row must commit on PG16."""
+def test_postgres_compiler_and_conversation_lifecycle():
+    """A real compiled SOP and chat message must commit on PG16."""
     from app.compiler.parser import OWDParser
     from app.compiler.validator import OWDValidator
     from app.compiler.compiler import OWDCompiler
     from app.compiler.loader import OWDLoader
     from app.repositories.conversation_repository import ConversationRepository
-    from app.repositories.voice_repository import VoiceRepository
     from app.repositories.knowledge_repository import KnowledgeRepository
 
     dept = "flow_" + uuid.uuid4().hex[:10]
@@ -143,26 +142,11 @@ Verified receiving checks finished.
     assert loaded.success
     assert KnowledgeRepository.get_published_version(loaded.workflow_id) is not None
     conversation_id = ConversationRepository.get_or_create_session(user, dept)
-    message_id = ConversationRepository.persist_message(
+    ConversationRepository.persist_message(
         conversation_id, sender="ai", content="Inspect the security seal.",
         retrieved_state_ids=[], citations=[], confidence_score=0.95
     )
     assert ConversationRepository.belongs_to_user(conversation_id, user)
-    voice_id = VoiceRepository.persist_interaction(
-        conversation_id=conversation_id,
-        response_message_id=message_id,
-        user_id=user,
-        original_language="hi", translated_language="en",
-        original_transcript="सील की जांच", translated_transcript="Check the seal",
-        response_text="Inspect the security seal.",
-        transcription_confidence=0.88, transcription_ms=100,
-        translation_ms=20, synthesis_ms=0, audio_id="audio_live_smoke",
-        success=True,
-    )
-    assert voice_id.startswith("voice_")
-    assert VoiceRepository.audio_belongs_to_user("audio_live_smoke", user)
-    assert not VoiceRepository.audio_belongs_to_user("audio_live_smoke", "other_user")
-    assert VoiceRepository.get_synthesis_source(message_id, user)["language"] == "hi"
 
 
 @pytest.mark.live_integration

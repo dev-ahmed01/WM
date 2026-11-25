@@ -230,8 +230,27 @@ class OWDCompiler:
                     })
 
             # Search Metadata (Section 2 & 9)
+            def _step_rules(st):
+                """Failure/recovery/safety text belongs with the rules, so exception and
+                reason questions retrieve it instead of just repeating the instruction."""
+                def _lower_first(text):
+                    # "The WMS ..." -> "the WMS ..." but keep acronyms ("WMS ...").
+                    return text[:1].lower() + text[1:] if text[1:2].islower() else text
+
+                parts = []
+                if st.common_failure:
+                    parts.append(f"If {_lower_first(st.common_failure.strip().rstrip('. '))}" + (f", {_lower_first(st.recovery_action.strip().rstrip('. '))}" if st.recovery_action else ""))
+                elif st.recovery_action:
+                    parts.append(f"Recovery: {st.recovery_action.rstrip('. ')}")
+                if st.expected_outcome and st.expected_outcome != "Step Completed Successfully":
+                    parts.append(f"This step is done when: {st.expected_outcome.rstrip('. ')}")
+                if st.safety_note:
+                    parts.append(f"Safety: {st.safety_note.rstrip('. ')}")
+                return (". ".join(parts) + ".") if parts else ""
+
             step_text = " ".join([f"{st.step_code} {st.instruction}" for st in s.steps])
             rule_text = " ".join([f"{r.rule_code} {r.condition_logic}" for r in s.safety_rules + s.business_rules])
+            rule_text = (rule_text + " " + " ".join(_step_rules(st) for st in s.steps)).strip()
             kw_list = ret_meta.keywords if ret_meta and ret_meta.keywords else []
             combined_raw = f"{wf.title} {wf.workflow_code} {s.title} {step_text} {rule_text} {' '.join(kw_list)}"
             keywords = sorted(list(set(re.findall(r'\b[A-Za-z0-9_-]{3,}\b', combined_raw.upper()))))

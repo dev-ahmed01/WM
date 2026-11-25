@@ -62,37 +62,6 @@ export interface WorkflowDecisionOption {
   option_label: string;
 }
 
-export type VoiceLanguage = 'auto' | 'en' | 'hi';
-
-export interface VoiceTranscriptPreview {
-  transcript: string;
-  suggested_text: string;
-  detected_language: 'en' | 'hi';
-  confidence: number;
-  transcription_ms: number;
-  translation_ms: number;
-  requires_confirmation: true;
-  warning: string;
-}
-
-export interface VoiceCopilotResponse {
-  language: Exclude<VoiceLanguage, 'auto'>;
-  transcript: string;
-  translated_transcript: string;
-  response_text: string;
-  audio_url?: string | null;
-  confidence: number;
-  transcription_ms: number;
-  translation_ms: number;
-  synthesis_ms: number;
-  copilot: CopilotResponse;
-}
-
-export interface VoiceSynthesisResponse {
-  audio_url: string;
-  synthesis_ms: number;
-}
-
 export interface WorkflowAdvanceResponse {
   status: CopilotResponse['active_session_status'];
   current_state_id?: string | null;
@@ -241,15 +210,3 @@ export async function apiClient<T>(
   return response.json() as Promise<T>;
 }
 
-export async function apiBlob(endpoint: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    credentials: 'same-origin', cache: 'no-store',
-  });
-  if (!response.ok) {
-    throw new ApiError(
-      { error_code: 'VOICE_AUDIO_ERROR', message: 'Voice audio is unavailable or expired.' },
-      response.status,
-    );
-  }
-  return response.blob();
-}

@@ -47,7 +47,7 @@ export default function LoginPage() {
           <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-[-0.045em] text-white xl:text-5xl">Every shift.<br />Every step.<br /><span className="text-emerald-300">Verified.</span></h1>
           <p className="mt-6 max-w-lg text-sm leading-7 text-slate-400">WorkMate turns published SOPs into clear, role-aware guidance without skipping workflow controls or inventing policy.</p>
           <ul className="mt-9 grid gap-4 text-sm text-slate-300 sm:grid-cols-2">
-            {['One step at a time', 'Department scoped', 'Traceable sources', 'Voice enabled'].map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" />{item}</li>)}
+            {['One step at a time', 'Department scoped', 'Traceable sources', 'Every question answered'].map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" />{item}</li>)}
           </ul>
         </div>
 

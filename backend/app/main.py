@@ -19,8 +19,6 @@ from app.middleware.audit_logger import AuditLoggingMiddleware
 from app.exceptions import WorkMateException
 from app.api.v1 import api_v1_router
 from app.integrations.ai_gateway import AIGateway
-from app.services.speech_recognition_service import get_speech_recognition_service
-from app.services.translation_service import get_translation_service
 
 # Initialize structured logging subsystem
 setup_logging()
@@ -30,16 +28,7 @@ logger = logging.getLogger("workmate.main")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Pay reusable local model load cost before accepting voice traffic."""
-    if settings.VOICE_ENABLED and settings.VOICE_PREWARM_MODELS:
-        started = time.perf_counter()
-        logger.info("Prewarming reusable voice models")
-        try:
-            await get_speech_recognition_service().warm()
-            await get_translation_service().warm()
-            logger.info("Voice models ready in %.2fs", time.perf_counter() - started)
-        except Exception:
-            logger.exception("Voice model prewarming failed; continuing startup")
+    """Release pooled database connections on shutdown."""
     try:
         yield
     finally:

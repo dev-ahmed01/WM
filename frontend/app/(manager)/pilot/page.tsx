@@ -44,7 +44,7 @@ export default function PilotReviewPage() {
   return (
     <div className="wm-page space-y-6">
       <PageHeader eyebrow="Controlled pilot" title="Pilot review"
-        description="Aggregated operator feedback from your department. This view contains no employee messages or voice transcripts." />
+        description="Aggregated operator feedback from your department. This view contains no employee messages." />
       {enabled === false ? <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600">
         Pilot feedback is not enabled for this department. An administrator must configure an explicit pilot cohort.
       </div> : null}

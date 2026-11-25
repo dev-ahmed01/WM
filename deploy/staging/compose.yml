@@ -34,8 +34,6 @@ services:
       PILOT_FEEDBACK_ENABLED: ${PILOT_FEEDBACK_ENABLED:-false}
       PILOT_ALLOWED_DEPARTMENTS: ${PILOT_ALLOWED_DEPARTMENTS:-}
       LOCAL_AI_ENABLED: "false"
-      VOICE_ENABLED: "false"
-      VOICE_PREWARM_MODELS: "false"
       POSTGRES_POOL_SIZE: "4"
       # No WMS/ERP callbacks may leave this reference staging deployment.
       WORKMATE_OUTBOUND_ENABLED: "false"

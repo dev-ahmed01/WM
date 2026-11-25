@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 
-type Surface = 'reference' | 'workflow' | 'voice';
-type Issue = 'incorrect_guidance' | 'missing_evidence' | 'unsafe_step' | 'voice_transcript' | 'other';
+type Surface = 'reference' | 'workflow';
+type Issue = 'incorrect_guidance' | 'missing_evidence' | 'unsafe_step' | 'other';
 const ISSUE_LABELS: Record<Issue, string> = {
   incorrect_guidance: 'Guidance incorrect',
   missing_evidence: 'Missing citation',
   unsafe_step: 'Unsafe instruction',
-  voice_transcript: 'Voice transcription',
   other: 'Other issue',
 };
 

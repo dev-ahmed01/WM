@@ -82,7 +82,6 @@ services:
         required: false
     environment:
       LOCAL_AI_BASE_URL: http://ollama:11434
-      VOICE_PREWARM_MODELS: "true"
       DATABASE_URL: postgresql://workmate:${POSTGRES_PASSWORD:-workmate_dev_only}@postgres:5432/workmate
     depends_on:
       postgres:
@@ -94,8 +93,6 @@ services:
     command: ["sh", "-c", "python scripts/migrate_postgres.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     volumes:
       - ./backend/app:/app/app
-      - voice_whisper_data:/app/data/voice/whisper
-      - voice_audio_data:/app/data/voice/audio
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
       interval: 10s
@@ -107,5 +104,3 @@ services:
 volumes:
   postgres_data:
   ollama_data:
-  voice_whisper_data:
-  voice_audio_data:

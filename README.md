@@ -147,5 +147,3 @@ npm run build
 See [`docs/local_ai_runtime.md`](docs/local_ai_runtime.md) for provider, index, grounding, model,
 health, hardware, and fallback behavior. Use the [PostgreSQL cutover guide](docs/postgres_cutover.md) for database setup and live authorization verification.
 
-See [`docs/multilingual_voice.md`](docs/multilingual_voice.md) for Faster-Whisper, Ollama
-translation, Piper voices, language configuration, protected audio delivery, and voice analytics.

@@ -83,12 +83,6 @@
   "employee": "allowed",
   "manager": "allowed"
  },
- "GET /api/v1/copilot/voice/audio/{audio_id}": {
-  "admin": "allowed",
-  "anonymous": "denied",
-  "employee": "allowed",
-  "manager": "allowed"
- },
  "GET /api/v1/escalations": {
   "admin": "denied",
   "anonymous": "denied",
@@ -342,24 +336,6 @@
   "manager": "allowed"
  },
  "POST /api/v1/copilot/session/{id}/resume": {
-  "admin": "allowed",
-  "anonymous": "denied",
-  "employee": "allowed",
-  "manager": "allowed"
- },
- "POST /api/v1/copilot/voice": {
-  "admin": "allowed",
-  "anonymous": "denied",
-  "employee": "allowed",
-  "manager": "allowed"
- },
- "POST /api/v1/copilot/voice/speech": {
-  "admin": "allowed",
-  "anonymous": "denied",
-  "employee": "allowed",
-  "manager": "allowed"
- },
- "POST /api/v1/copilot/voice/transcribe": {
   "admin": "allowed",
   "anonymous": "denied",
   "employee": "allowed",

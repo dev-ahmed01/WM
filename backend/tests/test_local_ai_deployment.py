@@ -23,14 +23,6 @@ def test_compose_initializes_both_configurable_models():
     assert "LOCAL_TRANSLATION_MODEL" not in compose
 
 
-def test_backend_builds_one_quantized_bidirectional_translation_model():
-    dockerfile = Path("infra/docker/backend.Dockerfile").read_text(encoding="utf-8")
-
-    assert "facebook/m2m100_418M" in dockerfile
-    assert dockerfile.count("--quantization int8") == 1
-    assert "COPY --from=translation-model-builder" in dockerfile
-
-
 def test_no_managed_ai_runtime_or_migration_remnants():
     migration_names = sorted(path.name for path in Path("analytics/migrations").glob("*.sql"))
     assert migration_names == [

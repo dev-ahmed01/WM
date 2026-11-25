@@ -1,10 +1,10 @@
 'use client';
 
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, ShieldCheck, Sparkles } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
-import { apiBlob, apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type VoiceTranscriptPreview, type VoiceLanguage, type WorkflowAdvanceResponse } from '@/lib/api-client';
+import { apiClient, type CopilotConversationDetail, type CopilotResponse, type SopSuggestion, type WorkflowAdvanceResponse } from '@/lib/api-client';
 import { ChatThread, type ChatMessage } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import { PilotFeedback } from '@/components/chat/PilotFeedback';
@@ -12,9 +12,6 @@ import { WorkflowRail } from '@/components/chat/WorkflowRail';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Badge } from '@/components/ui/badge';
-import { useSpeechSynthesis } from '@/hooks/useWebSpeech';
-import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
-import { presentCopilotMessage } from '@/lib/copilot-presentation';
 
 function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -43,13 +40,6 @@ function CopilotContent() {
   const [abandonOpen, setAbandonOpen] = useState(false);
   const [mobileWorkflowOpen, setMobileWorkflowOpen] = useState(false);
   const [abandonReason, setAbandonReason] = useState('');
-  const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>('auto');
-  const [detectedLanguage, setDetectedLanguage] = useState<string>();
-  const [transcriptPreview, setTranscriptPreview] = useState<string>();
-  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
-  const [voiceSpeakingKey, setVoiceSpeakingKey] = useState<string | null>(null);
-  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
-  const voiceObjectUrlRef = useRef<string | null>(null);
   const [pilotEnabled, setPilotEnabled] = useState(false);
   useEffect(() => {
     // Launchpad drafts are editable suggestions, never automatic model calls or workflow mutations.
@@ -81,51 +71,6 @@ function CopilotContent() {
   const feedbackMessage = latestPilotMessage?.sender === 'assistant' && latestPilotMessage.copilotData
     ? latestPilotMessage : null;
 
-  const speechSynthesis = useSpeechSynthesis();
-
-  const stopVoiceAudio = useCallback(() => {
-    voiceAudioRef.current?.pause();
-    voiceAudioRef.current = null;
-    if (voiceObjectUrlRef.current) URL.revokeObjectURL(voiceObjectUrlRef.current);
-    voiceObjectUrlRef.current = null;
-    setVoiceSpeakingKey(null);
-  }, []);
-
-  useEffect(() => stopVoiceAudio, [stopVoiceAudio]);
-
-  const handleSpeak = useCallback(async (
-    text: string,
-    messageKey: string,
-    audioUrl?: string | null,
-    language?: string,
-  ) => {
-    if (!audioUrl) {
-      stopVoiceAudio();
-      speechSynthesis.speak(text, messageKey, language);
-      return;
-    }
-    if (voiceSpeakingKey === messageKey) {
-      stopVoiceAudio();
-      return;
-    }
-    speechSynthesis.stop();
-    stopVoiceAudio();
-    try {
-      const blob = await apiBlob(audioUrl);
-      const objectUrl = URL.createObjectURL(blob);
-      const player = new Audio(objectUrl);
-      voiceAudioRef.current = player;
-      voiceObjectUrlRef.current = objectUrl;
-      player.onended = stopVoiceAudio;
-      player.onerror = stopVoiceAudio;
-      setVoiceSpeakingKey(messageKey);
-      await player.play();
-    } catch {
-      stopVoiceAudio();
-      speechSynthesis.speak(text, messageKey, language);
-    }
-  }, [speechSynthesis, stopVoiceAudio, voiceSpeakingKey]);
-
   useEffect(() => {
     async function resumeSession() {
       if (!sessionId || loading) return;
@@ -151,7 +96,6 @@ function CopilotContent() {
 
   const submitMessage = useCallback(async (
     message: string,
-    speakReply = false,
     selection?: {
       workflowCode: string;
       originalQuery: string;
@@ -196,22 +140,14 @@ function CopilotContent() {
         copilotData: response,
         language: selection?.responseLanguage,
       }]);
-      if (speakReply) {
-        const spokenText = presentCopilotMessage(response.answer, {
-          spokenAnswer: response.spoken_answer,
-          sopDetails: response.sop_details,
-        }).spokenText;
-        speechSynthesis.speak(spokenText, assistantMessageId);
-      }
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'WorkMate could not reach the Copilot service. Please try again.');
       const errorMessageId = createMessageId('error');
       setMessages((current) => [...current, { id: errorMessageId, sender: 'assistant', content: errorMessage }]);
-      if (speakReply) speechSynthesis.speak(errorMessage, errorMessageId);
     } finally {
       setIsSending(false);
     }
-  }, [conversationId, isSending, speechSynthesis.speak, answerMode]);
+  }, [conversationId, isSending, answerMode]);
 
   const handleSelectSop = useCallback((
     suggestion: SopSuggestion,
@@ -219,7 +155,7 @@ function CopilotContent() {
     originalQuery: string,
   ) => {
     // The code is validated server-side; the employee keeps seeing their localized choice.
-    void submitMessage(suggestion.source_query || originalQuery || suggestion.title, false, {
+    void submitMessage(suggestion.source_query || originalQuery || suggestion.title, {
       workflowCode: suggestion.workflow_code,
       originalQuery: originalQuery || suggestion.source_query || suggestion.title,
       responseLanguage: language === 'hi' ? 'hi' : 'en',
@@ -227,46 +163,7 @@ function CopilotContent() {
     });
   }, [submitMessage]);
 
-  const submitVoice = useCallback(async (audio: Blob) => {
-    if (isSending) return;
-    setIsSending(true);
-    setIsVoiceProcessing(true);
-    setTranscriptPreview(undefined);
-    setDetectedLanguage(undefined);
-    try {
-      const extension = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm';
-      const form = new FormData();
-      form.append('audio', audio, `workmate-voice.${extension}`);
-      form.append('language', voiceLanguage);
-      // This endpoint NEVER posts a Copilot message, starts a workflow, or
-      // records an attestation. A human must inspect and press Send.
-      const preview = await apiClient<VoiceTranscriptPreview>('/copilot/voice/transcribe', {
-        method: 'POST',
-        body: form,
-      });
-      setDetectedLanguage(preview.detected_language);
-      setTranscriptPreview(preview.transcript);
-      setInput(preview.suggested_text);
-      setMessages((current) => [...current, {
-        id: createMessageId('voice-review'),
-        sender: 'assistant',
-        content: `I heard: “${preview.transcript}”. ${preview.detected_language === 'hi' ? `Suggested English: “${preview.suggested_text}”. ` : ''}Check the text in the message field, especially names, amounts, numbers, and safety instructions. Press Send only after correcting it. No workflow action was recorded.`,
-      }]);
-    } catch (error) {
-      const errorMessage = getErrorMessage(error, 'WorkMate could not transcribe that recording. Please try again or type your request.');
-      setMessages((current) => [...current, {
-        id: createMessageId('voice-error'), sender: 'assistant', content: errorMessage,
-      }]);
-    } finally {
-      setIsVoiceProcessing(false);
-      setIsSending(false);
-    }
-  }, [isSending, voiceLanguage]);
-
-  const voiceRecorder = useVoiceRecorder(submitVoice);
-
   const handleSend = () => {
-    voiceRecorder.cancelListening();
     void submitMessage(input);
   };
 
@@ -363,9 +260,6 @@ function CopilotContent() {
             <ChatThread
               messages={messages}
               busy={isSending}
-              onSpeak={handleSpeak}
-              speakingMessageKey={voiceSpeakingKey || speechSynthesis.speakingKey}
-              speechSupported={speechSynthesis.isSupported || voiceRecorder.isSupported}
               onSelectSop={handleSelectSop}
             />
           </main>
@@ -382,20 +276,8 @@ function CopilotContent() {
             answerMode={answerMode}
             onAnswerModeChange={setAnswerMode}
             busy={isSending}
-            listening={voiceRecorder.isListening}
-            voiceProcessing={isVoiceProcessing}
-            voiceInputLevel={voiceRecorder.inputLevel}
-            voiceRecordingSeconds={voiceRecorder.recordingSeconds}
-            microphonePermission={voiceRecorder.permissionState}
-            speechSupported={voiceRecorder.isSupported}
-            speechError={voiceRecorder.error}
-            voiceLanguage={voiceLanguage}
-            detectedLanguage={detectedLanguage}
-            transcriptPreview={transcriptPreview}
             onChange={setInput}
             onSend={() => void handleSend()}
-            onToggleListening={voiceRecorder.toggleListening}
-            onVoiceLanguageChange={setVoiceLanguage}
           />
         </section>
         <div id="mobile-workflow-panel" className={`${mobileWorkflowOpen ? 'order-1 max-h-[18rem]' : 'hidden'} min-h-0 overflow-hidden lg:order-2 lg:block lg:max-h-none`}>

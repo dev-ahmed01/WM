@@ -1,0 +1,57 @@
+{
+  "cases": 85,
+  "passed": 78,
+  "pass_rate": 0.918,
+  "latency_ms": {
+    "p50": 53.4,
+    "p95": 99.9
+  },
+  "failures": [
+    {
+      "code": "SOP-INB-007",
+      "ok": false,
+      "why": "no citation; escalated",
+      "ms": 19,
+      "answer": "SAFETY FIRST: stop work now and move yourself and anyone nearby away from the hazard. If someone is hurt, or there is fire, smoke, a chemica",
+      "q": "what if damage looks hazardous (leaking, sharp, chemical smell)?"
+    },
+    {
+      "code": "SOP-PCK-007",
+      "ok": false,
+      "why": "SOP was not offered",
+      "answer": "I understood part of your request, but more than one verified SOP may fit. Choose the closest option below."
+    },
+    {
+      "code": "SOP-PAK-006",
+      "ok": false,
+      "why": "SOP was not offered",
+      "answer": "I understood part of your request, but more than one verified SOP may fit. Choose the closest option below."
+    },
+    {
+      "code": "SOP-HSE-002",
+      "ok": false,
+      "why": "no citation; escalated",
+      "ms": 49,
+      "answer": "SAFETY FIRST: stop work now and move yourself and anyone nearby away from the hazard. If someone is hurt, or there is fire, smoke, a chemica",
+      "q": "what if the hazard is immediate (fire, leak, collapse)?"
+    },
+    {
+      "code": "SOP-HSE-005",
+      "ok": false,
+      "why": "SOP was not offered",
+      "answer": "SAFETY FIRST: stop work now and move yourself and anyone nearby away from the hazard. If someone is hurt, or there is fi"
+    },
+    {
+      "code": "SOP-HSE-006",
+      "ok": false,
+      "why": "SOP was not offered",
+      "answer": "SAFETY FIRST: stop work now and move yourself and anyone nearby away from the hazard. If someone is hurt, or there is fi"
+    },
+    {
+      "code": "SOP-HSE-007",
+      "ok": false,
+      "why": "SOP was not offered",
+      "answer": "SAFETY FIRST: stop work now and move yourself and anyone nearby away from the hazard. If someone is hurt, or there is fi"
+    }
+  ]
+}

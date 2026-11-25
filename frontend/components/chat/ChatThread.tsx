@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bot, ChevronDown, CircleAlert, ClipboardCopy, Download, ShieldCheck, Sparkles, Square, UserRound, Volume2 } from 'lucide-react';
+import { Bot, ChevronDown, CircleAlert, ClipboardCopy, Download, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { formatEvidenceNote, downloadEvidenceNote } from '@/lib/evidence-note';
 import type { CopilotResponse, SopSuggestion } from '@/lib/api-client';
 import { presentCopilotMessage } from '@/lib/copilot-presentation';
@@ -10,20 +10,16 @@ export interface ChatMessage {
   sender: 'user' | 'assistant';
   content: string;
   copilotData?: CopilotResponse;
-  voiceAudioUrl?: string | null;
   language?: string;
 }
 
 interface ChatThreadProps {
   messages: ChatMessage[];
   busy: boolean;
-  speechSupported: boolean;
-  speakingMessageKey: string | null;
-  onSpeak: (text: string, messageKey: string, audioUrl?: string | null, language?: string) => void;
   onSelectSop: (suggestion: SopSuggestion, language: string, originalQuery: string) => void;
 }
 
-export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessageKey, speechSupported }: ChatThreadProps) {
+export function ChatThread({ messages, busy, onSelectSop }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [copyResult, setCopyResult] = useState<{ id: string; message: string } | null>(null);
 
@@ -49,7 +45,6 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
       <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
         {messages.map((message, messageIndex) => {
           const assistant = message.sender === 'assistant';
-          const isSpeaking = speakingMessageKey === message.id;
           const data = message.copilotData;
           const presentation = presentCopilotMessage(message.content, {
             spokenAnswer: data?.spoken_answer,
@@ -136,12 +131,6 @@ export function ChatThread({ messages, busy, onSpeak, onSelectSop, speakingMessa
                         <button type="button" onClick={() => downloadEvidenceNote(message.content, data)} title="Download a local text note of the response and citations" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"><Download className="h-3.5 w-3.5" />Evidence note</button>
                         {copyResult?.id === message.id ? <span role="status" className="text-[11px] text-emerald-700">{copyResult.message}</span> : null}
                       </>
-                    ) : null}
-                    {speechSupported ? (
-                      <button type="button" onClick={() => onSpeak(presentation.spokenText, message.id, message.voiceAudioUrl, message.language)} aria-label={isSpeaking ? 'Stop reading this response' : 'Listen to this response'} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground">
-                        {isSpeaking ? <Square className="h-3 w-3" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        {isSpeaking ? 'Stop' : 'Listen'}
-                      </button>
                     ) : null}
                   </div>
                 ) : null}

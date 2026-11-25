@@ -16,7 +16,7 @@ BOOLEAN_GATES = (
     "hosted_https_verified", "runtime_database_role_verified",
     "hosted_restore_drill_passed", "cross_department_isolation_verified",
     "account_revocation_verified", "reference_archive_revocation_verified",
-    "human_sop_approval_signed_off", "voice_review_before_send_verified",
+    "human_sop_approval_signed_off",
     "pilot_rollback_verified", "independent_ai_review_signed_off",
     "security_review_signed_off",
 )
@@ -35,13 +35,8 @@ COUNTS = {
     "operator_pilot_days": 7,
     "distinct_pilot_operators": 3,
     "private_qa_cases": 120,
-    "english_qa_cases": 30,
-    "hindi_qa_cases": 30,
-    "hinglish_qa_cases": 30,
+    "english_qa_cases": 120,
     "independent_reviewers": 2,
-    "field_audio_english_clips": 30,
-    "field_audio_hindi_clips": 30,
-    "field_audio_hinglish_clips": 30,
 }
 ZERO_GATES = (
     "cross_tenant_leaks", "invalid_citations", "unsafe_autonomous_step_advances",
@@ -73,8 +68,7 @@ def evaluate(evidence: dict[str, Any], fingerprint: str) -> dict[str, Any]:
             blocked.append(key)
     # Acceptance of accuracy requires a human-approved threshold and recorded
     # pass/fail, not synthetic benchmark numbers.
-    for key in ("qa_quality_thresholds_approved", "qa_thresholds_met",
-                "voice_quality_thresholds_approved", "voice_thresholds_met"):
+    for key in ("qa_quality_thresholds_approved", "qa_thresholds_met"):
         if evidence.get(key) is not True:
             blocked.append(key)
     return {

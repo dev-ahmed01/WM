@@ -2,7 +2,7 @@
 
 Generated from `backend/tests/golden/rbac_matrix.json`, which `backend/tests/test_rbac_matrix.py` produces by calling
 every API operation anonymously and with admin/manager/employee tokens. ✔ = the role reaches the handler; — = rejected
-by the auth/role dependency (401/403). All 106 operations deny anonymous callers.
+by the auth/role dependency (401/403). All 102 operations deny anonymous callers.
 
 **What this proves:** each route's role guard exists and matches this table; a change fails CI until the golden file is
 regenerated and reviewed (`UPDATE_RBAC_GOLDEN=1`), then run `python scripts/generate_rbac_doc.py`.
@@ -41,10 +41,6 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `POST /api/v1/copilot/session/{id}/advance` | ✔ | ✔ | ✔ |
 | `POST /api/v1/copilot/session/{id}/pause` | ✔ | ✔ | ✔ |
 | `POST /api/v1/copilot/session/{id}/resume` | ✔ | ✔ | ✔ |
-| `POST /api/v1/copilot/voice` | ✔ | ✔ | ✔ |
-| `GET /api/v1/copilot/voice/audio/{audio_id}` | ✔ | ✔ | ✔ |
-| `POST /api/v1/copilot/voice/speech` | ✔ | ✔ | ✔ |
-| `POST /api/v1/copilot/voice/transcribe` | ✔ | ✔ | ✔ |
 | `GET /api/v1/escalations` | — | — | — |
 | `POST /api/v1/escalations/{escalation_id}/resolve` | ✔ | ✔ | — |
 | `GET /api/v1/handover` | ✔ | ✔ | ✔ |
