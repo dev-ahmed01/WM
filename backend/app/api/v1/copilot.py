@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.text_matching import fuzzy_relevance_score
+from app.services import safety_triage
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.models.copilot import (
@@ -1076,6 +1077,43 @@ async def copilot_message(
     history: list[Dict[str, Any]] = []
     started_workflow_this_turn = False
     active_session = WorkflowStateService.get_current_session(conversation_id)
+
+    # Safety triage precedes retrieval, workflow state and every model call: a
+    # reported hazard gets fixed stop-work wording and an urgent case, never an
+    # improvised procedure.
+    safety_alert = safety_triage.detect(payload.message)
+    if safety_alert is not None:
+        ConversationRepository.update_message_intent(user_message_id, "SAFETY_STOP")
+        language = payload.response_language or (
+            "hi" if re.search(r"[ऀ-ॿ]", payload.message) else "en")
+        safety_message_id = ConversationRepository.persist_message(
+            conversation_id=conversation_id, sender="ai", content=safety_triage.EN,
+            intent="SAFETY_STOP", confidence_score=1.0, escalated=True,
+        )
+        case_created = False
+        try:
+            await EscalationService().escalate(
+                conversation_message_id=safety_message_id,
+                reason=f"URGENT safety report ({safety_alert.hazard})",
+            )
+            case_created = True
+        except Exception:
+            copilot_logger.exception("Safety escalation could not be created")
+        try:
+            AnalyticsService.record_event(
+                event_type="copilot.safety_stop",
+                conversation_message_id=safety_message_id,
+                payload={"user_id": user_id, "department_id": department_id,
+                         "hazard": safety_alert.hazard, "case_created": case_created},
+            )
+        except Exception:
+            copilot_logger.exception("Safety telemetry write failed")
+        text = safety_alert.message(language, case_created=case_created)
+        return CopilotResponse(
+            conversation_id=conversation_id, message_id=safety_message_id, answer=text,
+            spoken_answer=text, sop_details=f"Related reference SOP: {safety_alert.related_sop}",
+            citations=[], confidence_score=1.0, is_grounded=True, requires_escalation=True,
+        )
 
     # Read-only evidence mode: resolve *before* every confirmation, completion,
     # decision, or workflow advancement branch. Even "done" in this mode cannot

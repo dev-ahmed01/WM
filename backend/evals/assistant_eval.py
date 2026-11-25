@@ -121,7 +121,7 @@ def candidates(resp: Dict[str, Any]) -> List[str]:
             out.append(s["workflow_code"])
     details = resp.get("sop_details")
     if isinstance(details, str):  # confident match: "SOP: <title> | <CODE>"
-        out.extend(re.findall(r"\|\s*(SOP_[A-Z]+_\d+)", details))
+        out.extend(re.findall(r"(?:\|\s*|Related reference SOP:\s*)(SOP[-_][A-Z]+[-_]\d+)", details))
     for d in details if isinstance(details, list) else []:
         if isinstance(d, dict) and d.get("workflow_code"):
             out.append(d["workflow_code"])
@@ -137,7 +137,8 @@ def run(api: Api, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         cands = candidates(resp) if status == 200 else []
         exp = [norm(e) for e in r["expect"]] if r["expect"] else None
         started = bool(resp.get("active_session_id")) if status == 200 else False
-        results.append({**r, "status": status, "cands": cands[:3], "ms": ms, "started": started,
+        stop = status == 200 and str(resp.get("sop_details") or "").startswith("Related reference SOP:")
+        results.append({**r, "status": status, "cands": cands[:3], "ms": ms, "started": started, "stop": stop,
                         "escalated": bool(resp.get("requires_escalation")) if status == 200 else False,
                         "top1": bool(exp and cands and cands[0] in exp),
                         "top3": bool(exp and any(c in exp for c in cands[:3]))})
@@ -154,7 +155,7 @@ def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     for tag in sorted({r["tag"] for r in results}):
         rs = [r for r in results if r["tag"] == tag]
         answerable = [r for r in rs if r["expect"]]
-        d: Dict[str, Any] = {"n": len(rs)}
+        d: Dict[str, Any] = {"n": len(rs), "safety_stops": sum(r["stop"] for r in rs)}
         if answerable:
             d["top1"] = round(sum(r["top1"] for r in answerable) / len(answerable), 3)
             d["top3"] = round(sum(r["top3"] for r in answerable) / len(answerable), 3)
