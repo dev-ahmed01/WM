@@ -1,0 +1,596 @@
+{
+ "DELETE /api/v1/knowledge/{id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "DELETE /api/v1/knowledge/{id}/permanent": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/admin/employees": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/admin/org": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/analytics/confidence-trends": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/analytics/confusing-procedures": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/analytics/department-adoption": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/analytics/escalations": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/analytics/faqs": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/analytics/sop-usage": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/auth/me": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/copilot/history": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/copilot/history/{conversation_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/copilot/session/{id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/copilot/voice/audio/{audio_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/escalations": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/handover": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/knowledge": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/departments": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/ocr-status": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/references": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/references/search": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/knowledge/references/{document_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/references/{document_id}/content": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/{id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/{id}/status": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge/{id}/versions": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/pilot/config": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/pilot/summary": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/procedure/drafts": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/procedure/drafts/{draft_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/procedure/drafts/{draft_id}/compile-preview": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/procedure/drafts/{draft_id}/source": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/work/exceptions": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/exceptions/{case_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/execution/procedures": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/execution/{work_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/execution/{work_id}/timeline": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/integrations/intake": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/integrations/operations/readiness": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/work/integrations/sources": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/work/integrations/sources/{source_id}/deliveries": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/work/integrations/sources/{source_id}/outbox": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/work/items": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/items/assignees": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/work/items/{item_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "PATCH /api/v1/admin/employees/{employee_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/admin/employees": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/admin/employees/{employee_id}/recovery-token": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/admin/employees/{employee_id}/status": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/copilot/message": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/session/{id}/abandon": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/session/{id}/advance": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/session/{id}/pause": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/session/{id}/resume": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/voice": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/voice/speech": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/voice/transcribe": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/escalations/{escalation_id}/resolve": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/handover": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/handover/{handover_id}/claim": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/handover/{handover_id}/review": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/knowledge/preview": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge/references": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge/references/{document_id}/approve": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge/references/{document_id}/archive": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge/upload": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/pilot/feedback": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/procedure/drafts/import": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/procedure/drafts/{draft_id}/publish": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/procedure/drafts/{draft_id}/review": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/action": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/claim": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/closure/evidence": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/closure/site": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/corrective": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/corrective/{request_id}/decision": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/handover": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/exceptions/{case_id}/review": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/bind": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/block": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/continue": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/decision": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/pause": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/resume": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/start": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/execution/{work_id}/step": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/guidance/{work_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/integrations/intake": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/integrations/intake/{intake_id}/decision": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/integrations/operations/actions": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/integrations/outbox/{event_id}/recover": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/integrations/sources": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/integrations/sources/{source_id}/control": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/integrations/webhooks/{source_id}": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/work/items": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/work/items/{item_id}/assign": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "PUT /api/v1/knowledge/{id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "PUT /api/v1/procedure/drafts/{draft_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ }
+}
