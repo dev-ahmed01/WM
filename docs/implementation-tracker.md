@@ -1,48 +1,64 @@
 # WorkMate AI — Implementation Tracker
 
-Branch: `dev/commercial-product`. Update this file at the end of every work session.
+Branch: `dev/commercial-product` (not pushed; GitHub MCP failed to connect and nothing was pushed). Update at the end of every session.
 
 ## Environment (this workstation)
-- Windows 11, Python 3.12 venv at `.venv` (3.15 is also installed; use 3.12), Node 26, Docker Desktop (start it manually; `docker compose up -d postgres`).
+- Windows 11, Python 3.12 venv at `.venv` (3.15 is also installed; do not use), Node 26, Docker Desktop (start it manually; `docker compose up -d postgres`).
 - DB: `postgresql://workmate:workmate_dev_only@127.0.0.1:5432/workmate` (compose dev default, local only).
-- Run backend tests: `PYTHONPATH=backend .venv/Scripts/python -m pytest backend/tests -q` (≈8 min).
-- Live DB tests: `WORKMATE_RUN_LIVE_TESTS=1 DATABASE_URL=... pytest ...`.
-- Ollama 0.40 installed on host with **no models pulled**; model pulls are large and not yet done.
+- Backend tests: `PYTHONPATH=backend .venv/Scripts/python -m pytest backend/tests -q` (~7 min). Live DB tests add `WORKMATE_RUN_LIVE_TESTS=1 DATABASE_URL=...`.
+- Run backend locally: `APP_ENV=dev DATABASE_URL=... JWT_SECRET=<32+ chars> INTERNAL_WEBHOOK_SECRET=<16+ chars> LOCAL_AI_ENABLED=false VOICE_ENABLED=false PYTHONPATH=backend python -m uvicorn app.main:app --port 8000`
+- Demo data: `PYTHONPATH=backend python -m demo.seed_demo` (idempotent; `--republish` recompiles SOPs; `--reset-passwords`). Credentials are written to git-ignored `.demo-credentials.local.json`.
+- Assistant eval: `PYTHONPATH=backend python backend/evals/assistant_eval.py --out result.json`.
+- Ollama 0.40 is installed on the host with **no models pulled**; Whisper/Piper/M2M100 models not downloaded.
 
 ## Phase status
-| Phase | Status | Notes |
+| Phase | Status | Evidence |
 |---|---|---|
-| 1 Audit/baseline/remediation | **Done** | `docs/product-audit.md`; Windows voice-upload bug fixed |
-| 2 Research/personas/PRD | **Done (v1)** | docs/warehouse-research.md, competitor-analysis.md, user-personas.md, product-requirements.md; sources + gaps recorded |
-| 3 Org/roles/tenant isolation | Next | migration 018: organizations, warehouses, job_profiles, user scope, RLS |
-| 4 Knowledge library & approval | Not started | 85-SOP generator → OWD |
-| 5 Assistant quality | Not started | 200-question bilingual eval |
-| 6 Voice | Not started | |
-| 7 Actions/escalation loop | Not started | |
-| 8 Admin/manager/analytics | Not started | |
-| 9 UI polish | Not started | |
-| 10 Demo/eval/security/deploy | Not started | |
+| 1 Audit / baseline / remediation | **Done** | `docs/product-audit.md`; Windows voice-upload 500 fixed |
+| 2 Research / personas / PRD | **Done v1 (search-snippet depth only)** | warehouse-research, competitor-analysis, user-personas, product-requirements; gaps listed in each |
+| 3 Org / roles / tenant isolation | **Partly done** | Migration 018 (organizations, warehouses, job profiles, user scope, invitation/recovery tokens, cross-org trigger); org-scoped employee admin API; escalations tenant leak fixed; RBAC golden matrix. **Not done:** RLS on workflows/conversations/work tables, manager warehouse scoping in routes, frontend screens for employee management, email delivery of invites (token is shown once to the admin) |
+| 4 Knowledge library & approval | **Partly done** | 85 labelled demo SOPs compile through the real OWD compiler; idempotent seeder. **Not done:** approval gate for publishing (upload = publish today), SOP applicability by job profile/warehouse, shared org-wide knowledge scope, versioning policy for in-flight workflows (Scenario I) |
+| 5 Assistant quality | **Partly done** | Hindi/Hinglish retrieval fixed, deterministic safety triage, 293-case eval harness. **Not done:** LLM/embedding path untested (no models), citations on catalog path, missing-knowledge escalation (Scenario D), 200-question independent dataset, answer-correctness grading |
+| 6 Voice | Not started | needs model downloads for honest benchmarking |
+| 7 Actions / escalation loop | Not started | existing work-item/exception infra reused; assistant→action wiring and admin conversation UI missing |
+| 8 Admin / manager / analytics | Not started | no employee-management, conversation-management, ROI screens |
+| 9 UI polish / accessibility | Not started | frontend untouched this session (typecheck/build pass) |
+| 10 Demo / security / deployment | **Started** | seeder + RBAC matrix + live tenant tests. No browser E2E, no deployment benchmark |
 
-## Verified baseline
-- Backend: 358 passed / 15 skipped / 1 failed before fix (fixed; rerun recorded below).
-- Frontend: typecheck OK, build OK (23 routes).
-- Migrations 001–017 apply on fresh PG16.
+## Verified results
+- Backend baseline before changes: 358 pass, 15 skip, **1 fail** (Windows voice temp file). After fixes, with live Postgres tests enabled (`WORKMATE_RUN_LIVE_TESTS=1`): **568 passed, 1 skipped, 0 failed**.
+- Frontend: `tsc --noEmit` OK; `next build` OK (23 routes).
+- Migrations 001–018 apply on fresh PostgreSQL 16.
+- New live tests: `test_org_admin_postgres.py` (5) pass — cross-org list/patch/status/recovery denied (404), foreign department/warehouse/supervisor refused, DB trigger rejects cross-org supervisor/warehouse, invite→redeem→login→deactivate→recovery flow, escalation scoping (admin=org, manager=department, orphan invisible).
+- `test_demo_sop_catalog.py` (90), `test_safety_triage.py` (21), `test_rbac_matrix.py` (2; 99 operations pinned).
+- Live smoke through HTTP: demo picker asks Hinglish/English/Hindi questions; forklift hydraulic-leak report returns stop-work text and creates an urgent escalation visible to the Pune manager.
 
 ## Architecture decisions
-1. PostgreSQL is the only datastore; Snowflake docs are obsolete and will be marked/removed.
-2. Add an `organizations` layer *above* departments rather than replacing departments: departments become warehouse-scoped units inside an organization. Existing `department_id` columns and RLS GUC stay valid; add `workmate.organization_id` GUC.
-3. System role (admin/manager/employee) stays in `security.roles`; job profile, warehouse, supervisor are separate attributes.
-4. Reuse OWD compiler for executable SOPs; generate demo SOPs from structured Python data to OWD v1.1 so they pass the real validator.
-5. Local Ollama remains the default inference; no external providers.
+1. PostgreSQL is the only datastore; Snowflake docs/scripts are obsolete (`seed_test_users.py`, `deploy_owd_schema.py`, `analytics/migrations`, `PROJECT_CONTEXT_V2.md` still describe it — to be removed/marked).
+2. Organization sits above departments; departments stay the RLS/knowledge key. A department cannot span organizations (FK + trigger), so department isolation implies organization isolation.
+3. **Knowledge scope finding:** retrieval/RLS are per-department, so an employee only sees SOPs of their own department. Demo SOPs therefore live in one department (`dm_ops`) with the functional area as a label. A real multi-department client needs an org-wide "shared" knowledge scope plus job-profile/warehouse applicability filters (Phase 4 follow-up).
+4. Safety triage runs before retrieval and any model call and only ever emits fixed stop-work wording; it never gives repair/first-aid steps or claims emergency services were contacted.
+5. Role matrix is pinned from observed behaviour (golden file) rather than hand-maintained.
+6. Authored retrieval metadata (synonyms/search phrases) is now indexed (`Also known as:`) and used in catalog ranking.
 
-## Blockers / open items
-- No Ollama models installed; model benchmarking, Hindi quality and latency numbers cannot be claimed until pulled (multi-GB download needs user go-ahead on disk/time).
-- Whisper/Piper/M2M100 models not downloaded; noisy-audio benchmark pending.
-- GitHub MCP failed to connect (auth header); git push/PR not attempted.
-- India regulatory mapping is research-only; needs legal review.
+## Defects found and fixed
+- Windows: rejected voice upload → 500 (open temp-file handle unlinked).
+- `/escalations` list and resolve were not tenant-scoped (any admin/manager saw/resolved every organization's cases).
+- Search tokenizer ASCII-only → Devanagari questions returned nothing.
+- Compiler never indexed authored synonyms/phrases.
+- Seeder idempotency check ignored workflow-code normalization (SOP-X → SOP_X).
 
-## Test log
-| Date | Command | Result |
-|---|---|---|
-| 2026-11-25 | backend pytest -x | 358 pass, 15 skip, 1 fail (voice temp file) |
-| 2026-11-25 | tsc / next build | pass |
+## Open issues / blockers
+- No Ollama models → LLM, embeddings, Hindi translation, speech all unexercised. Pulling `qwen2.5:3b` + `nomic-embed-text` is a few GB; needs go-ahead.
+- Truncated confirmation text ("…confirm it has a. Start it?") — description cut at a stop word; fix pending.
+- Out-of-scope questions show unrelated "closest SOP" suggestions and create no escalation.
+- Publishing has no approval step; deprecated older version is replaced at upload.
+- GitHub MCP not connected; nothing pushed.
+- India regulatory content is research-only and needs legal review.
+
+## Next session (recommended order)
+1. Missing-knowledge escalation + safe fallback for out-of-scope (Scenario D) and fix truncation bug.
+2. Pull models; run eval with LLM/embeddings; measure Hindi/Hinglish; voice benchmark.
+3. Publish approval gate + version policy; org-wide knowledge scope; extend RLS.
+4. Admin UI: employee management (API exists), conversation/escalation console; manager approvals.
+5. Browser E2E (Playwright) for scenarios A–J; screenshots; final report.
