@@ -149,6 +149,12 @@
   "employee": "denied",
   "manager": "denied"
  },
+ "GET /api/v1/knowledge/submissions": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
  "GET /api/v1/knowledge/{id}": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -423,6 +429,12 @@
   "admin": "allowed",
   "anonymous": "denied",
   "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/procedure/approvals/uploads/{submission_id}": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
   "manager": "allowed"
  },
  "POST /api/v1/procedure/approvals/{draft_id}": {

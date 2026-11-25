@@ -20,8 +20,10 @@ from fastapi import (
     status,
 )
 
+from app.core.config import settings
 from app.middleware.rbac_middleware import require_role
 from app.middleware.tenant_scope import DepartmentScope, department_scope
+from app.repositories.owd_submission_repository import OwdSubmissionRepository, SubmissionConflict
 from app.services.ingestion import IngestionService
 from app.services.document_extraction import (
     DocumentExtractionError, MAX_DOCUMENT_BYTES, preview_document,
@@ -177,6 +179,30 @@ async def upload_knowledge(
                     "details": sorted(declared)},
         )
 
+    if settings.PUBLISH_REQUIRES_APPROVAL:
+        # Same two-person rule as Procedure Studio: nothing goes live until a manager approves this exact file.
+        try:
+            submission = OwdSubmissionRepository.stage(
+                department_id, str(current_user.get("sub", "")),
+                (file.filename or f"{workflow_code}.md").rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
+                title, raw_bytes, workflow_code, version_number)
+        except SubmissionConflict as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_PENDING", "message": str(exc), "details": None},
+            ) from exc
+        return UploadResponse(
+            knowledge_item_id=workflow_id,
+            version_id=submission["id"],
+            version_number=version_number,
+            status="pending_approval",
+            stage_file_uri="",
+            message="Validated and sent for manager approval. Nothing is published until a manager approves this exact file.",
+            compilation_status="VALIDATED",
+            warnings=validation.warnings,
+            deployment_status="PENDING_APPROVAL",
+        )
+
     prepared_document.workflow.version_number = version_number
     source_hash = hashlib.sha256(raw_bytes).hexdigest()
     stage_prefix = f"{workflow_code}/v{version_number}/{source_hash[:12]}"
@@ -300,6 +326,19 @@ async def list_knowledge_items(
         page=page,
         limit=limit,
     )
+
+
+@router.get(
+    "/submissions",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def list_submissions(
+    status_filter: Optional[str] = Query(None, alias="status", pattern="^(pending|published|returned)$"),
+    scope: DepartmentScope = Depends(department_scope),
+) -> Dict[str, Any]:
+    """Uploads waiting for (or decided by) a manager, for the caller's own organization."""
+    items = OwdSubmissionRepository.list_for_departments(sorted(scope.allowed), status_filter)
+    return {"items": items}
 
 
 @router.get(

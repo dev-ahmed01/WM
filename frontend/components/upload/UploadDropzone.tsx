@@ -12,6 +12,7 @@ export const UploadDropzone: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
 
   const [uploadedDocId, setUploadedDocId] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export const UploadDropzone: React.FC = () => {
     setMessage('Uploading file and compiling operational workflow...');
     setErrorDetails(null);
     setUploadedDocId(null);
+    setPendingApproval(false);
 
     try {
       const formData = new FormData();
@@ -54,6 +56,15 @@ export const UploadDropzone: React.FC = () => {
         method: 'POST',
         body: formData,
       });
+
+      if (res.status === 'pending_approval') {
+        // Validated and stored; NOT live. A manager must approve this exact file.
+        setProgress(100);
+        setMessage(`"${file.name}" passed validation and was sent for manager approval. Nothing is published until a manager approves it.`);
+        setPendingApproval(true);
+        setTitle('');
+        return;
+      }
 
       if (res.compilation_status !== 'SUCCESS' || res.deployment_status !== 'PUBLISHED') {
         setProgress(100);
@@ -128,17 +139,19 @@ export const UploadDropzone: React.FC = () => {
           </label>
 
           {uploading ? <div className="mx-auto mt-6 max-w-md"><div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground"><span>Validating and compiling</span><span>{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-600 transition-all duration-300" style={{ width: `${progress}%` }} /></div></div> : null}
-          {message && !errorDetails && !uploadedDocId ? <p className="mt-4 text-xs font-medium text-muted-foreground" aria-live="polite">{message}</p> : null}
+          {message && !errorDetails && !uploadedDocId && !pendingApproval ? <p className="mt-4 text-xs font-medium text-muted-foreground" aria-live="polite">{message}</p> : null}
         </div>
 
         <div className="grid gap-3 border-t bg-muted/25 px-5 py-4 text-xs text-muted-foreground sm:grid-cols-3 sm:px-6">
           <span className="flex items-center gap-2"><FileCode2 className="h-4 w-4 text-emerald-700" />Parse OWD structure</span>
           <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-700" />Validate all transitions</span>
-          <span className="flex items-center gap-2"><ArrowRight className="h-4 w-4 text-emerald-700" />Publish atomically</span>
+          <span className="flex items-center gap-2"><ArrowRight className="h-4 w-4 text-emerald-700" />Manager approves, then publish</span>
         </div>
       </section>
 
       {errorDetails ? <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-5 w-5 flex-none" /><div><p className="font-semibold">Compilation failed</p><p className="mt-1 leading-5">{errorDetails}</p></div></div> : null}
+
+      {pendingApproval ? <div role="status" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"><CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-amber-700" /><div><p className="font-semibold">Waiting for manager approval</p><p className="mt-1 text-xs leading-5">{message}</p></div></div> : null}
 
       {uploadedDocId ? <div className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-emerald-700" /><div><p className="font-semibold">Workflow published</p><p className="mt-1 text-xs leading-5 text-emerald-800">{message}</p></div></div><div className="flex flex-none gap-2"><a href="/knowledge-studio" className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold">Library</a><a href={`/knowledge-studio/${uploadedDocId}`} className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">View workflow</a></div></div> : null}
     </div>

@@ -49,3 +49,6 @@ def permissive_department_scope(request, monkeypatch):
     if "live_integration" in request.keywords:
         return
     monkeypatch.setattr("app.middleware.tenant_scope._load", lambda *_a, **_k: _EveryDepartment())
+    # Mocked-repository upload tests exercise the direct-publish branch; the approval gate has live tests.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "PUBLISH_REQUIRES_APPROVAL", False)

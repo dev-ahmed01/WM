@@ -18,7 +18,9 @@ from app.middleware.rbac_middleware import require_role
 from app.repositories.escalation_repository import ScopedEscalationRepository
 from app.repositories.knowledge_loop_repository import ApprovalRepository, GapNotFound, KnowledgeGapRepository
 from app.repositories.org_repository import organization_of_user
+from app.repositories.owd_submission_repository import OwdSubmissionRepository, SubmissionConflict, SubmissionNotFound
 from app.repositories.procedure_draft_repository import DraftConflict, DraftNotFound, ProcedureDraftRepository
+from app.services import owd_submission_service
 from app.services.document_extraction import DocumentExtractionError, extract_document
 
 router = APIRouter(tags=["Knowledge loop"])
@@ -54,9 +56,9 @@ def _scope(user: Dict[str, Any]) -> tuple[str, Optional[str]]:
 async def _guard(fn, *args):
     try:
         return await run_in_threadpool(fn, *args)
-    except (GapNotFound, DraftNotFound) as exc:
+    except (GapNotFound, DraftNotFound, SubmissionNotFound) as exc:
         raise HTTPException(404, detail={"error_code": "NOT_FOUND", "message": "Not found in your scope."}) from exc
-    except DraftConflict as exc:
+    except (DraftConflict, SubmissionConflict) as exc:
         raise HTTPException(409, detail={"error_code": "CONFLICT", "message": str(exc)}) from exc
 
 
@@ -116,7 +118,8 @@ async def draft_from_gap(gap_id: str, body: GapDraft, user: Dict[str, Any] = Dep
 
 @router.get("/procedure/approvals")
 async def pending_approvals(user: Dict[str, Any] = Depends(require_role("manager"))):
-    return {"items": await _guard(ApprovalRepository.pending, user["department_id"])}
+    uploads = await _guard(OwdSubmissionRepository.list_for_departments, [user["department_id"]], "pending")
+    return {"items": await _guard(ApprovalRepository.pending, user["department_id"]), "uploads": uploads}
 
 
 @router.post("/procedure/approvals/{draft_id}")
@@ -127,3 +130,22 @@ async def decide_approval(draft_id: str, body: Decision, user: Dict[str, Any] = 
                           body.expected_revision, body.decision == "approve", body.note.strip())
     return {"draft_id": draft_id, "status": result["status"], "revision": result["revision"],
             "approved": result["approved_by"] is not None}
+
+
+class UploadDecision(Strict):
+    decision: Literal["approve", "return"]
+    note: str = Field(default="", max_length=800)
+
+
+@router.post("/procedure/approvals/uploads/{submission_id}")
+async def decide_upload(submission_id: str, body: UploadDecision, user: Dict[str, Any] = Depends(require_role("manager"))):
+    """Approve = compile and publish exactly the stored file (one transaction); return = send back with a note."""
+    dept, manager = user["department_id"], user["sub"]
+    if body.decision == "return":
+        if len(body.note.strip()) < 8:
+            raise HTTPException(422, detail={"error_code": "NOTE_REQUIRED", "message": "Say what needs to change (at least 8 characters)."})
+        row = await _guard(OwdSubmissionRepository.mark_returned, dept, manager, submission_id, body.note.strip())
+        return {"id": row["id"], "status": row["status"]}
+    row = await _guard(owd_submission_service.approve_and_publish, dept, manager, submission_id)
+    return {"id": row["id"], "status": row["status"], "version_number": row["version_number"],
+            "knowledge_item_id": row["workflow_id"]}

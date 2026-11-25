@@ -2,7 +2,7 @@
 
 Generated from `backend/tests/golden/rbac_matrix.json`, which `backend/tests/test_rbac_matrix.py` produces by calling
 every API operation anonymously and with admin/manager/employee tokens. ✔ = the role reaches the handler; — = rejected
-by the auth/role dependency (401/403). All 103 operations deny anonymous callers.
+by the auth/role dependency (401/403). All 105 operations deny anonymous callers.
 
 **What this proves:** each route's role guard exists and matches this table; a change fails CI until the golden file is
 regenerated and reviewed (`UPDATE_RBAC_GOLDEN=1`), then run `python scripts/generate_rbac_doc.py`.
@@ -63,6 +63,7 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `POST /api/v1/knowledge/references/{document_id}/approve` | ✔ | — | — |
 | `POST /api/v1/knowledge/references/{document_id}/archive` | ✔ | — | — |
 | `GET /api/v1/knowledge/references/{document_id}/content` | ✔ | — | — |
+| `GET /api/v1/knowledge/submissions` | ✔ | — | — |
 | `POST /api/v1/knowledge/upload` | ✔ | — | — |
 | `DELETE /api/v1/knowledge/{id}` | ✔ | — | — |
 | `GET /api/v1/knowledge/{id}` | ✔ | — | — |
@@ -74,6 +75,7 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `POST /api/v1/pilot/feedback` | ✔ | ✔ | ✔ |
 | `GET /api/v1/pilot/summary` | ✔ | ✔ | — |
 | `GET /api/v1/procedure/approvals` | — | ✔ | — |
+| `POST /api/v1/procedure/approvals/uploads/{submission_id}` | — | ✔ | — |
 | `POST /api/v1/procedure/approvals/{draft_id}` | — | ✔ | — |
 | `GET /api/v1/procedure/drafts` | ✔ | — | — |
 | `POST /api/v1/procedure/drafts/import` | ✔ | — | — |

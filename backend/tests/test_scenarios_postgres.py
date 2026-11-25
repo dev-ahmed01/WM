@@ -275,9 +275,25 @@ def _custom_sop_markdown(dept: str, first_step: str) -> bytes:
 
 
 def _upload_owd(api: Api, user: str, dept: str, first_step: str):
-    return api.c.post("/api/v1/knowledge/upload", headers=headers(user),
-                      data={"department_id": dept, "title": "Pallet wrap audit"},
-                      files={"file": ("pallet.md", _custom_sop_markdown(dept, first_step), "text/markdown")})
+    """Upload an OWD file, then have a manager approve it (the required two-person path). Returns the publish result
+    shaped like the old direct upload so callers can read version_number."""
+    up = api.c.post("/api/v1/knowledge/upload", headers=headers(user),
+                    data={"department_id": dept, "title": "Pallet wrap audit"},
+                    files={"file": ("pallet.md", _custom_sop_markdown(dept, first_step), "text/markdown")})
+    assert up.status_code == 200 and up.json()["status"] == "pending_approval", up.text
+    sub_id = up.json()["version_id"]
+    approved = api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "approve"})
+    assert approved.status_code == 200, approved.text
+
+    class Result:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"version_number": approved.json()["version_number"]}
+
+        text = approved.text
+    return Result
 
 
 @pytest.mark.live_integration
@@ -406,3 +422,52 @@ def test_B_hindi_voice_is_out_of_scope_and_absent(world):
     """Scenario B was removed with the English-only decision: no voice or translation endpoints exist."""
     for path in ("/copilot/voice", "/copilot/voice/transcribe", "/copilot/voice/speech"):
         assert world.post("emp1", path, {}).status_code == 404, path
+
+
+@pytest.mark.live_integration
+def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
+    api = world
+    md = _custom_sop_markdown(DEPT_A, "Check the pallet is on the marked staging bay")
+    files = {"file": ("pallet.md", md, "text/markdown")}
+    form = {"department_id": DEPT_A, "title": "Pallet wrap audit"}
+    question = "how do I do a pallet wrap audit"
+
+    up = api.c.post("/api/v1/knowledge/upload", headers=headers("admin1"), data=form, files=files)
+    assert up.status_code == 200, up.text
+    body = up.json()
+    assert body["status"] == "pending_approval" and body["deployment_status"] == "PENDING_APPROVAL"
+    sub_id = body["version_id"]
+
+    # Nothing is live: no workflow exists and employees cannot retrieve it.
+    assert api.get("admin1", "/knowledge").json()["items"] and all(
+        i["item"]["workflow_code"] != "SOP_REV_001" for i in api.get("admin1", "/knowledge").json()["items"])
+    assert "Start it?" not in api.ask("emp1", question)["answer"]
+    # The same bytes cannot be queued twice; the admin sees the pending item; other companies do not.
+    assert api.c.post("/api/v1/knowledge/upload", headers=headers("admin1"), data=form, files=files).status_code == 409
+    assert [s["id"] for s in api.get("admin1", "/knowledge/submissions?status=pending").json()["items"]] == [sub_id]
+    assert api.get("admin_b", "/knowledge/submissions").json()["items"] == []
+    assert api.get("emp1", "/knowledge/submissions").status_code == 403
+
+    # Only a manager decides, and the manager sees it in the approvals queue.
+    assert api.post("admin1", f"/procedure/approvals/uploads/{sub_id}", {"decision": "approve"}).status_code == 403
+    assert api.post("emp1", f"/procedure/approvals/uploads/{sub_id}", {"decision": "approve"}).status_code == 403
+    queue = api.get("mgr", "/procedure/approvals").json()
+    assert [u["id"] for u in queue["uploads"]] == [sub_id]
+    assert "content" not in queue["uploads"][0]                       # the file bytes are never listed
+
+    # Returning needs a real note, publishes nothing, and the file can then be corrected and resubmitted.
+    assert api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "return", "note": "no"}).status_code == 422
+    back = api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "return", "note": "Step 1 must name the staging bay."})
+    assert back.status_code == 200 and back.json()["status"] == "returned"
+    assert "Start it?" not in api.ask("emp1", question)["answer"]
+    assert api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "approve"}).status_code == 409   # already decided
+
+    fixed = api.c.post("/api/v1/knowledge/upload", headers=headers("admin1"), data=form,
+                       files={"file": ("pallet.md", _custom_sop_markdown(DEPT_A, "Check the pallet is on bay 4"), "text/markdown")})
+    new_id = fixed.json()["version_id"]
+    done = api.post("mgr", f"/procedure/approvals/uploads/{new_id}", {"decision": "approve"})
+    assert done.status_code == 200 and done.json()["status"] == "published" and done.json()["version_number"] == 1
+    assert api.post("mgr", f"/procedure/approvals/uploads/{new_id}", {"decision": "approve"}).status_code == 409   # replay
+    found = api.ask("emp1", question)
+    assert "Start it?" in found["answer"] and "Pallet wrap audit" in (found["sop_details"] or "")
+    assert api.get("mgr", "/procedure/approvals").json()["uploads"] == []

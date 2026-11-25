@@ -4,7 +4,7 @@ Run: `WORKMATE_RUN_LIVE_TESTS=1 DATABASE_URL=postgresql://…@127.0.0.1:5432/wor
 
 Every scenario drives the real FastAPI stack with real signed tokens against a **scratch PostgreSQL database** created and
 dropped per test (all migrations applied, 85 demo SOPs published). Only scenario H mocks anything, and only the failure being tested.
-Last full-suite result: **549 passed, 1 skipped, 0 failed**.
+Last full-suite result: **550 passed, 1 skipped, 0 failed**.
 
 | # | Scenario | Test | Result |
 |---|---|---|---|
@@ -31,9 +31,19 @@ One unlabeled icon button was found and fixed. Flows also exercised by hand in t
 accept → sign in, unanswered question → reply → draft → review → approval → publish → employee finds it, Hinglish discrepancy
 report → manager handover queue, blocked task → employee progress card → manager exception queue.
 
+## Approval gate now covers direct uploads (E2)
+`test_E2_direct_owd_upload_cannot_bypass_manager_approval`: with `PUBLISH_REQUIRES_APPROVAL=true` (default) a Knowledge Studio
+file upload is validated and stored as a *pending submission*; no workflow exists and employees cannot retrieve it. Only a
+manager can approve (admin and employee get 403), the same bytes cannot be queued twice, a return needs a real note and
+publishes nothing, and an approval compiles and publishes exactly the stored file in one transaction (failure rolls back and
+leaves it pending). Replacing an existing SOP (scenario I) goes through the same two-person path. Verified in the browser:
+admin upload shows "Waiting for manager approval", the manager's Approvals page lists the file, approval publishes, the employee
+then finds it.
+
 ## Known gaps (not hidden)
-1. **Direct OWD upload (Knowledge Studio) publishes immediately and bypasses the manager approval gate.** Only the Procedure
-   Studio path (documents, gaps) is gated. Until this is closed an admin can publish without a second person.
+1. The assistant's catalog match can propose a loosely related SOP when a question shares one word with it (e.g. a "dock plate"
+   question proposed "Supplier arrival and gate check" before the right SOP existed). It always asks "Start it?" first, so nothing
+   runs unconfirmed, but the proposal is noise. A stricter relevance floor or a "no, something else" shortcut would help.
 2. Not tested: phone/tablet layouts, keyboard-only use, assistive-technology review.
 3. Free-form answers from the language model are not part of any scenario; `qwen2.5:3b` is installed but unused by these paths.
 4. Row-level security still covers only reference documents; other tenant isolation is application-level (tested, not DB-enforced).

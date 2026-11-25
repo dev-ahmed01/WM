@@ -86,7 +86,8 @@ no admin/manager console for knowledge-gap escalations beyond the Intelligence H
 - `docs/acceptance-scenarios.md`: scenarios A–J automated on a scratch DB (B removed with voice); 549 pass / 1 skip / 0 fail.
 - New: assistant discrepancy action (propose -> confirm -> record), `/work/exceptions/mine` + employee "Issues you reported" card,
   relevance guard on in-workflow "explain", migration 009 re-runnability fix, accessibility label fix. 28/28 desktop routes clean.
-- **Top open item:** direct OWD upload in Knowledge Studio bypasses the manager approval gate.
+- **Closed:** direct OWD upload now stages a pending submission and needs manager approval (migration 020, `owd_submissions`,
+  `/knowledge/submissions`, `/procedure/approvals/uploads/{id}`); verified in the browser. Next: phone/tablet and accessibility pass.
 
 ## Open issues / blockers
 - Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).
