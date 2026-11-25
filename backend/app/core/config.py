@@ -132,6 +132,8 @@ class Settings(BaseSettings):
     AUTH_RATE_MAX_ATTEMPTS: int = Field(default=10, ge=3, le=100)
     AUTH_RATE_WINDOW_SECONDS: int = Field(default=900, ge=60, le=3600)
     POSTGRES_RLS_REFERENCES: bool = False
+    # A manager must approve a reviewed SOP draft revision before an admin can publish it.
+    PUBLISH_REQUIRES_APPROVAL: bool = True
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 

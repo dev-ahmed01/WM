@@ -282,6 +282,7 @@ class KnowledgeRepository:
         status_filter: Optional[str] = None,
         page: int = 1,
         limit: int = 20,
+        department_ids: Optional[List[str]] = None,
     ) -> Tuple[List[Dict[str, Any]], int]:
         offset = (page - 1) * limit
         where_clauses = []
@@ -290,6 +291,9 @@ class KnowledgeRepository:
         if department_id:
             where_clauses.append("w.department_id = %s")
             params.append(department_id)
+        elif department_ids is not None:
+            where_clauses.append("w.department_id = ANY(%s)")
+            params.append(list(department_ids))
 
         if status_filter:
             where_clauses.append("wv.status = %s")

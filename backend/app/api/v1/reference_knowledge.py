@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from starlette.concurrency import run_in_threadpool
 
 from app.middleware.rbac_middleware import require_role
+from app.middleware.tenant_scope import DepartmentScope, department_scope
 from app.repositories.knowledge_repository import KnowledgeRepository
 from app.repositories.reference_document_repository import (
     ReferenceDocumentRepository, new_reference_id,
@@ -33,7 +34,9 @@ async def upload_reference(
     department_id: str = Form(...),
     title: str = Form(...),
     current_user: dict = Depends(require_role("admin")),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     if not title.strip() or len(title.strip()) > 512:
         raise _problem(422, "INVALID_TITLE", "Document title must be 1–512 characters.")
     raw = await file.read(MAX_DOCUMENT_BYTES + 1)
@@ -83,7 +86,9 @@ async def upload_reference(
 async def list_references(
     department_id: str = Query(..., min_length=1, max_length=64),
     limit: int = Query(50, ge=1, le=100),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     try:
         items = ReferenceDocumentRepository.list_documents(department_id, limit=limit)
         return {"items": items, "total": len(items)}
@@ -114,7 +119,9 @@ async def search_references(
 async def get_reference(
     document_id: str,
     department_id: str = Query(..., min_length=1, max_length=64),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     try:
         row = ReferenceDocumentRepository.get_document(document_id, department_id)
     except Exception as exc:
@@ -129,7 +136,9 @@ async def get_reference(
 async def get_reference_content(
     document_id: str,
     department_id: str = Query(..., min_length=1, max_length=64),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     try:
         doc = ReferenceDocumentRepository.get_document(document_id, department_id)
         if doc is None:
@@ -148,7 +157,9 @@ async def approve_reference(
     document_id: str,
     department_id: str = Query(..., min_length=1, max_length=64),
     current_user: dict = Depends(require_role("admin")),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     try:
         changed = ReferenceDocumentRepository.change_status(
             document_id, department_id, str(current_user["sub"]), action="approve",
@@ -166,7 +177,9 @@ async def archive_reference(
     document_id: str,
     department_id: str = Query(..., min_length=1, max_length=64),
     current_user: dict = Depends(require_role("admin")),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> dict:
+    scope.ensure(department_id)
     try:
         changed = ReferenceDocumentRepository.change_status(
             document_id, department_id, str(current_user["sub"]), action="archive",

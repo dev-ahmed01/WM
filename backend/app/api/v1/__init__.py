@@ -18,6 +18,7 @@ from app.api.v1.work_exceptions import router as work_exceptions_router
 from app.api.v1.task_guidance import router as task_guidance_router
 from app.api.v1.work_integrations import router as work_integrations_router
 from app.api.v1.admin_employees import router as admin_employees_router
+from app.api.v1.knowledge_gaps import router as knowledge_gaps_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -37,6 +38,7 @@ api_v1_router.include_router(work_exceptions_router)
 api_v1_router.include_router(task_guidance_router)
 api_v1_router.include_router(work_integrations_router)
 api_v1_router.include_router(admin_employees_router)
+api_v1_router.include_router(knowledge_gaps_router)
 
 __all__ = [
     "api_v1_router",
@@ -57,5 +59,6 @@ __all__ = [
     "task_guidance_router",
     "work_integrations_router",
     "admin_employees_router",
+    "knowledge_gaps_router",
 ]
 

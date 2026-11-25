@@ -107,6 +107,18 @@
   "employee": "denied",
   "manager": "denied"
  },
+ "GET /api/v1/knowledge-gaps": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/knowledge-gaps/mine": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "GET /api/v1/knowledge/departments": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -169,6 +181,12 @@
  },
  "GET /api/v1/pilot/summary": {
   "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "GET /api/v1/procedure/approvals": {
+  "admin": "denied",
   "anonymous": "denied",
   "employee": "denied",
   "manager": "allowed"
@@ -371,6 +389,24 @@
   "employee": "denied",
   "manager": "allowed"
  },
+ "POST /api/v1/knowledge-gaps/{gap_id}/dismiss": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge-gaps/{gap_id}/draft": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge-gaps/{gap_id}/reply": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
  "POST /api/v1/knowledge/preview": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -405,6 +441,12 @@
   "admin": "allowed",
   "anonymous": "denied",
   "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/procedure/approvals/{draft_id}": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
   "manager": "allowed"
  },
  "POST /api/v1/procedure/drafts/import": {

@@ -21,6 +21,7 @@ from fastapi import (
 )
 
 from app.middleware.rbac_middleware import require_role
+from app.middleware.tenant_scope import DepartmentScope, department_scope
 from app.services.ingestion import IngestionService
 from app.services.document_extraction import (
     DocumentExtractionError, MAX_DOCUMENT_BYTES, preview_document,
@@ -99,8 +100,10 @@ async def upload_knowledge(
     title: str = Form(...),
     knowledge_item_id: Optional[str] = Form(None),
     current_user: Dict[str, Any] = Depends(require_role("admin")),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> UploadResponse:
     """Validates uploaded OWD markdown file, stages file in Snowflake Stage, compiles markdown into normalized state machine graph, persists structures into KNOWLEDGE_STUDIO tables, and returns detailed compilation report."""
+    scope.ensure(department_id)
     # 1. Validate file extension and size (<= 25MB)
     IngestionService.validate_upload(file)
 
@@ -161,6 +164,18 @@ async def upload_knowledge(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"error_code": "POSTGRES_LOOKUP_FAILED", "message": exc.message, "details": None},
         ) from exc
+
+    declared = {
+        str(getattr(getattr(prepared_document, "metadata", None), "department", "") or ""),
+        str(getattr(getattr(prepared_document, "user_context", None), "department", "") or ""),
+    } - {""}
+    if declared - {department_id}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error_code": "DEPARTMENT_MISMATCH",
+                    "message": "The document declares a different department than the one selected.",
+                    "details": sorted(declared)},
+        )
 
     prepared_document.workflow.version_number = version_number
     source_hash = hashlib.sha256(raw_bytes).hexdigest()
@@ -254,10 +269,14 @@ async def list_knowledge_items(
     status_filter: Optional[str] = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    scope: DepartmentScope = Depends(department_scope),
 ) -> PaginatedKnowledgeItemsResponse:
     """Paginated list of enterprise OWD workflows, filterable by department and version status."""
+    if department_id:
+        scope.ensure(department_id)
     items_raw, total = KnowledgeRepository.list_items(
         department_id=department_id,
+        department_ids=None if department_id else sorted(scope.allowed),
         status_filter=status_filter,
         page=page,
         limit=limit,
@@ -287,10 +306,10 @@ async def list_knowledge_items(
     "/departments",
     dependencies=[Depends(require_role("admin"))],
 )
-async def list_departments() -> List[Dict[str, str]]:
-    """Return active departments accepted by the ingestion pipeline."""
+async def list_departments(scope: DepartmentScope = Depends(department_scope)) -> List[Dict[str, str]]:
+    """Return active departments accepted by the ingestion pipeline (own organization only)."""
     try:
-        return KnowledgeRepository.list_departments()
+        return [d for d in KnowledgeRepository.list_departments() if d.get("id") in scope.allowed]
     except WorkMateException as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -303,9 +322,11 @@ async def list_departments() -> List[Dict[str, str]]:
     response_model=KnowledgeItemDetailResponse,
     dependencies=[Depends(require_role("admin"))],
 )
-async def get_knowledge_item(id: str) -> KnowledgeItemDetailResponse:
+async def get_knowledge_item(id: str, scope: DepartmentScope = Depends(department_scope)) -> KnowledgeItemDetailResponse:
     """Retrieves a single OWD workflow by ID along with its states breakdown, published, and latest versions."""
     item = KnowledgeRepository.get_item_by_id(id)
+    if item:
+        scope.ensure(item.get("department_id"))
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -339,9 +360,11 @@ async def get_knowledge_item(id: str) -> KnowledgeItemDetailResponse:
     response_model=KnowledgeVersionHistoryResponse,
     dependencies=[Depends(require_role("admin"))],
 )
-async def get_version_history(id: str) -> KnowledgeVersionHistoryResponse:
+async def get_version_history(id: str, scope: DepartmentScope = Depends(department_scope)) -> KnowledgeVersionHistoryResponse:
     """Retrieves full version history for an OWD workflow."""
     item = KnowledgeRepository.get_item_by_id(id)
+    if item:
+        scope.ensure(item.get("department_id"))
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -366,8 +389,10 @@ async def get_version_history(id: str) -> KnowledgeVersionHistoryResponse:
     response_model=IngestionStatusResponse,
     dependencies=[Depends(require_role("admin"))],
 )
-async def get_ingestion_status(id: str) -> IngestionStatusResponse:
+async def get_ingestion_status(id: str, scope: DepartmentScope = Depends(department_scope)) -> IngestionStatusResponse:
     """Retrieves current processing status of latest version of an OWD workflow."""
+    owner = KnowledgeRepository.get_item_by_id(id)
+    scope.ensure(owner.get("department_id") if owner else None)
     latest = KnowledgeRepository.get_latest_version(id)
     if not latest:
         raise HTTPException(
@@ -396,9 +421,13 @@ async def get_ingestion_status(id: str) -> IngestionStatusResponse:
 async def update_knowledge_metadata(
     id: str,
     payload: UpdateKnowledgeItemRequest,
+    scope: DepartmentScope = Depends(department_scope),
 ) -> KnowledgeItemResponse:
     """Updates title or department_id metadata of an OWD workflow."""
+    current = KnowledgeRepository.get_item_by_id(id)
+    scope.ensure(current.get("department_id") if current else None)
     if payload.department_id is not None:
+        scope.ensure(payload.department_id)
         try:
             department_is_active = KnowledgeRepository.department_exists(payload.department_id)
         except WorkMateException as exc:
@@ -437,9 +466,11 @@ async def update_knowledge_metadata(
     response_model=KnowledgeDeleteResponse,
     dependencies=[Depends(require_role("admin"))],
 )
-async def delete_knowledge_item(id: str) -> KnowledgeDeleteResponse:
+async def delete_knowledge_item(id: str, scope: DepartmentScope = Depends(department_scope)) -> KnowledgeDeleteResponse:
     """Soft-deletes an OWD workflow item by setting version status to 'archived'."""
     item = KnowledgeRepository.get_item_by_id(id)
+    if item:
+        scope.ensure(item.get("department_id"))
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -462,9 +493,12 @@ async def delete_knowledge_item(id: str) -> KnowledgeDeleteResponse:
 async def permanently_delete_knowledge_item(
     id: str,
     payload: KnowledgePermanentDeleteRequest,
+    scope: DepartmentScope = Depends(department_scope),
 ) -> KnowledgePermanentDeleteResponse:
     """Permanently delete one workflow graph after an explicit code confirmation."""
     item = KnowledgeRepository.get_item_by_id(id)
+    if item:
+        scope.ensure(item.get("department_id"))
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

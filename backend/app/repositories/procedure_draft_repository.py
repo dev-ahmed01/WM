@@ -15,7 +15,8 @@ from app.services.procedure_plan import ProcedurePlanError, check_plan
 COLUMNS = ("id,department_id,created_by,source_sha256,source_filename,"
            "source_type,title,source_excerpt,steps,warnings,decision,status,revision,"
            "published_version_id,"
-           "reviewed_by,reviewed_at,created_at,updated_at")
+           "reviewed_by,reviewed_at,created_at,updated_at,"
+           "approved_by,approved_at,approved_revision,rejection_note,source_gap_id")
 LINE_ITEM = re.compile(r"^\s*(?:(?:step|stage)\s*\d+\s*[:.)-]\s*|\d{1,3}[.)]\s+|[-*]\s+)(.{8,700})$",re.I)
 
 
@@ -37,7 +38,7 @@ def _dict(cur):
     if value is None:
         return None
     result=dict(zip([c.name.lower() for c in cur.description],value))
-    for k in ("reviewed_at","created_at","updated_at"):
+    for k in ("reviewed_at","created_at","updated_at","approved_at"):
         if result.get(k) is not None:
             result[k]=result[k].isoformat()
     return result

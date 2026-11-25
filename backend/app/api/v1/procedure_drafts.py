@@ -127,10 +127,17 @@ async def publish_reviewed_procedure(
     user:dict=Depends(require_role("admin")),
 ):
     dept,admin=_identity(user)
-    return await _call(
+    result=await _call(
         ProcedurePublisher.publish,dept,admin,draft_id,
         payload.expected_revision,payload.approval,
     )
+    try:
+        # Close the knowledge gap that motivated this SOP, if any.
+        from app.repositories.knowledge_loop_repository import KnowledgeGapRepository
+        await run_in_threadpool(KnowledgeGapRepository.resolve_by_draft,draft_id)
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/{draft_id}/source")

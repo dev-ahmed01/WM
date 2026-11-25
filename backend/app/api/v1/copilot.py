@@ -57,6 +57,7 @@ from app.services.translation_service import (
     get_translation_service,
 )
 from app.services.escalation import EscalationService
+from app.repositories.knowledge_loop_repository import KnowledgeGapRepository
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
 from app.services.workflow_intent import WorkflowIntentService
@@ -1462,25 +1463,34 @@ async def copilot_message(
                     confidence_score=0.0,
                 )
                 case_created = False
+                already_reported = False
                 try:
-                    await EscalationService().escalate(
-                        conversation_message_id=gap.message_id,
-                        reason="Knowledge gap: no approved SOP matches the question",
-                    )
+                    gap_id, is_new = KnowledgeGapRepository.record(
+                        department_id, user_id, gap.message_id, payload.message)
+                    already_reported = not is_new
+                    if is_new:
+                        escalation_id = await EscalationService().escalate(
+                            conversation_message_id=gap.message_id,
+                            reason="Knowledge gap: no approved SOP matches the question",
+                        )
+                        KnowledgeGapRepository.attach_escalation(gap_id, escalation_id)
                     case_created = True
                 except Exception:
-                    copilot_logger.exception("Knowledge-gap escalation could not be created")
+                    copilot_logger.exception("Knowledge-gap case could not be created")
                 try:
                     AnalyticsService.record_event(
                         event_type="copilot.knowledge_gap", conversation_message_id=gap.message_id,
                         payload={"user_id": user_id, "department_id": department_id,
-                                 "case_created": case_created},
+                                 "case_created": case_created, "repeat": already_reported},
                     )
                 except Exception:
                     copilot_logger.exception("Knowledge-gap telemetry write failed")
-                tail = (" I have sent your question to your supervisor so the missing guidance can be added."
-                        if case_created else
-                        " I could not send it to your supervisor from here, so please ask them directly.")
+                if case_created and already_reported:
+                    tail = " Your supervisor already has this question; I added your report to it."
+                elif case_created:
+                    tail = " I have sent your question to your supervisor so the missing guidance can be added."
+                else:
+                    tail = " I could not send it to your supervisor from here, so please ask them directly."
                 gap.answer = gap.spoken_answer = gap_text + tail
                 gap.requires_escalation = case_created
                 gap.is_grounded = False

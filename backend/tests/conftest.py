@@ -34,3 +34,18 @@ def block_unmocked_postgres_connections(monkeypatch):
     if os.getenv("WORKMATE_RUN_LIVE_TESTS") == "1":
         return
     monkeypatch.setattr("psycopg.connect", blocked)
+
+
+class _EveryDepartment(frozenset):
+    """Unit-test scope: every department is allowed (the real lookup needs a database)."""
+
+    def __contains__(self, item):
+        return True
+
+
+@pytest.fixture(autouse=True)
+def permissive_department_scope(request, monkeypatch):
+    """Mocked-repository unit tests bypass the tenant lookup; live tests use the real one."""
+    if "live_integration" in request.keywords:
+        return
+    monkeypatch.setattr("app.middleware.tenant_scope._load", lambda *_a, **_k: _EveryDepartment())

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 from uuid import uuid4
+from app.core.config import settings
 from app.core.database import get_postgres_connection
 from app.repositories.procedure_draft_repository import (
     ProcedureDraftRepository,DraftNotFound,DraftConflict,COLUMNS,_dict,_event,_start,
@@ -28,11 +29,20 @@ class ProcedurePublisher:
         except ProcedurePlanError as exc:
             raise DraftConflict(str(exc)) from exc
         # A valid syntax preview is not sufficient to authorize publication.
+        approved=ProcedurePublisher.is_approved(draft)
+        result["approval_required"]=settings.PUBLISH_REQUIRES_APPROVAL
+        result["approved"]=approved
         result["can_publish"]=(result["valid"] and draft["status"]=="reviewed"
-                               and draft["published_version_id"] is None)
+                               and draft["published_version_id"] is None
+                               and (approved or not settings.PUBLISH_REQUIRES_APPROVAL))
         result["review_revision"]=draft["revision"]
         result["workflow_code"]="SOP_DRAFT_"+draft["id"].split("_",1)[-1].upper()
         return result
+
+    @staticmethod
+    def is_approved(draft):
+        return (draft.get("approved_by") is not None
+                and draft.get("approved_revision")==draft["revision"])
 
     @staticmethod
     def publish(department,admin,draft_id,expected_revision,approval):
@@ -52,6 +62,10 @@ class ProcedurePublisher:
                     if (draft["revision"]!=expected_revision or
                         draft["status"]!="reviewed" or draft["published_version_id"]):
                         raise DraftConflict("Only the unchanged, reviewed revision can be published.")
+                    if settings.PUBLISH_REQUIRES_APPROVAL and not ProcedurePublisher.is_approved(draft):
+                        raise DraftConflict("A manager must approve this exact reviewed revision before it can be published.")
+                    if settings.PUBLISH_REQUIRES_APPROVAL and draft["approved_by"]==admin:
+                        raise DraftConflict("The approver and the publisher must be different people.")
                     try:
                         generated=render_owd(draft)
                     except ProcedurePlanError as exc:
