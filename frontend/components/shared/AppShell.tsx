@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity, BarChart3, BookOpenText, Bot, Building2, ChevronDown,
   ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut, AlertTriangle,
-  Menu, Search, ShieldCheck, X,
+  Library, Menu, Search, ShieldCheck, Users, X,
 } from 'lucide-react';
 import { loadUserClaims, getUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -36,12 +36,20 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Shift handover', description: 'Transfer open context', href: '/copilot/handover', icon: ClipboardCheck, roles: ['admin','manager','employee'] },
   { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
   { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
+  { label: 'Knowledge Studio', description: 'Upload and publish SOPs', href: '/knowledge-studio', icon: Library, roles: ['admin'] },
+  { label: 'Employees', description: 'Invite and manage people', href: '/employees', icon: Users, roles: ['admin'] },
   { label: 'Procedure Studio', description: 'Manage governed SOPs', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
   { label: 'Task exceptions', description: 'Blocked work and reviews', href: '/work/exceptions', icon: AlertTriangle, roles: ['admin','manager'] },
   { label: 'Shift reviews', description: 'Department handovers', href: '/handover/review', icon: ClipboardCheck, roles: ['admin','manager'] },
   { label: 'Intelligence', description: 'Actual operational metrics', href: '/intelligence-hub', icon: BarChart3, roles: ['admin','manager'] },
   { label: 'Pilot evaluation', description: 'Private quality signals', href: '/pilot', icon: Activity, roles: ['admin','manager'] },
 ];
+
+// Pages that must render without a session (no shell, no redirect to /login).
+const PUBLIC_PATHS = ['/login', '/accept-invite'];
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 function isActiveRoute(pathname: string, href: string) {
   if (href === '/copilot') return pathname === href;
@@ -107,8 +115,8 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
   const sections = [
     { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/work/exceptions','/copilot','/copilot/handover'].includes(item.href)) },
-    { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/procedure-studio'].includes(item.href)) },
-    { title: 'Supervise', items: visibleItems.filter(item => ['/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
+    { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/knowledge-studio','/procedure-studio'].includes(item.href)) },
+    { title: 'Supervise', items: visibleItems.filter(item => ['/employees','/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
   ];
 
   return (
@@ -165,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    if (pathname === '/login' || pathname.startsWith('/login/')) return;
+    if (isPublicPath(pathname)) return;
     void loadUserClaims().then(profile => {
       if (cancelled) return;
       setUser(profile);
@@ -175,7 +183,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, [pathname, router]);
 
-  if (pathname === '/login' || pathname.startsWith('/login/')) return <>{children}</>;
+  if (isPublicPath(pathname)) return <>{children}</>;
   if (!user) return <div className="min-h-screen grid place-items-center bg-[#f8faf8]"><LoadingState label="Opening workspace" /></div>;
 
   const handleLogout = () => {
