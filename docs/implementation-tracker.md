@@ -17,9 +17,9 @@ Branch: `dev/commercial-product` (not pushed; GitHub MCP failed to connect and n
 | 1 Audit / baseline / remediation | **Done** | `docs/product-audit.md`; Windows voice-upload 500 fixed |
 | 2 Research / personas / PRD | **Done v1 (search-snippet depth only)** | warehouse-research, competitor-analysis, user-personas, product-requirements; gaps listed in each |
 | 3 Org / roles / tenant isolation | **Partly done** | Migration 018 (organizations, warehouses, job profiles, user scope, invitation/recovery tokens, cross-org trigger); org-scoped employee admin API; escalations tenant leak fixed; RBAC golden matrix. **Not done:** RLS on workflows/conversations/work tables, manager warehouse scoping in routes, frontend screens for employee management, email delivery of invites (token is shown once to the admin) |
-| 4 Knowledge library & approval | **Partly done** | 85 labelled demo SOPs compile through the real OWD compiler; idempotent seeder. **Not done:** approval gate for publishing (upload = publish today), SOP applicability by job profile/warehouse, shared org-wide knowledge scope, versioning policy for in-flight workflows (Scenario I) |
-| 5 Assistant quality | **Partly done** | Hindi/Hinglish retrieval fixed, deterministic safety triage, 293-case eval harness. **Not done:** LLM/embedding path untested (no models), citations on catalog path, missing-knowledge escalation (Scenario D), 200-question independent dataset, answer-correctness grading |
-| 6 Voice | Not started | needs model downloads for honest benchmarking |
+| 4 Knowledge library & approval | **Mostly done** (approval gate, gap->draft->publish) | 85 labelled demo SOPs compile through the real OWD compiler; idempotent seeder. **Not done:** approval gate for publishing (upload = publish today), SOP applicability by job profile/warehouse, shared org-wide knowledge scope, versioning policy for in-flight workflows (Scenario I) |
+| 5 Assistant quality | **Mostly done for English** | Hindi/Hinglish retrieval fixed, deterministic safety triage, 293-case eval harness. **Not done:** LLM/embedding path untested (no models), citations on catalog path, missing-knowledge escalation (Scenario D), 200-question independent dataset, answer-correctness grading |
+| 6 Voice | **Removed** | English-only decision; code deleted |
 | 7 Actions / escalation loop | Not started | existing work-item/exception infra reused; assistant→action wiring and admin conversation UI missing |
 | 8 Admin / manager / analytics | Not started | no employee-management, conversation-management, ROI screens |
 | 9 UI polish / accessibility | Not started | frontend untouched this session (typecheck/build pass) |
@@ -65,6 +65,22 @@ continue until the mandatory step/decision is done (deterministic gating works).
 
 Known UI/UX issues seen: copilot shows "100% confidence" on deterministic catalog matches (not a measured signal);
 no admin/manager console for knowledge-gap escalations beyond the Intelligence Hub list; no mobile layout check yet.
+
+## Session 2026-11-25 (late): the loop, a security fix, English-only
+- **Closed knowledge loop built and verified in a real browser** (and by `test_knowledge_loop_postgres.py` in a scratch DB):
+  unanswered question -> `knowledge_gaps` row (repeats counted, one support case) -> manager/admin reply visible to the
+  employee (not stored as knowledge) -> admin drafts an SOP from the gap -> admin reviews each step -> **manager approval
+  of the exact revision (new gate; `PUBLISH_REQUIRES_APPROVAL=true`)** -> admin publishes -> gap resolved -> employee finds it.
+  New pages: `/knowledge-gaps` (admin, manager), `/approvals` (manager), employee "Your questions" card.
+- **Security fix:** Knowledge Studio and reference routes accepted any `department_id`; an admin of one organization could list,
+  read, modify, delete and publish into another organization. Now scoped by `middleware/tenant_scope.py`; an OWD that declares a
+  different department than selected is refused. Regression: `test_tenant_knowledge_isolation_postgres.py` (fails on the old code).
+- **Assistant:** relevance floor (0.30) for suggestions so unrelated questions open a knowledge gap instead of showing noise; step
+  failure/recovery/safety text is indexed as rules evidence so in-workflow "what if" questions are answered from the SOP in ~50 ms
+  without a model.
+- **English only:** Hindi voice, Whisper/Piper/M2M100, translation provider, voice routes/tests/evals/docs, frontend voice UI, Docker
+  model stages and the voice/Hindi parts of the pilot gate were deleted. Migrations are unchanged (tables remain, unused).
+- Verified: backend 539+ pass (live DB tests on), frontend `tsc` and `next build` (28 routes) pass, RBAC golden regenerated (102 ops).
 
 ## Open issues / blockers
 - Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).

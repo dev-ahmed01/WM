@@ -94,9 +94,9 @@ class SafetyAlert:
             if case_created else
             "मैं यहाँ से सपोर्ट केस नहीं बना पाया, इसलिए सुपरवाइज़र को सीधे बताएं।"
         )
-        if language == "hi":
-            return f"{HI} {follow_hi}"
-        return f"{EN} {follow}\n\n{HI} {follow_hi}"
+        if language == "hi":  # only when the employee wrote in Devanagari
+            return f"{HI} {follow_hi}\n\n{EN} {follow}"
+        return f"{EN} {follow}"
 
 
 def detect(message: str) -> Optional[SafetyAlert]:
