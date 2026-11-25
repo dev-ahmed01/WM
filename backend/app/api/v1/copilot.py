@@ -127,6 +127,8 @@ async def _save_voice_upload(audio: UploadFile) -> Path:
             )
         return Path(temporary.name)
     except Exception:
+        # Close before unlinking: an open handle blocks deletion on Windows.
+        temporary.close()
         Path(temporary.name).unlink(missing_ok=True)
         raise
     finally:
