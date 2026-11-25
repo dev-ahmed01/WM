@@ -748,3 +748,23 @@ HINGLISH = {
     "SOP-IT-004": "wms mein error system hang ho gaya",
     "SOP-IT-005": "wifi nahi aa raha network chala gaya internet nahi",
 }
+
+
+# Everyday English wording for the same procedures (retrieval aliases only).
+ENGLISH = {
+    "SOP-INB-001": "truck has arrived at the gate driver check in vehicle arrival",
+    "SOP-INB-003": "unload the truck container unloading",
+    "SOP-INB-005": "count the boxes check quantity received",
+    "SOP-INB-006": "receive this shipment receive a delivery receiving goods how do I receive",
+    "SOP-INB-007": "found a damaged box damaged cartons broken goods received",
+    "SOP-INB-008": "report a shortage missing boxes shipment is short wrong quantity delivered",
+    "SOP-INV-006": "stock is missing cannot find stock lost inventory",
+    "SOP-PCK-006": "picked the wrong item wrong product picked",
+    "SOP-PCK-003": "barcode will not scan scanner cannot read the label",
+    "SOP-OUT-005": "hand over to the carrier driver pickup",
+    "SOP-RET-001": "customer return came back accept a return",
+    "SOP-EMP-005": "request leave apply for time off holiday",
+    "SOP-EMP-009": "hand over my shift pass on to the next shift",
+    "SOP-EQP-004": "forklift is faulty report forklift problem",
+    "SOP-IT-003": "cannot log in forgot my password locked out",
+}

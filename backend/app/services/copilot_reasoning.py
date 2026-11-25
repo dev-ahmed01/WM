@@ -4,7 +4,13 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Sequence
 
-from app.core.text_matching import fuzzy_relevance_score
+from app.core.text_matching import search_terms, fuzzy_relevance_score
+
+
+_GENERIC_EXPLAIN_TERMS = frozenset({
+    "explain", "simply", "simple", "step", "steps", "rule", "rules", "mean", "means", "detail", "details",
+    "more", "again", "please", "clearly", "easy", "understand", "current", "tell", "describe", "meaning",
+})
 
 
 class CopilotReasoningService:
@@ -471,6 +477,11 @@ class CopilotReasoningService:
         ):
             return f"{rule} Current step remains: {current_instruction}"
         if move == "explain" and rule:
+            # "explain this step simply" is generic; "explain the economics of X" is a different
+            # subject. Only answer from the current step when the subject actually relates to it.
+            subject = [t for t in search_terms(query) if t not in _GENERIC_EXPLAIN_TERMS]
+            if subject and fuzzy_relevance_score(" ".join(subject), active_context) < 0.2:
+                return None
             return f"Current step: {current_instruction} Relevant rule: {rule}"
         return None
 

@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.text_matching import fuzzy_relevance_score
-from app.services import live_data_guard, safety_triage
+from app.services import assistant_actions, live_data_guard, safety_triage
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.models.copilot import (
@@ -34,6 +34,7 @@ from app.services.reference_answer import ReferenceAnswerService
 from app.services.validation import ResponseValidationService
 from app.services.workflow_state import WorkflowCompletionResult, WorkflowStateService
 from app.services.escalation import EscalationService
+from app.repositories.handover_repository import HandoverRepository
 from app.repositories.knowledge_loop_repository import KnowledgeGapRepository
 from app.services.analytics_service import AnalyticsService
 from app.services.copilot_reasoning import CopilotReasoningService
@@ -464,6 +465,77 @@ async def get_copilot_conversation(
     )
 
 
+async def _handle_assistant_action(
+    *, payload: "CopilotMessageRequest", conversation_id: str, user_message_id: str,
+    user_id: str, department_id: str, active_session: Any,
+) -> Optional["CopilotResponse"]:
+    """Propose -> confirm -> execute for allowlisted actions. Returns None when the message is not an action turn."""
+    history = ConversationRepository.get_history(conversation_id, limit=6)
+    last_ai = next((m for m in reversed(history) if m.get("sender") == "ai"), None)
+    state = assistant_actions.parse_state(last_ai.get("intent") if last_ai else None)
+
+    def reply(text: str, intent: str, user_intent: str) -> "CopilotResponse":
+        return _persist_control_reply(
+            conversation_id=conversation_id, user_message_id=user_message_id, intent=user_intent,
+            answer=text, spoken_answer=text, message_intent=intent, active_session=active_session, confidence_score=1.0,
+        )
+
+    if state:
+        step, kind, quantity = state
+        decision = WorkflowIntentService.confirmation_response(payload.message)
+        if step == "ask":
+            if decision is False:
+                return reply("Okay, I won't report it.", "ACTION_CANCELLED", "ACTION_CANCELLED")
+            qty = assistant_actions.parse_quantity(payload.message)
+            if qty:
+                return reply(assistant_actions.proposal(kind, qty), assistant_actions.intent_confirm(kind, qty), "ACTION_PROPOSED")
+            return None  # not an answer: treat as a normal message
+        if decision is False:
+            return reply("Okay, I won't send it. Nothing was reported.", "ACTION_CANCELLED", "ACTION_CANCELLED")
+        if decision is True:
+            fields = assistant_actions.handover_fields(kind, quantity or 0, _original_report(history))
+            try:
+                record = await run_in_threadpool(
+                    HandoverRepository.submit, department_id, user_id, conversation_id, fields["recipient"],
+                    fields["disposition"], fields["exception_type"], fields["severity"],
+                    fields["next_action"], fields["notes"],
+                )
+            except Exception:
+                copilot_logger.exception("Assistant discrepancy report failed")
+                record = None
+            if not record:
+                return reply("I could not save the report, so nothing was sent. Please tell your supervisor directly.",
+                             "ACTION_FAILED", "ACTION_FAILED")
+            try:
+                AnalyticsService.record_event(
+                    event_type="copilot.action.discrepancy_reported", conversation_message_id=user_message_id,
+                    payload={"user_id": user_id, "department_id": department_id, "kind": kind,
+                             "quantity": quantity, "handover_id": record.get("id")})
+            except Exception:
+                copilot_logger.exception("Action telemetry write failed")
+            return reply(f"Reported to your shift supervisor (reference {record.get('id', 'saved')}). "
+                         "Stock was not adjusted and the supplier was not contacted.", "ACTION_DONE", "ACTION_CONFIRMED")
+        return None
+
+    if active_session is None:
+        found = assistant_actions.detect(payload.message)
+        if found:
+            if found.quantity is None:
+                return reply(assistant_actions.ask_for_quantity(found.kind), assistant_actions.intent_ask(found.kind), "ACTION_ASK")
+            return reply(assistant_actions.proposal(found.kind, found.quantity),
+                         assistant_actions.intent_confirm(found.kind, found.quantity), "ACTION_PROPOSED")
+    return None
+
+
+def _original_report(history: list) -> str:
+    """The employee message that started the report (the last non-yes employee message before the proposal)."""
+    for item in reversed(history[:-1]):
+        if item.get("sender") == "employee" and WorkflowIntentService.confirmation_response(str(item.get("content"))) is None:
+            return str(item.get("content") or "")
+    return ""
+
+
+
 @router.post(
     "/message",
     response_model=CopilotResponse,
@@ -543,6 +615,13 @@ async def copilot_message(
             spoken_answer=text, sop_details=f"Related reference SOP: {safety_alert.related_sop}",
             citations=[], confidence_score=1.0, is_grounded=True, requires_escalation=True,
         )
+
+    action_reply = await _handle_assistant_action(
+        payload=payload, conversation_id=conversation_id, user_message_id=user_message_id,
+        user_id=user_id, department_id=department_id, active_session=active_session,
+    )
+    if action_reply is not None:
+        return action_reply
 
     if live_data_guard.needs_live_data(payload.message) and active_session is None:
         return _persist_control_reply(

@@ -93,6 +93,13 @@ async def cases(limit:int=Query(100,ge=1,le=100),
     return {"items":await call(WorkExceptionRepository.list,department,limit)}
 
 
+@router.get("/mine")
+async def my_reported_cases(user:dict=Depends(require_role("admin","manager","employee"))):
+    """Cases the caller raised, with status only (no internal notes)."""
+    department,actor=who(user)
+    return {"items":await call(WorkExceptionRepository.mine,department,actor)}
+
+
 @router.get("/{case_id}")
 async def case_details(case_id:str,
                        user:dict=Depends(require_role("admin","manager"))):

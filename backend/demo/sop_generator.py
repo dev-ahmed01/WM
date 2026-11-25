@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List
 
-from demo.sop_catalog import AREAS, CATALOG, DEMO_DEPARTMENT_ID, HINGLISH, PROFILE, Sop
+from demo.sop_catalog import AREAS, CATALOG, DEMO_DEPARTMENT_ID, ENGLISH, HINGLISH, PROFILE, Sop
 
 LABEL = "DEMONSTRATION SOP - original sample content for WorkMate Demo Logistics; not an approved company procedure"
 _INV = {v: k for k, v in PROFILE.items()}
@@ -65,7 +65,7 @@ def render(sop: Sop) -> str:
     w("# 2 AI Retrieval Metadata")
     w(f"keywords: {keywords}")
     w(f"synonyms: {synonyms}")
-    hinglish = _clean(HINGLISH.get(sop.code, ""))
+    hinglish = _clean(" , ".join(x for x in (HINGLISH.get(sop.code, ""), ENGLISH.get(sop.code, "")) if x))
     w(f"search_phrases: {_clean(sop.title.lower())}, {_clean(sop.hindi_title)}" + (f", {hinglish}" if hinglish else ""))
     w(f"search_queries: how to {_clean(sop.title.lower())}")
     w(f"business_process: {dept_name} operations")

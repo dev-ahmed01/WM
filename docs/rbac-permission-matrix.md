@@ -2,7 +2,7 @@
 
 Generated from `backend/tests/golden/rbac_matrix.json`, which `backend/tests/test_rbac_matrix.py` produces by calling
 every API operation anonymously and with admin/manager/employee tokens. ✔ = the role reaches the handler; — = rejected
-by the auth/role dependency (401/403). All 102 operations deny anonymous callers.
+by the auth/role dependency (401/403). All 103 operations deny anonymous callers.
 
 **What this proves:** each route's role guard exists and matches this table; a change fails CI until the golden file is
 regenerated and reviewed (`UPDATE_RBAC_GOLDEN=1`), then run `python scripts/generate_rbac_doc.py`.
@@ -84,6 +84,7 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `POST /api/v1/procedure/drafts/{draft_id}/review` | ✔ | — | — |
 | `GET /api/v1/procedure/drafts/{draft_id}/source` | ✔ | — | — |
 | `GET /api/v1/work/exceptions` | ✔ | ✔ | — |
+| `GET /api/v1/work/exceptions/mine` | ✔ | ✔ | ✔ |
 | `GET /api/v1/work/exceptions/{case_id}` | ✔ | ✔ | — |
 | `POST /api/v1/work/exceptions/{case_id}/action` | ✔ | ✔ | — |
 | `POST /api/v1/work/exceptions/{case_id}/claim` | ✔ | ✔ | — |

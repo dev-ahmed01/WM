@@ -68,6 +68,29 @@ def open_case(cur,work,department,actor,trigger,reason,state_id=None,option=None
     return case
 
 
+def _progress(item):
+    """Plain-language status an employee can act on; derived only from recorded state."""
+    if item["status"]=="closed":
+        return "Closed. A supervisor and an independent site check accepted the resolution."
+    if item["evidence_reviewed_at"]:
+        return "Corrective work is done and reviewed. Waiting for the independent site check."
+    if item["corrective_status"]=="approved":
+        if item["corrective_work_status"]=="completed":
+            return "Corrective work is finished. Waiting for a supervisor to review the evidence."
+        return "Corrective work has been approved and assigned. It must be completed and reviewed."
+    if item["corrective_status"]=="pending":
+        return "A corrective task has been requested and is waiting for approval."
+    if item["corrective_status"]=="rejected":
+        return "The requested corrective task was declined; your supervisor will decide the next step."
+    if item["status"]=="follow_up_requested":
+        return "Your supervisor asked for more follow-up."
+    if item["status"]=="reviewed":
+        return "Your supervisor reviewed this report."
+    if item["status"]=="claimed":
+        return "A supervisor has taken this case and is looking into it."
+    return "Reported. Waiting for a supervisor to pick it up."
+
+
 class WorkExceptionRepository:
     @staticmethod
     def list(department,limit=100):
@@ -100,6 +123,37 @@ class WorkExceptionRepository:
                 items=_rows(cur)
                 cur.execute("COMMIT")
                 return items
+
+    @staticmethod
+    def mine(department,user,limit=20):
+        """Employee-safe view of cases the caller raised: status and progress only.
+        Review notes, containment/remediation notes and other people's cases stay private."""
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cur:
+                _begin(cur,department)
+                cur.execute("""
+                    SELECT c.id,c.status,c.severity,c.reason,c.created_at,c.updated_at,c.closed_at,
+                           w.title AS work_title,w.status AS work_status,
+                           cr.status AS corrective_status, cw.status AS corrective_work_status,
+                           cl.evidence_reviewed_at AS evidence_reviewed_at
+                    FROM workmate_copilot.work_exceptions c
+                    JOIN workmate_copilot.work_items w
+                      ON w.id=c.work_item_id AND w.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_corrective_requests cr
+                      ON cr.case_id=c.id AND cr.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_items cw
+                      ON cw.id=cr.corrective_work_id AND cw.department_id=c.department_id
+                    LEFT JOIN workmate_copilot.work_case_closures cl
+                      ON cl.case_id=c.id AND cl.department_id=c.department_id
+                    WHERE c.department_id=%s AND c.raised_by=%s
+                    ORDER BY (c.status<>'closed') DESC, c.updated_at DESC
+                    LIMIT %s
+                """,(department,user,limit))
+                items=_rows(cur)
+                cur.execute("COMMIT")
+        for item in items:
+            item["progress"]=_progress(item)
+        return items
 
     @staticmethod
     def get(department,case_id):

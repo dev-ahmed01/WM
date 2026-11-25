@@ -215,6 +215,12 @@
   "employee": "denied",
   "manager": "allowed"
  },
+ "GET /api/v1/work/exceptions/mine": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "GET /api/v1/work/exceptions/{case_id}": {
   "admin": "allowed",
   "anonymous": "denied",
