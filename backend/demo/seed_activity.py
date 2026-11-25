@@ -33,6 +33,10 @@ WORK = (
      "Verify package count against the manifest before carrier handover."),
 )
 
+# work reference -> SOP the manager binds it to (so employees can run it step by step)
+BIND = {"DEMO-WI-001": "SOP_INB_005", "DEMO-WI-002": "SOP_STO_001", "DEMO-WI-003": "SOP_PCK_001",
+        "DEMO-WI-004": "SOP_INV_001", "DEMO-WI-005": "SOP_OUT_002"}
+
 # (employee, question, optional follow-up replies sent in the same conversation)
 CONVERSATIONS = (
     ("demo_picker", "Galat item pick ho gaya, ab kya karun?", ()),
@@ -87,6 +91,20 @@ def main() -> int:
             summary["work_created"] += 1
         else:
             summary["errors"].append((ref, status, body))
+
+    _, procs = c.call("demo_manager_hyd", "GET", "/work/execution/procedures")
+    version_of = {p["workflow_code"]: p["workflow_version_id"] for p in procs.get("items", [])}
+    _, items = c.call("demo_manager_hyd", "GET", "/work/items?limit=100")
+    summary["bound"] = 0
+    for item in items.get("items", []):
+        code = BIND.get(item.get("external_reference"))
+        if code and code in version_of and not item.get("workflow_version_id"):
+            status, body = c.call("demo_manager_hyd", "POST", f"/work/execution/{item['id']}/bind",
+                                  {"workflow_version_id": version_of[code]})
+            if status == 200:
+                summary["bound"] += 1
+            else:
+                summary["errors"].append(("bind " + item["external_reference"], status, body))
 
     _, hist = c.call("demo_picker", "GET", "/copilot/history")
     if not hist.get("sessions"):

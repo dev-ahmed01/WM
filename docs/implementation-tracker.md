@@ -52,6 +52,20 @@ Branch: `dev/commercial-product` (not pushed; GitHub MCP failed to connect and n
 Done: models pulled; knowledge-gap escalation (Scenario D, first half); live-data guard; truncation fix; full suite 581 pass / 1 skip / 0 fail.
 Found: LLM follow-ups take ~10 s on this CPU and hit the 8 s timeout; exception text isn't evidence for the current step.
 
+## Direction change (2026-11-25): English only, end-to-end first
+User decision: perfect the English experience and build the application end to end; Hindi/Hinglish voice, translation and
+the extra speech models are parked (8 GB RAM machine). Existing Hindi/Hinglish retrieval fixes stay.
+
+Done since: `demo/seed_activity.py` (work items, SOP binding, conversations incl. a safety report and a knowledge gap,
+handover — all through the real API, idempotent); admin **Employees** page (invite, deactivate/activate, reset link,
+search) and public **accept-invite** page + `/api/session/redeem` proxy route; nav entries for Knowledge Studio and
+Employees. Verified in a real browser: employee login -> assigned work queue and copilot answer; admin login ->
+employee table; invite -> accept -> sign in as the invitee. A work item driven through guided execution refuses to
+continue until the mandatory step/decision is done (deterministic gating works).
+
+Known UI/UX issues seen: copilot shows "100% confidence" on deterministic catalog matches (not a measured signal);
+no admin/manager console for knowledge-gap escalations beyond the Intelligence Hub list; no mobile layout check yet.
+
 ## Open issues / blockers
 - Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).
 - Out-of-scope questions show unrelated "closest SOP" suggestions and create no escalation.
