@@ -236,6 +236,12 @@ class OWDCompiler:
             combined_raw = f"{wf.title} {wf.workflow_code} {s.title} {step_text} {rule_text} {' '.join(kw_list)}"
             keywords = sorted(list(set(re.findall(r'\b[A-Za-z0-9_-]{3,}\b', combined_raw.upper()))))
             keywords_str = ", ".join(keywords[:25])
+            # Authored synonyms/phrases (including Hindi and Hinglish wording) must be
+            # searchable; they were previously parsed but never indexed.
+            aliases = []
+            if ret_meta:
+                aliases = [a.strip() for a in (ret_meta.synonyms + ret_meta.search_phrases + ret_meta.search_queries) if a and a.strip()]
+            aliases_str = " ; ".join(dict.fromkeys(aliases))
 
             sm_id = generate_deterministic_uuid("search", f"{version_id}_{s_id}")
             search_metadata_payload.append({
@@ -248,6 +254,7 @@ class OWDCompiler:
                     f"Category: {wf.category} | Type: OWD_WORKFLOW | Language: en-US | "
                     f"State: {s.title} ({s.state_key}) | Instructions: {step_text} | Rules: {rule_text} | "
                     f"Keywords: {keywords_str}"
+                    + (f" | Also known as: {aliases_str}" if aliases_str else "")
                 ),
                 "embedding_ref": "none",
                 "status": "published",

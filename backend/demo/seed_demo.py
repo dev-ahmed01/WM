@@ -113,7 +113,7 @@ def seed_structure_and_users(dsn: str, reset_passwords: bool) -> dict:
     return {"users_created": created, "credentials_file": str(CREDENTIALS_FILE)}
 
 
-def publish_sops(dsn: str) -> dict:
+def publish_sops(dsn: str, republish: bool = False) -> dict:
     # Imported lazily so structure seeding does not need the whole app graph.
     from app.compiler.pipeline import OWDCompilerPipeline
     from app.services.ingestion import IngestionService
@@ -124,7 +124,7 @@ def publish_sops(dsn: str) -> dict:
         cur.execute("SELECT workflow_code FROM knowledge_studio.workflows WHERE department_id=%s", (DEMO_DEPARTMENT_ID,))
         existing = {r[0].upper().replace("-", "_") for r in cur.fetchall()}
     for sop in CATALOG:
-        if sop.code.replace("-", "_") in existing:
+        if not republish and sop.code.replace("-", "_") in existing:
             skipped += 1
             continue
         md = render(sop)
@@ -145,11 +145,12 @@ def publish_sops(dsn: str) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--reset-passwords", action="store_true")
+    ap.add_argument("--republish", action="store_true", help="re-compile existing demo SOPs in place (same version)")
     args = ap.parse_args()
     dsn = settings.DATABASE_URL
     guard(dsn)
     out = seed_structure_and_users(dsn, args.reset_passwords)
-    out.update(publish_sops(dsn))
+    out.update(publish_sops(dsn, args.republish))
     print(json.dumps(out, indent=2, default=str))
     return 1 if out["failed"] else 0
 

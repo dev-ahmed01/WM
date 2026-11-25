@@ -704,3 +704,47 @@ assert len(CATALOG) == 85, len(CATALOG)
 assert len({s.code for s in CATALOG}) == 85
 EXPECTED_PER_AREA = {"INB": 8, "STO": 7, "INV": 8, "PCK": 7, "PAK": 6, "OUT": 7, "RET": 6,
                      "HSE": 10, "EQP": 6, "QC": 6, "EMP": 9, "IT": 5}
+
+
+# Roman-script Hindi (Hinglish) wording workers actually type, used as extra
+# retrieval aliases. Authored as general vocabulary, not copied from the eval set.
+HINGLISH = {
+    "SOP-INB-001": "gaadi aayi gate par driver ka delivery note",
+    "SOP-INB-004": "po match nahi ho raha purchase order check karna hai",
+    "SOP-INB-005": "maal kam aaya ginti galat boxes kam gine",
+    "SOP-INB-007": "box toot gaya tuta hua maal kharab aaya gila box",
+    "SOP-INB-008": "maal kam aaya zyada aaya galat maal shipment mein difference boxes missing",
+    "SOP-STO-001": "maal rack mein rakhna putaway kahan rakhna hai",
+    "SOP-STO-002": "bin ka label nahi mil raha bin kaise pehchane",
+    "SOP-INV-001": "cycle count ginti stock ginna",
+    "SOP-INV-006": "stock nahi mil raha gum ho gaya maal ghayab",
+    "SOP-INV-007": "expire ho gaya expiry nikal gayi purana maal",
+    "SOP-PCK-003": "barcode scan nahi ho raha beep nahi kar raha",
+    "SOP-PCK-005": "poora maal nahi mila short pick quantity kam mili",
+    "SOP-PCK-006": "galat item pick ho gaya galat saman utha liya wrong item",
+    "SOP-PAK-002": "kaunsa dabba lena hai box ka size",
+    "SOP-PAK-003": "toot jaane wala saman kaanch fragile kaise pack karen",
+    "SOP-OUT-006": "dispatch late ho gaya truck nikal gayi deri",
+    "SOP-OUT-004": "gaadi mein load karna truck loading",
+    "SOP-RET-001": "return aaya hai customer ka wapas aaya maal",
+    "SOP-RET-003": "return kharab condition check karna",
+    "SOP-HSE-001": "helmet jute gloves pehenna zaruri hai",
+    "SOP-HSE-005": "chot lag gayi zakhmi pehle upchar ambulance",
+    "SOP-HSE-006": "aag lag gayi dhuan nikal raha hai",
+    "SOP-HSE-007": "paani tel gir gaya fisalan floor par leak",
+    "SOP-HSE-010": "kaam asurakshit lag raha hai kaam rok do khatra",
+    "SOP-EQP-002": "scanner kharab scanner chal nahi raha nahi chalta",
+    "SOP-EQP-003": "belt ruk gayi conveyor band ho gaya atak gaya",
+    "SOP-EQP-004": "forklift kharab brake kaam nahi kar raha tel leak hydraulic",
+    "SOP-EQP-006": "machine band karo repair mat karo maintenance ko batao",
+    "SOP-QC-004": "kuch zehreela chemical smell gandagi dikh rahi hai",
+    "SOP-EMP-003": "shift khatam ghar jaane se pehle kya karna hai",
+    "SOP-EMP-005": "chhutti leave lena hai chhutti kaise len",
+    "SOP-EMP-007": "overtime extra ghante zyada kaam",
+    "SOP-EMP-009": "agli shift ko batana handover likhna",
+    "SOP-IT-001": "scanner nahi chal raha scan nahi ho raha scanner theek karo",
+    "SOP-IT-002": "printer nahi chal raha label print nahi ho raha",
+    "SOP-IT-003": "login nahi ho raha password bhool gaya account lock",
+    "SOP-IT-004": "wms mein error system hang ho gaya",
+    "SOP-IT-005": "wifi nahi aa raha network chala gaya internet nahi",
+}

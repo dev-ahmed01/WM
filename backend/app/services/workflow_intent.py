@@ -155,7 +155,7 @@ class WorkflowIntentService:
                             message,
                             " ".join(
                                 str(item.get(field) or "")
-                                for field in ("title", "workflow_code", "description")
+                                for field in ("title", "workflow_code", "description", "aliases")
                             ),
                         )
                     + 0.25

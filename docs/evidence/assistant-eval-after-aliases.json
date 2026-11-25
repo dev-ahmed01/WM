@@ -1,0 +1,93 @@
+{
+  "total": 293,
+  "http_errors": 0,
+  "answerable_top1": 0.975,
+  "answerable_top3": 0.993,
+  "latency_ms": {
+    "p50": 148.3,
+    "p95": 460.3,
+    "mean": 196.6
+  },
+  "by_tag": {
+    "derived_hindi_title": {
+      "n": 85,
+      "top1": 0.976,
+      "top3": 1.0
+    },
+    "derived_purpose": {
+      "n": 85,
+      "top1": 0.988,
+      "top3": 1.0
+    },
+    "derived_title": {
+      "n": 85,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "en": {
+      "n": 3,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "hi": {
+      "n": 1,
+      "top1": 0.0,
+      "top3": 1.0
+    },
+    "hinglish": {
+      "n": 19,
+      "top1": 0.895,
+      "top3": 0.947
+    },
+    "injection": {
+      "n": 1,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 1
+    },
+    "live_data": {
+      "n": 1,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 1
+    },
+    "oos": {
+      "n": 8,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 3
+    },
+    "safety": {
+      "n": 3,
+      "top1": 0.667,
+      "top3": 0.667
+    },
+    "typo": {
+      "n": 2,
+      "top1": 1.0,
+      "top3": 1.0
+    }
+  },
+  "failures": [
+    {
+      "q": "overtime ke liye kya karna hai",
+      "expect": [
+        "SOP-EMP-007"
+      ],
+      "cands": [
+        "SOP_EMP_003"
+      ],
+      "tag": "hinglish"
+    },
+    {
+      "q": "a chemical box is leaking should I clean it up",
+      "expect": [
+        "SOP-HSE-007",
+        "SOP-INB-007",
+        "SOP-QC-004"
+      ],
+      "cands": [
+        "SOP_INB_008"
+      ],
+      "tag": "safety"
+    }
+  ],
+  "wrong_workflow_starts": []
+}

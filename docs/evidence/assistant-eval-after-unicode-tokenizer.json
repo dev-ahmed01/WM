@@ -1,0 +1,551 @@
+{
+  "total": 293,
+  "http_errors": 0,
+  "answerable_top1": 0.675,
+  "answerable_top3": 0.689,
+  "latency_ms": {
+    "p50": 118.9,
+    "p95": 435.5,
+    "mean": 171.7
+  },
+  "by_tag": {
+    "derived_hindi_title": {
+      "n": 85,
+      "top1": 0.012,
+      "top3": 0.012
+    },
+    "derived_purpose": {
+      "n": 85,
+      "top1": 0.988,
+      "top3": 1.0
+    },
+    "derived_title": {
+      "n": 85,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "en": {
+      "n": 3,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "hi": {
+      "n": 1,
+      "top1": 0.0,
+      "top3": 0.0
+    },
+    "hinglish": {
+      "n": 19,
+      "top1": 0.737,
+      "top3": 0.895
+    },
+    "injection": {
+      "n": 1,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 1
+    },
+    "live_data": {
+      "n": 1,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 1
+    },
+    "oos": {
+      "n": 8,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 3
+    },
+    "safety": {
+      "n": 3,
+      "top1": 0.667,
+      "top3": 0.667
+    },
+    "typo": {
+      "n": 2,
+      "top1": 1.0,
+      "top3": 1.0
+    }
+  },
+  "failures": [
+    {
+      "q": "सप्लायर आगमन और गेट जाँच",
+      "expect": [
+        "SOP-INB-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिसीविंग एरिया की तैयारी",
+      "expect": [
+        "SOP-INB-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "अनलोडिंग समन्वय",
+      "expect": [
+        "SOP-INB-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "परचेज़ ऑर्डर सत्यापन",
+      "expect": [
+        "SOP-INB-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "मात्रा सत्यापन",
+      "expect": [
+        "SOP-INB-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "गुड्स रिसीप्ट पोस्टिंग",
+      "expect": [
+        "SOP-INB-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "क्षतिग्रस्त इनबाउंड सामान",
+      "expect": [
+        "SOP-INB-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "शिपमेंट विसंगति रिपोर्टिंग",
+      "expect": [
+        "SOP-INB-008"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पुटअवे",
+      "expect": [
+        "SOP-STO-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "बिन पहचान",
+      "expect": [
+        "SOP-STO-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "लोकेशन आवंटन",
+      "expect": [
+        "SOP-STO-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्टॉक पृथक्करण",
+      "expect": [
+        "SOP-STO-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्टोरेज लेबलिंग",
+      "expect": [
+        "SOP-STO-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्टॉक रोटेशन",
+      "expect": [
+        "SOP-STO-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "लोकेशन ट्रांसफर",
+      "expect": [
+        "SOP-STO-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "साइकिल काउंट",
+      "expect": [
+        "SOP-INV-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "फिज़िकल स्टॉक काउंट",
+      "expect": [
+        "SOP-INV-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "इन्वेंटरी मिलान",
+      "expect": [
+        "SOP-INV-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्टॉक समायोजन",
+      "expect": [
+        "SOP-INV-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रीप्लेनिशमेंट",
+      "expect": [
+        "SOP-INV-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "गुम इन्वेंटरी",
+      "expect": [
+        "SOP-INV-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "एक्सपायर्ड इन्वेंटरी",
+      "expect": [
+        "SOP-INV-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्टॉक विसंगति रिपोर्टिंग",
+      "expect": [
+        "SOP-INV-008"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पिक लिस्ट पढ़ना",
+      "expect": [
+        "SOP-PCK-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "आइटम सत्यापन",
+      "expect": [
+        "SOP-PCK-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "बारकोड स्कैनिंग",
+      "expect": [
+        "SOP-PCK-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "बैच पिकिंग",
+      "expect": [
+        "SOP-PCK-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "शॉर्ट पिकिंग",
+      "expect": [
+        "SOP-PCK-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "गलत आइटम पिक होना",
+      "expect": [
+        "SOP-PCK-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पिकिंग पूर्ण करना",
+      "expect": [
+        "SOP-PCK-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पैकिंग पर ऑर्डर जाँच",
+      "expect": [
+        "SOP-PAK-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पैकेजिंग का चयन",
+      "expect": [
+        "SOP-PAK-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "नाज़ुक सामान की हैंडलिंग",
+      "expect": [
+        "SOP-PAK-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "लेबल सत्यापन",
+      "expect": [
+        "SOP-PAK-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पैकेजिंग गुणवत्ता जाँच",
+      "expect": [
+        "SOP-PAK-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पैकिंग पूर्ण करना",
+      "expect": [
+        "SOP-PAK-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "ऑर्डर स्टेजिंग",
+      "expect": [
+        "SOP-OUT-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "शिपमेंट सत्यापन",
+      "expect": [
+        "SOP-OUT-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "डिस्पैच दस्तावेज़",
+      "expect": [
+        "SOP-OUT-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "लोडिंग समन्वय",
+      "expect": [
+        "SOP-OUT-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "कैरियर हैंडओवर",
+      "expect": [
+        "SOP-OUT-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "डिस्पैच में देरी",
+      "expect": [
+        "SOP-OUT-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "शिपमेंट क्लोज़र",
+      "expect": [
+        "SOP-OUT-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिटर्न स्वीकार करना",
+      "expect": [
+        "SOP-RET-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिटर्न सत्यापन",
+      "expect": [
+        "SOP-RET-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिटर्न की स्थिति जाँच",
+      "expect": [
+        "SOP-RET-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिटर्न रीस्टॉक",
+      "expect": [
+        "SOP-RET-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "रिटर्न क्वारंटीन",
+      "expect": [
+        "SOP-RET-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "अस्वीकृत रिटर्न",
+      "expect": [
+        "SOP-RET-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पीपीई आवश्यकताएँ",
+      "expect": [
+        "SOP-HSE-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "खतरे की रिपोर्टिंग",
+      "expect": [
+        "SOP-HSE-002"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "आपातकालीन संचार",
+      "expect": [
+        "SOP-HSE-003"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "निकासी जागरूकता",
+      "expect": [
+        "SOP-HSE-004"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "चोट की रिपोर्टिंग",
+      "expect": [
+        "SOP-HSE-005"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "अग्नि सुरक्षा जागरूकता",
+      "expect": [
+        "SOP-HSE-006"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "स्पिल रिपोर्टिंग",
+      "expect": [
+        "SOP-HSE-007"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "पैदल यात्री सुरक्षा",
+      "expect": [
+        "SOP-HSE-008"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "नियर-मिस रिपोर्टिंग",
+      "expect": [
+        "SOP-HSE-009"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "असुरक्षित कार्य एस्केलेशन",
+      "expect": [
+        "SOP-HSE-010"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    },
+    {
+      "q": "उपकरण निरीक्षण रिपोर्टिंग",
+      "expect": [
+        "SOP-EQP-001"
+      ],
+      "cands": [],
+      "tag": "derived_hindi_title"
+    }
+  ],
+  "wrong_workflow_starts": []
+}

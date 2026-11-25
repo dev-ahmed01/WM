@@ -14,6 +14,16 @@ _STOP_WORDS = {
     "want", "what", "when", "where", "why", "with", "workflow", "would", "you",
 }
 
+# Latin letters/digits plus the Devanagari block (letters AND vowel signs, which
+# \w would split on), so Hindi questions yield search terms without translation.
+_TERM_PATTERN = "[a-z0-9\u0900-\u097f][a-z0-9_\u0900-\u097f-]{1,}"
+
+_HINDI_STOP_WORDS = {
+    "है", "हैं", "था", "थी", "हो", "का", "की", "के", "को", "से", "में", "पर", "और", "या", "भी",
+    "क्या", "कैसे", "क्यों", "कब", "कहाँ", "कहां", "करूँ", "करूं", "करें", "करना", "कर", "मैं",
+    "मुझे", "मेरा", "मेरी", "आया", "आई", "गया", "गयी", "रहा", "रही", "रहे", "ये", "यह", "वह", "तो",
+}
+
 _DOMAIN_EQUIVALENTS = {
     "box": "handling_unit",
     "boxes": "handling_unit",
@@ -49,8 +59,10 @@ _NEGATIVE_MATCH_PATTERN = re.compile(
 
 
 def _is_stop_word(term: str) -> bool:
-    if term in _STOP_WORDS:
+    if term in _STOP_WORDS or term in _HINDI_STOP_WORDS:
         return True
+    if not term.isascii():
+        return False  # fuzzy stop-word matching is Latin-only
     if len(term) < 3:
         return False
     return any(
@@ -63,7 +75,7 @@ def _is_stop_word(term: str) -> bool:
 
 def search_terms(query: str) -> List[str]:
     normalized_query = _NEGATIVE_MATCH_PATTERN.sub("mismatch", query or "")
-    terms = re.findall(r"[a-z0-9][a-z0-9_-]{1,}", normalized_query.lower())
+    terms = re.findall(_TERM_PATTERN, normalized_query.lower())
     result: List[str] = []
     for term in terms:
         if not _is_stop_word(term) and term not in result:
@@ -97,7 +109,7 @@ def fuzzy_relevance_score(query: str, candidate_content: str) -> float:
     if not query_tokens:
         return 0.0
     raw_candidate_tokens = set(
-        re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (candidate_content or "").lower())
+        re.findall(_TERM_PATTERN, (candidate_content or "").lower())
     )
     raw_candidate_tokens.update(
         part

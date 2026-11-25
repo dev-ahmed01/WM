@@ -211,11 +211,15 @@ class KnowledgeRepository:
         """Return executable SOPs authorized for the caller's operational scope."""
         query = """
             SELECT workflow_id, workflow_code, title, description, department_id,
-                   category, workflow_version_id, version_number
+                   category, workflow_version_id, version_number, aliases
             FROM (
                 SELECT w.id AS workflow_id, w.workflow_code, w.title,
                        w.description, w.department_id, w.category,
                        wv.id AS workflow_version_id, wv.version_number,
+                       -- Authored synonyms/phrases (Hindi, Hinglish) indexed by the compiler.
+                       (SELECT MAX(SUBSTRING(sm.search_content FROM 'Also known as: (.*)$'))
+                          FROM KNOWLEDGE_STUDIO.workflow_search_metadata sm
+                         WHERE sm.workflow_version_id = wv.id) AS aliases,
                        ROW_NUMBER() OVER (
                            PARTITION BY w.id
                            ORDER BY wv.version_number DESC, wv.published_at DESC
