@@ -49,3 +49,5 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+.demo-credentials.local.json
+.venv/
