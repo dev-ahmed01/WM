@@ -163,6 +163,7 @@ def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             # false positive = an unanswerable question that started a workflow
             d["workflow_started_wrongly"] = sum(r["started"] for r in rs)
             d["with_any_suggestion"] = sum(bool(r["cands"]) for r in rs)
+            d["escalated_to_human"] = sum(r["escalated"] for r in rs)
         by_tag[tag] = d
     lat = [r["ms"] for r in results if r["status"] == 200]
     ans = [r for r in results if r["expect"]]

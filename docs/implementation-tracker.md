@@ -9,7 +9,7 @@ Branch: `dev/commercial-product` (not pushed; GitHub MCP failed to connect and n
 - Run backend locally: `APP_ENV=dev DATABASE_URL=... JWT_SECRET=<32+ chars> INTERNAL_WEBHOOK_SECRET=<16+ chars> LOCAL_AI_ENABLED=false VOICE_ENABLED=false PYTHONPATH=backend python -m uvicorn app.main:app --port 8000`
 - Demo data: `PYTHONPATH=backend python -m demo.seed_demo` (idempotent; `--republish` recompiles SOPs; `--reset-passwords`). Credentials are written to git-ignored `.demo-credentials.local.json`.
 - Assistant eval: `PYTHONPATH=backend python backend/evals/assistant_eval.py --out result.json`.
-- Ollama 0.40 is installed on the host with **no models pulled**; Whisper/Piper/M2M100 models not downloaded.
+- Ollama 0.40 on the host has `qwen2.5:3b` and `nomic-embed-text` pulled (2026-11-25). Whisper/Piper/M2M100 models are not downloaded.
 
 ## Phase status
 | Phase | Status | Evidence |
@@ -48,9 +48,12 @@ Branch: `dev/commercial-product` (not pushed; GitHub MCP failed to connect and n
 - Compiler never indexed authored synonyms/phrases.
 - Seeder idempotency check ignored workflow-code normalization (SOP-X → SOP_X).
 
+## Update after approval to pull models
+Done: models pulled; knowledge-gap escalation (Scenario D, first half); live-data guard; truncation fix; full suite 581 pass / 1 skip / 0 fail.
+Found: LLM follow-ups take ~10 s on this CPU and hit the 8 s timeout; exception text isn't evidence for the current step.
+
 ## Open issues / blockers
-- No Ollama models → LLM, embeddings, Hindi translation, speech all unexercised. Pulling `qwen2.5:3b` + `nomic-embed-text` is a few GB; needs go-ahead.
-- Truncated confirmation text ("…confirm it has a. Start it?") — description cut at a stop word; fix pending.
+- Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).
 - Out-of-scope questions show unrelated "closest SOP" suggestions and create no escalation.
 - Publishing has no approval step; deprecated older version is replaced at upload.
 - GitHub MCP not connected; nothing pushed.

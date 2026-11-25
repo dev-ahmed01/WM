@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.text_matching import fuzzy_relevance_score
-from app.services import safety_triage
+from app.services import live_data_guard, safety_triage
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.models.copilot import (
@@ -227,9 +227,12 @@ def _workflow_confirmation_explanation(
         ),
         "Verified operational guidance",
     )
-    context_words = re.findall(r"[A-Za-z0-9'-]+", raw_context)[:9]
-    context = " ".join(context_words).rstrip(".,;:")
-    return f"{context}. Start it? Yes or no."
+    words = raw_context.split()
+    # Never cut mid-phrase silently: show a full short description, or mark the cut.
+    context = " ".join(words[:18]).rstrip(".,;:")
+    if len(words) > 18:
+        context += "..."
+    return f"{context}. Start it? Yes or no." if not context.endswith("...") else f"{context} Start it? Yes or no."
 
 
 async def _localized_text(text: str, language: str | None) -> str:
@@ -1115,6 +1118,14 @@ async def copilot_message(
             citations=[], confidence_score=1.0, is_grounded=True, requires_escalation=True,
         )
 
+    if live_data_guard.needs_live_data(payload.message) and active_session is None:
+        return _persist_control_reply(
+            conversation_id=conversation_id, user_message_id=user_message_id,
+            intent="LIVE_DATA_UNAVAILABLE", answer=live_data_guard.MESSAGE,
+            spoken_answer=live_data_guard.MESSAGE, message_intent="LIVE_DATA_UNAVAILABLE",
+            confidence_score=1.0,
+        )
+
     # Read-only evidence mode: resolve *before* every confirmation, completion,
     # decision, or workflow advancement branch. Even "done" in this mode cannot
     # mutate the persisted operational state.
@@ -1440,6 +1451,40 @@ async def copilot_message(
             # When speech/translation is too noisy for word overlap, still let
             # the employee choose from real published SOPs instead of waiting
             # through model and embedding timeouts or inventing guidance.
+            if catalog and not ranked_options:
+                # Nothing in the approved library resembles the question: say so,
+                # never guess, and open a knowledge-gap case for a human.
+                gap_text = ("I don't have an approved procedure for that, so I won't guess.")
+                gap = _persist_control_reply(
+                    conversation_id=conversation_id, user_message_id=user_message_id,
+                    intent="KNOWLEDGE_GAP", answer=gap_text, spoken_answer=gap_text,
+                    active_session=active_session, position=None, message_intent="KNOWLEDGE_GAP",
+                    confidence_score=0.0,
+                )
+                case_created = False
+                try:
+                    await EscalationService().escalate(
+                        conversation_message_id=gap.message_id,
+                        reason="Knowledge gap: no approved SOP matches the question",
+                    )
+                    case_created = True
+                except Exception:
+                    copilot_logger.exception("Knowledge-gap escalation could not be created")
+                try:
+                    AnalyticsService.record_event(
+                        event_type="copilot.knowledge_gap", conversation_message_id=gap.message_id,
+                        payload={"user_id": user_id, "department_id": department_id,
+                                 "case_created": case_created},
+                    )
+                except Exception:
+                    copilot_logger.exception("Knowledge-gap telemetry write failed")
+                tail = (" I have sent your question to your supervisor so the missing guidance can be added."
+                        if case_created else
+                        " I could not send it to your supervisor from here, so please ask them directly.")
+                gap.answer = gap.spoken_answer = gap_text + tail
+                gap.requires_escalation = case_created
+                gap.is_grounded = False
+                return gap
             menu_options = ranked_options or catalog[:3]
             if menu_options:
                 suggestions = [

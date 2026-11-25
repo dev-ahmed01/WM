@@ -34,3 +34,20 @@ Latency (HTTP round-trip, local): p50 ≈ 150 ms, p95 ≈ 470 ms (no model call)
 3. Safety triage is rules-based (broad by design; false alarms possible: ~7 of 255 derived SOP-text questions tripped it).
 4. Truncated confirmation text bug: "Record each arriving vehicle and confirm it has a. Start it?" (description is cut at a stop-word) — not yet fixed.
 5. No Ollama models installed on this machine; embedding/LLM paths, Hindi translation and speech were not exercised.
+
+
+## Update: knowledge-gap escalation, live-data guard, Ollama enabled (same day)
+- Out-of-scope questions with no resembling SOP now say "I don't have an approved procedure for that, so I won't guess" and
+  open an escalation (visible in the scoped `/escalations` list): 5 of 8 out-of-scope eval cases escalate; 3 still get
+  weak "closest option" suggestions because they share a common word with some SOP. Not yet "fixed".
+- "Stock level / bin / shipment status" questions get an explicit "I can't see live warehouse data" reply (no numbers).
+- The confirmation-text truncation bug is fixed (full short description; punctuation kept).
+- Models installed: `qwen2.5:3b` (1.9 GB) and `nomic-embed-text` (274 MB). `/health/ai` reports both ready.
+  Eval with Ollama enabled (`assistant-eval-with-ollama.json`): top-3 98.9%, identical in practice, because the
+  SOP-selection stage is deterministic and does not call the model. **The model is only used for free-form follow-ups.**
+- Measured on this CPU-only PC: a free-form follow-up question during a workflow ("what if the WMS rejects the receipt?")
+  takes **~10 s** and falls back to "I could not find verified organizational guidance" + escalation, although the SOP
+  contains that exception. Two causes to fix next: the 8 s `LOCAL_AI_TIMEOUT_SECONDS` is being hit on this hardware,
+  and exception/decision text is not part of the evidence for the current step. Deterministic step guidance
+  ("yes", "done", next step) responds in ~0.1-0.2 s.
+- Full backend suite with live Postgres tests: 581 passed, 1 skipped, 0 failed.

@@ -491,7 +491,7 @@ def test_named_sop_request_requires_confirmation_without_starting():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"] == "Inbound receiving seal verification and inventory intake. Start it? Yes or no."
+    assert body["answer"] == "Inbound receiving, seal verification, and inventory intake. Start it? Yes or no."
     assert len(body["answer"].split()) < 15
     assert "get me receive shipment sop" not in body["answer"]
     assert "receive_shipment_v1_1" not in body["spoken_answer"]

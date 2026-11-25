@@ -1,0 +1,113 @@
+{
+  "total": 293,
+  "http_errors": 0,
+  "answerable_top1": 0.972,
+  "answerable_top3": 0.989,
+  "latency_ms": {
+    "p50": 128.5,
+    "p95": 481.1,
+    "mean": 184.7
+  },
+  "by_tag": {
+    "derived_hindi_title": {
+      "n": 85,
+      "safety_stops": 1,
+      "top1": 0.976,
+      "top3": 1.0
+    },
+    "derived_purpose": {
+      "n": 85,
+      "safety_stops": 3,
+      "top1": 0.988,
+      "top3": 1.0
+    },
+    "derived_title": {
+      "n": 85,
+      "safety_stops": 3,
+      "top1": 0.988,
+      "top3": 0.988
+    },
+    "en": {
+      "n": 3,
+      "safety_stops": 0,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "hi": {
+      "n": 1,
+      "safety_stops": 0,
+      "top1": 0.0,
+      "top3": 1.0
+    },
+    "hinglish": {
+      "n": 19,
+      "safety_stops": 5,
+      "top1": 0.842,
+      "top3": 0.895
+    },
+    "injection": {
+      "n": 1,
+      "safety_stops": 0,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 1,
+      "escalated_to_human": 0
+    },
+    "live_data": {
+      "n": 1,
+      "safety_stops": 0,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 0,
+      "escalated_to_human": 0
+    },
+    "oos": {
+      "n": 8,
+      "safety_stops": 0,
+      "workflow_started_wrongly": 0,
+      "with_any_suggestion": 3,
+      "escalated_to_human": 5
+    },
+    "safety": {
+      "n": 3,
+      "safety_stops": 3,
+      "top1": 1.0,
+      "top3": 1.0
+    },
+    "typo": {
+      "n": 2,
+      "safety_stops": 0,
+      "top1": 1.0,
+      "top3": 1.0
+    }
+  },
+  "failures": [
+    {
+      "q": "how do I physical stock count",
+      "expect": [
+        "SOP-INV-002"
+      ],
+      "cands": [],
+      "tag": "derived_title"
+    },
+    {
+      "q": "overtime ke liye kya karna hai",
+      "expect": [
+        "SOP-EMP-007"
+      ],
+      "cands": [
+        "SOP_EMP_003"
+      ],
+      "tag": "hinglish"
+    },
+    {
+      "q": "conveyor ruk gaya",
+      "expect": [
+        "SOP-EQP-003"
+      ],
+      "cands": [
+        "SOP_EQP_004"
+      ],
+      "tag": "hinglish"
+    }
+  ],
+  "wrong_workflow_starts": []
+}
