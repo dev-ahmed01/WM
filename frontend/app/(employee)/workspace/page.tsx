@@ -10,6 +10,7 @@ import {
 import { apiClient } from '@/lib/api-client';
 import { useRequireRole } from '@/lib/auth';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { MyQuestions } from '@/components/work/MyQuestions';
 import { workTypeLabel, workStatusLabel, type WorkItem, type WorkQueueResponse } from '@/lib/work-items';
 
 type Filter = 'all' | 'high' | 'receiving';
@@ -136,6 +137,7 @@ export default function WorkDesk() {
             <p className="mt-3 text-xs leading-6 text-[#c1d9ca]">Find published procedures and review cited evidence before taking action.</p>
             <Link href="/copilot" className="mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#c1efd3] px-4 text-sm font-semibold text-[#123728] transition hover:bg-white">Ask about your work <ArrowRight className="h-4 w-4" /></Link>
           </section>
+          <MyQuestions />
           <div className="rounded-[1.35rem] border border-[#dae4dc] bg-white p-5">
             <h3 className="text-xs font-bold uppercase tracking-wide text-[#597765]">Quick access</h3>
             <div className="mt-3 divide-y divide-[#edf1ed]">

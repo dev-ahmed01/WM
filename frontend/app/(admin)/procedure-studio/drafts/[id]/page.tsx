@@ -10,9 +10,9 @@ import { LoadingState } from '@/components/shared/LoadingState';
 
 type DraftStep={id:string;instruction:string;source_line:number|null;reviewed:boolean;output_type?:'CONFIRMATION'|'TEXT_INPUT'|'NUMERIC_INPUT'|'DOCUMENT_UPLOAD';evidence_type?:'NONE'|'PHOTO_JPEG'|'DOCUMENT_PDF'};
 type DraftDecision={question:string;options:{code:string;label:string;requires_supervisor_review?:boolean}[]};
-type CompilePreview={valid:boolean;can_publish:boolean;validation_errors:string[];warnings:string[];states:number;steps:number;decisions:number;review_revision:number;workflow_code:string};
+type CompilePreview={valid:boolean;can_publish:boolean;approval_required?:boolean;approved?:boolean;validation_errors:string[];warnings:string[];states:number;steps:number;decisions:number;review_revision:number;workflow_code:string};
 type Draft={id:string;title:string;source_filename:string;source_sha256:string;source_excerpt:string;
-  steps:DraftStep[];warnings:string[];decision?:DraftDecision;published_version_id?:string|null;status:'draft'|'reviewed'|'published';revision:number;updated_at:string};
+  steps:DraftStep[];warnings:string[];decision?:DraftDecision;published_version_id?:string|null;rejection_note?:string|null;source_gap_id?:string|null;status:'draft'|'reviewed'|'published';revision:number;updated_at:string};
 
 export default function ProcedureDraftEditor() {
   const { user, loading }=useRequireRole(['admin']);
@@ -112,6 +112,7 @@ export default function ProcedureDraftEditor() {
 
   return <div className="wm-page max-w-[1450px] space-y-6 pb-12">
     <Link href="/procedure-studio/drafts" className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-800"><ArrowLeft className="h-4 w-4"/>Draft library</Link>
+    {draft.rejection_note&&draft.status==='draft'?<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900"><strong>Returned by a manager:</strong> {draft.rejection_note}</p>:null}
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><p className="text-[10px] font-bold uppercase tracking-[.17em] text-emerald-700">SOURCE-REVIEWED PROCEDURE / REVISION {draft.revision}</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] text-[#1a3324] sm:text-[2.5rem]">Procedure editor</h1>
@@ -247,6 +248,8 @@ export default function ProcedureDraftEditor() {
             <p className="mt-2 text-[11px] text-[#617e69]">{preview.states} states · {preview.steps} worker steps · {preview.decisions} decisions</p>
             {preview.validation_errors.map((e,i)=><p key={i} className="mt-2 text-xs text-red-700">{e}</p>)}
             {preview.warnings.map((e,i)=><p key={i} className="mt-2 text-xs text-amber-800">{e}</p>)}
+            {preview.valid&&!published&&preview.approval_required&&!preview.approved?<p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">Waiting for manager approval. A manager must approve this exact reviewed revision on the Approvals page before it can be published. Editing the draft voids any approval.</p>:null}
+            {preview.approved&&!published?<p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">A manager approved this revision.</p>:null}
             {preview.can_publish&&!published?<div className="mt-4 space-y-3 border-t border-[#dae8dd] pt-3">
               <label className="flex items-start gap-2 text-xs leading-5 text-[#446f50]">
                 <input type="checkbox" checked={confirmedPublish}

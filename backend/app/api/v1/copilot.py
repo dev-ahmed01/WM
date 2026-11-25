@@ -72,6 +72,9 @@ copilot_logger = logging.getLogger("copilot_services")
 
 router = APIRouter(prefix="/copilot", tags=["WorkMate Copilot"])
 
+# Minimum catalog match score before a procedure is offered as a suggestion.
+SUGGESTION_FLOOR = 0.30
+
 _VOICE_CONTENT_TYPES = {
     "audio/flac", "audio/m4a", "audio/mp3", "audio/mp4", "audio/mpeg",
     "audio/ogg", "audio/wav", "audio/webm", "audio/x-m4a", "audio/x-wav",
@@ -1452,6 +1455,8 @@ async def copilot_message(
             # When speech/translation is too noisy for word overlap, still let
             # the employee choose from real published SOPs instead of waiting
             # through model and embedding timeouts or inventing guidance.
+            # Weak word overlap (scores of ~0.2) is noise, not a candidate procedure.
+            ranked_options = [o for o in ranked_options if float(o.get("match_score") or 0.0) >= SUGGESTION_FLOOR]
             if catalog and not ranked_options:
                 # Nothing in the approved library resembles the question: say so,
                 # never guess, and open a knowledge-gap case for a human.

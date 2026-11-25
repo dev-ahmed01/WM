@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity, BarChart3, BookOpenText, Bot, Building2, ChevronDown,
   ClipboardCheck, ClipboardList, History, LayoutDashboard, LogOut, AlertTriangle,
-  Library, Menu, Search, ShieldCheck, Users, X,
+  CircleHelp, FileCheck2, Library, Menu, Search, ShieldCheck, Users, X,
 } from 'lucide-react';
 import { loadUserClaims, getUserClaims, clearCachedUser, type UserClaims } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
   { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
   { label: 'Knowledge Studio', description: 'Upload and publish SOPs', href: '/knowledge-studio', icon: Library, roles: ['admin'] },
+  { label: 'Unanswered questions', description: 'Close knowledge gaps', href: '/knowledge-gaps', icon: CircleHelp, roles: ['admin','manager'] },
+  { label: 'SOP approvals', description: 'Approve before publishing', href: '/approvals', icon: FileCheck2, roles: ['manager'] },
   { label: 'Employees', description: 'Invite and manage people', href: '/employees', icon: Users, roles: ['admin'] },
   { label: 'Procedure Studio', description: 'Manage governed SOPs', href: '/procedure-studio', icon: BookOpenText, roles: ['admin'] },
   { label: 'Task exceptions', description: 'Blocked work and reviews', href: '/work/exceptions', icon: AlertTriangle, roles: ['admin','manager'] },
@@ -116,7 +118,7 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
   const sections = [
     { title: 'Execute', items: visibleItems.filter(item => ['/workspace','/control-room','/work/exceptions','/copilot','/copilot/handover'].includes(item.href)) },
     { title: 'Knowledge', items: visibleItems.filter(item => ['/copilot/sources','/copilot/history','/knowledge-studio','/procedure-studio'].includes(item.href)) },
-    { title: 'Supervise', items: visibleItems.filter(item => ['/employees','/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
+    { title: 'Supervise', items: visibleItems.filter(item => ['/knowledge-gaps','/approvals','/employees','/handover/review','/intelligence-hub','/pilot'].includes(item.href)) },
   ];
 
   return (
