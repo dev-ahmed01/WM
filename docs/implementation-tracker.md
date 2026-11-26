@@ -110,3 +110,10 @@ no admin/manager console for knowledge-gap escalations beyond the Intelligence H
 3. Publish approval gate + version policy; org-wide knowledge scope; extend RLS.
 4. Admin UI: employee management (API exists), conversation/escalation console; manager approvals.
 5. Browser E2E (Playwright) for scenarios A–J; screenshots; final report.
+
+
+## Update — VPS package, metrics, bootstrap, final report
+- Done (verified): `deploy/vps` compose/runbook + static topology audit (9 tests); bootstrap creates org/warehouse/admin and the admin can use admin screens (live test); `/analytics/summary` (scoped, defined, honest about unavailable metrics; correct under the restricted DB role) and `/analytics/roi-estimate` (labelled estimate); Measured-outcomes panel on the manager overview (typecheck clean; not yet exercised in a browser).
+- Full live suite: 599 passed, 1 skipped, 0 failed. RBAC golden regenerated (107 operations).
+- Corrections: RLS covers more operational tables than earlier docs said; scenarios now run as owner and as non-owner runtime login.
+- Not done: real VPS deployment/restore drill, helpful/not-helpful signal, SOP applicability by job profile, org-wide shared scope, screen-reader testing, browser suite in CI. `final-implementation-report.md` written.
