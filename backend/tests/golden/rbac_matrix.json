@@ -113,6 +113,12 @@
   "employee": "allowed",
   "manager": "allowed"
  },
+ "GET /api/v1/copilot/suggestions": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "GET /api/v1/escalations": {
   "admin": "denied",
   "anonymous": "denied",
@@ -510,6 +516,12 @@
   "manager": "denied"
  },
  "POST /api/v1/knowledge/references/{document_id}/archive": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/knowledge/test-answer": {
   "admin": "allowed",
   "anonymous": "denied",
   "employee": "denied",

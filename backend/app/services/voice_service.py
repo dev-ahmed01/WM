@@ -259,6 +259,26 @@ async def translate_to_hindi(text: str) -> str:
     return hindi
 
 
+def prewarm() -> None:
+    """Load every model once, in the background. Failures are logged and never stop the API."""
+    import time
+    started = time.perf_counter()
+    steps = (
+        ("whisper-" + settings.WHISPER_MODEL_EN, lambda: _whisper.model(settings.WHISPER_MODEL_EN)),
+        ("whisper-" + settings.WHISPER_MODEL, lambda: _whisper.model(settings.WHISPER_MODEL)),
+        ("piper", lambda: [_piper.wav("ready", lang) for lang in SUPPORTED if _piper.available().get(lang)]),
+        ("translation", lambda: _translator.load()),
+    )
+    for name, load in steps:
+        try:
+            begin = time.perf_counter()
+            load()
+            logger.info("voice prewarm: %s ready in %.1fs", name, time.perf_counter() - begin)
+        except Exception as exc:
+            logger.warning("voice prewarm: %s skipped (%s)", name, type(exc).__name__)
+    logger.info("voice prewarm finished in %.1fs", time.perf_counter() - started)
+
+
 def status() -> Dict[str, Any]:
     return {
         "enabled": bool(settings.VOICE_ENABLED),

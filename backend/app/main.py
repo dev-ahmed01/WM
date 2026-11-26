@@ -28,7 +28,11 @@ logger = logging.getLogger("workmate.main")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Release pooled database connections on shutdown."""
+    """Warm the voice models in the background; release pooled database connections on shutdown."""
+    if settings.VOICE_ENABLED and settings.VOICE_PREWARM:
+        import threading
+        from app.services import voice_service
+        threading.Thread(target=voice_service.prewarm, name="voice-prewarm", daemon=True).start()
     try:
         yield
     finally:

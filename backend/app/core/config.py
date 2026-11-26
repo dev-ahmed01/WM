@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # Private local speech: transcription, synthesis and Hindi translation. No external speech APIs.
     VOICE_ENABLED: bool = True
+    # Load the speech and translation models when the API starts so the first employee does not wait ~2 minutes.
+    VOICE_PREWARM: bool = False
     VOICE_MAX_AUDIO_BYTES: int = 12 * 1024 * 1024
     VOICE_MAX_SECONDS: int = Field(default=60, ge=5, le=180)
     VOICE_MAX_TTS_CHARS: int = Field(default=1500, ge=200, le=6000)

@@ -90,12 +90,31 @@ def _last_question(conversation_id: str, user_id: str) -> str:
     return row[0]
 
 
+def _with_preceding_questions(conversation_id: str, user_id: str, message_ids: List[str]) -> List[str]:
+    """Share the chosen messages plus the employee question each assistant answer responded to (own conversation only)."""
+    if not message_ids:
+        return []
+    with get_postgres_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT m.id, (SELECT q.id FROM workmate_copilot.conversation_messages q WHERE q.conversation_id=m.conversation_id "
+            "AND q.sender='employee' AND q.created_at <= m.created_at ORDER BY q.created_at DESC LIMIT 1) "
+            "FROM workmate_copilot.conversation_messages m JOIN workmate_copilot.conversations c ON c.id=m.conversation_id "
+            "WHERE m.conversation_id=%s AND c.user_id=%s AND m.id = ANY(%s)", (conversation_id, user_id, message_ids))
+        out: List[str] = []
+        for mid, qid in cur.fetchall():
+            for x in (qid, mid):
+                if x and x not in out:
+                    out.append(x)
+        return out
+
+
 @router.post("/copilot/escalate", status_code=201)
 async def ask_a_person(body: EscalateBody, user: Dict[str, Any] = Depends(require_role("employee", "manager", "admin"))):
     """Raise a request for a person. Only the conversation messages the employee selected are shared with staff."""
     question = await _guard(_last_question, body.conversation_id, user["sub"])
+    ids = await _guard(_with_preceding_questions, body.conversation_id, user["sub"], body.message_ids)
     return await _guard(CaseRepository.create_for_employee, user, body.conversation_id, "human_request", question,
-                        body.note, body.message_ids)
+                        body.note, ids)
 
 
 def _record_feedback(user: Dict[str, Any], body: FeedbackBody) -> Dict[str, Any]:
@@ -252,3 +271,19 @@ async def patch_conversation(conversation_id: str, body: ConversationPatch,
                             (body.archived, conversation_id))
         return {"id": conversation_id, "updated": True}
     return await _guard(work)
+
+
+@router.get("/copilot/suggestions")
+async def suggested_questions(limit: int = Query(4, ge=1, le=8),
+                              user: Dict[str, Any] = Depends(require_role("employee", "manager", "admin"))):
+    """Starter questions drawn from published SOPs in the caller's department - most-used first, never invented."""
+    def work():
+        with get_postgres_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT w.title, count(ws.id) AS used FROM knowledge_studio.workflows w "
+                "JOIN knowledge_studio.workflow_versions wv ON wv.workflow_id=w.id AND lower(wv.status)='published' "
+                "LEFT JOIN workmate_copilot.workflow_sessions ws ON ws.workflow_version_id=wv.id "
+                "WHERE w.department_id=%s GROUP BY w.title ORDER BY used DESC, w.title LIMIT %s",
+                (user.get("department_id"), limit))
+            return [{"title": t, "question": t} for t, _ in cur.fetchall()]
+    return {"items": await run_in_threadpool(work)}

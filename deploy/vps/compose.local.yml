@@ -13,9 +13,17 @@ services:
       LOCAL_AI_ENABLED: "true"
       LOCAL_AI_BASE_URL: http://host.docker.internal:11434
     ports: ["127.0.0.1:8010:8000"]
+    # A named volume, not a bind mount: Docker Desktop's file-share read of the 1.9 GB translation model failed with
+    # 'Out of memory' in a 4 GB VM. Fill it once with `docker cp` (see README section 8).
+    volumes: !override
+      - workmate_voice:/app/data/voice:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: !override [internal, public]
     depends_on: !override
       migrate:
         condition: service_completed_successfully
+
+volumes:
+  workmate_voice:
+    external: true

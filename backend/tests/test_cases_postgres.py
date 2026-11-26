@@ -150,3 +150,16 @@ def test_self_service_resolution_counts_only_employee_confirmed_outcomes(world):
     assert m["messages_in_devanagari"] == 1 and m["messages_in_latin_script"] == 3
     other = api.get("admin_b", "/analytics/summary").json()["metrics"]
     assert other["conversations_total"] == 0 and other["cases_opened"] == 0 and other["answers_rated_helpful"] == 0
+
+
+@pytest.mark.live_integration
+def test_howto_question_gets_the_approved_steps_not_a_bare_yes_or_no(world):
+    api = world
+    first = api.ask("emp1", "how do I do goods receipt posting")
+    text = first["answer"]
+    assert text.startswith("Here is the approved procedure for")
+    assert "\n1. " in text and "\n2. " in text                      # real numbered steps from the published SOP
+    assert "Say yes to start" in text                                # guided mode is offered, not forced
+    started = api.ask("emp1", "yes", first["conversation_id"])
+    assert started["active_session_id"] and started["active_step_number"] == 1
+    assert api.ask("emp2", "what is the weather on mars")["answer"].startswith("I don't have an approved procedure")

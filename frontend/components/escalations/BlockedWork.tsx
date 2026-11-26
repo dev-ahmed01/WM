@@ -49,7 +49,7 @@ const elapsed=(value:string,now:number)=>{
   return Math.floor(minutes/1440)+'d '+Math.floor(minutes%1440/60)+'h';
 };
 
-export default function SupervisorExceptionDesk() {
+export function BlockedWork() {
   const { user, loading }=useRequireRole(['admin','manager']);
   const [items,setItems]=useState<WorkCase[]>([]);
   const [selected,setSelected]=useState<CaseDetail|null>(null);

@@ -135,6 +135,7 @@ services:
       LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-qwen2.5:3b}
       LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}
       POSTGRES_POOL_SIZE: "8"
+      VOICE_PREWARM: "true"
       # No WMS/ERP callbacks leave this deployment unless an operator explicitly configures them.
       WORKMATE_OUTBOUND_ENABLED: "false"
       WORKMATE_OUTBOUND_ALLOWED_HOSTS: ""

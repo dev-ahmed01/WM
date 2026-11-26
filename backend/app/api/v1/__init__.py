@@ -21,6 +21,7 @@ from app.api.v1.admin_employees import router as admin_employees_router
 from app.api.v1.knowledge_gaps import router as knowledge_gaps_router
 from app.api.v1.voice import router as voice_router
 from app.api.v1.cases import router as cases_router
+from app.api.v1.knowledge_test import router as knowledge_test_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -43,6 +44,7 @@ api_v1_router.include_router(admin_employees_router)
 api_v1_router.include_router(knowledge_gaps_router)
 api_v1_router.include_router(voice_router)
 api_v1_router.include_router(cases_router)
+api_v1_router.include_router(knowledge_test_router)
 
 __all__ = [
     "api_v1_router",

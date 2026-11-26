@@ -40,7 +40,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     safeHeaders.set('Authorization', `Bearer ${access}`);
     return fetch(dest, {
       method: request.method, headers: safeHeaders,
-      body, cache: 'no-store', signal: AbortSignal.timeout(25000),
+      body, cache: 'no-store', signal: AbortSignal.timeout(path[0] === 'voice' ? 120000 : 25000), // a cold Hindi transcription alone can take ~25 s on a small CPU
     });
   }
   try {

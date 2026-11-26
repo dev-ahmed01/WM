@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 150 20% 98%;
+    --background: 120 10% 98%;
     --foreground: 164 34% 11%;
     --card: 0 0% 100%;
     --card-foreground: 164 34% 11%;
@@ -21,7 +21,7 @@
     --border: 150 12% 88%;
     --input: 150 12% 82%;
     --ring: 158 64% 31%;
-    --radius: 0.875rem;
+    --radius: 0.75rem;
   }
 
   * {
@@ -36,7 +36,14 @@
   body {
     @apply bg-background text-foreground antialiased;
     min-height: 100vh;
-    font-family: "Segoe UI Variable", "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body), "Noto Sans Devanagari", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.015em;
   }
 
   ::selection {
@@ -60,15 +67,15 @@
   }
 
   .wm-panel {
-    @apply rounded-2xl border border-border/80 bg-card text-card-foreground shadow-panel;
+    @apply rounded-xl border border-border bg-card text-card-foreground;
   }
 
   .wm-input {
-    @apply w-full rounded-xl border border-input bg-white px-3.5 py-2.5 text-sm text-foreground shadow-sm transition placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply w-full rounded-lg border border-input bg-white px-3 py-2 text-sm text-foreground transition placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .wm-label {
-    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+    @apply mb-1.5 block text-xs font-medium text-muted-foreground;
   }
 
   .wm-eyebrow {

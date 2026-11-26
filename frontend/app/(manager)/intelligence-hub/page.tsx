@@ -1,126 +1,124 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ArrowRight, CircleCheck, HelpCircle, TrendingUp } from 'lucide-react';
 import { useRequireRole } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
-import { MetricCard } from '@/components/dashboard/MetricCard';
-import { MeasuredOutcomes } from '@/components/dashboard/MeasuredOutcomes';
-import { PageHeader } from '@/components/shared/PageHeader';
+import { EmptyState, ErrorNote, Page, PageTitle, inputClass } from '@/components/shared/ui';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
-type AnalyticsRow = Record<string, any>;
+interface Summary { top_questions: { question: string; count: number; people: number }[]; metrics: Record<string, number | null>; definitions: Record<string, string>; unavailable: Record<string, string> }
+type Row = Record<string, any>;
+interface Dept { id: string; name: string }
 
-function EmptyMetric({ children }: { children: React.ReactNode }) {
-  return <div className="grid min-h-36 place-items-center rounded-xl border border-dashed bg-muted/25 p-5 text-center text-xs leading-5 text-muted-foreground">{children}</div>;
+const pct = (v: number | null | undefined) => (v == null ? '—' : `${v}%`);
+const hours = (v: number | null | undefined) => (v == null ? '—' : v < 1 ? `${Math.round(v * 60)} min` : `${v} h`);
+
+function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4" title={hint}>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
 }
 
-export default function IntelligenceHubPage() {
-  const { loading } = useRequireRole(['manager', 'admin']);
-  const [sopUsage, setSopUsage] = useState<AnalyticsRow[]>([]);
-  const [confusingProcedures, setConfusingProcedures] = useState<AnalyticsRow[]>([]);
-  const [departmentAdoption, setDepartmentAdoption] = useState<AnalyticsRow[]>([]);
-  const [confidenceTrends, setConfidenceTrends] = useState<AnalyticsRow[]>([]);
-  const [faqs, setFaqs] = useState<AnalyticsRow[]>([]);
-  const [escalations, setEscalations] = useState<AnalyticsRow[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [resolutionId, setResolutionId] = useState<string | null>(null);
-  const [resolutionNote, setResolutionNote] = useState('');
-  const [resolving, setResolving] = useState(false);
+function Bars({ items, empty }: { items: { label: string; value: number }[]; empty: string }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  if (!items.length) return <p className="px-4 py-6 text-sm text-muted-foreground">{empty}</p>;
+  return (
+    <ul className="space-y-3 p-4">
+      {items.map((i) => (
+        <li key={i.label}>
+          <div className="flex items-baseline justify-between gap-3 text-sm"><span className="line-clamp-1">{i.label}</span><span className="flex-none tabular-nums text-muted-foreground">{i.value}</span></div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" role="presentation"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(3, (i.value / max) * 100)}%` }} /></div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Card({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border bg-card">
+      <div className="px-4 pt-4"><h2 className="font-display text-base font-semibold">{title}</h2>{note ? <p className="mt-0.5 text-xs text-muted-foreground">{note}</p> : null}</div>
+      {children}
+    </section>
+  );
+}
+
+export default function Analytics() {
+  const { user, loading } = useRequireRole(['manager', 'admin']);
+  const [days, setDays] = useState(30);
+  const [department, setDepartment] = useState('');
+  const [departments, setDepartments] = useState<Dept[]>([]);
+  const [data, setData] = useState<Summary | null>(null);
+  const [sops, setSops] = useState<Row[]>([]);
+  const [adoption, setAdoption] = useState<Row[]>([]);
+  const [gaps, setGaps] = useState<Row[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { if (!loading && user?.role === 'admin') void apiClient<Dept[]>('/knowledge/departments').then(setDepartments).catch(() => setDepartments([])); }, [loading, user?.role]);
 
   useEffect(() => {
     if (loading) return;
-    Promise.all([
-      apiClient<AnalyticsRow[]>('/analytics/sop-usage'),
-      apiClient<AnalyticsRow[]>('/analytics/confusing-procedures'),
-      apiClient<AnalyticsRow[]>('/analytics/department-adoption'),
-      apiClient<AnalyticsRow[]>('/analytics/confidence-trends'),
-      apiClient<AnalyticsRow[]>('/analytics/faqs'),
-      apiClient<AnalyticsRow[]>('/analytics/escalations'),
-    ])
-      .then(([usage, confusing, adoption, trends, topics, escalationRows]) => {
-        setSopUsage(Array.isArray(usage) ? usage : []);
-        // The API lists every SOP; only those where people actually got confused are 'flagged'.
-        setConfusingProcedures(Array.isArray(confusing) ? confusing.filter(row => Number(row.confusing_sessions) > 0) : []);
-        setDepartmentAdoption(Array.isArray(adoption) ? adoption : []);
-        setConfidenceTrends(Array.isArray(trends) ? trends : []);
-        setFaqs(Array.isArray(topics) ? topics : []);
-        setEscalations(Array.isArray(escalationRows) ? escalationRows : []);
-      })
-      .catch((caught) => setFetchError(caught instanceof Error ? caught.message : 'Failed to connect to analytics service.'))
-      .finally(() => setDataLoading(false));
-  }, [loading]);
+    let live = true;
+    const dep = department ? `&department_id=${encodeURIComponent(department)}` : '';
+    const depOnly = department ? `?department_id=${encodeURIComponent(department)}` : '';
+    setError(null);
+    void Promise.all([
+      apiClient<Summary>(`/analytics/summary?days=${days}${dep}`),
+      apiClient<Row[]>(`/analytics/sop-usage${depOnly}`).catch(() => []),
+      apiClient<Row[]>(`/analytics/department-adoption${depOnly}`).catch(() => []),
+      apiClient<{ items: Row[] }>(`/cases?view=unanswered&limit=8${department ? `&department=${encodeURIComponent(department)}` : ''}`).then((r) => r.items).catch(() => []),
+    ]).then(([s, u, a, g]) => { if (live) { setData(s); setSops(Array.isArray(u) ? u : []); setAdoption(Array.isArray(a) ? a : []); setGaps(g); } })
+      .catch(() => live && setError('Analytics could not be loaded.'));
+    return () => { live = false; };
+  }, [loading, days, department]);
 
-  if (loading || dataLoading) return <LoadingState label="Loading intelligence hub" />;
-
-  const totalExecutions = sopUsage.reduce((total, row) => total + (row.total_executions || 0), 0);
-  const avgConfidence = confidenceTrends.length ? `${(confidenceTrends.reduce((total, row) => total + (row.avg_confidence_score || 0), 0) / confidenceTrends.length * 100).toFixed(1)}%` : 'No data';
-  const avgAdoptionRate = departmentAdoption.length ? `${(departmentAdoption.reduce((total, row) => total + (row.adoption_rate_pct || 0), 0) / departmentAdoption.length).toFixed(0)}%` : 'No data';
-  const openEscalations = escalations.filter((row) => row.escalation_status !== 'resolved').length;
-
-  const resolveEscalation = async () => {
-    if (!resolutionId || !resolutionNote.trim()) return;
-    setResolving(true);
-    try {
-      await apiClient(`/escalations/${resolutionId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution_note: resolutionNote.trim() }) });
-      setEscalations((current) => current.map((item) => item.escalation_id === resolutionId ? { ...item, escalation_status: 'resolved' } : item));
-      setResolutionId(null);
-      setResolutionNote('');
-    } catch (caught) {
-      setFetchError(caught instanceof Error ? caught.message : 'Failed to resolve escalation.');
-    } finally {
-      setResolving(false);
-    }
-  };
+  if (loading) return <LoadingState label="Loading analytics" />;
+  const m = data?.metrics;
 
   return (
-    <div className="wm-page space-y-7">
-      <PageHeader eyebrow="Operational intelligence" title="Manager overview" description="A focused view of SOP adoption, confidence, confusion, and human escalation across active operations." />
+    <Page wide>
+      <PageTitle title="Analytics" hint="Counted from what employees actually did. Nothing here is estimated."
+        action={<div className="flex gap-2">
+          {departments.length > 1 ? <select value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Department" className={`${inputClass} !w-auto`}><option value="">All departments</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select> : null}
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Period" className={`${inputClass} !w-auto`}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select>
+        </div>} />
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {!m ? <LoadingState label="Loading analytics" /> : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat label="Employee adoption" value={m.active_employees ?? 0} hint={data?.definitions.active_employees} />
+            <Stat label="Question volume" value={m.questions_received ?? 0} hint={data?.definitions.questions_received} />
+            <Stat label="Confirmed resolution" value={pct(m.self_service_resolution_pct)} hint={data?.definitions.self_service_resolution_pct} />
+            <Stat label="Escalation rate" value={m.conversations_total ? pct(Math.round(((m.cases_opened ?? 0) / (m.conversations_total || 1)) * 1000) / 10) : '—'} hint="Requests for a person, unanswered questions and flagged answers per conversation." />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat label="Median response from staff" value={hours(m.median_escalation_resolution_hours ?? null)} hint={data?.definitions.median_escalation_resolution_hours} />
+            <Stat label="Median time to resolve a request" value={hours(m.median_case_resolution_hours ?? null)} hint={data?.definitions.median_case_resolution_hours} />
+            <Stat label="Answers rated helpful" value={`${m.answers_rated_helpful ?? 0} of ${(m.answers_rated_helpful ?? 0) + (m.answers_rated_not_helpful ?? 0)}`} hint="Only answers employees rated." />
+            <Stat label="Procedures completed" value={`${m.workflows_completed ?? 0} of ${m.workflows_started ?? 0}`} hint={data?.definitions.workflow_completion_rate_pct} />
+          </div>
 
-      {fetchError ? <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-5 w-5 flex-none" /><div><p className="font-semibold">Some analytics are unavailable</p><p className="mt-1">{fetchError}</p></div></div> : null}
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Operational metrics">
-        <MetricCard title="SOP executions" value={fetchError ? 'N/A' : totalExecutions || 'No data'} />
-        <MetricCard title="Response confidence" value={fetchError ? 'N/A' : avgConfidence} />
-        <MetricCard title="Flagged procedures" value={fetchError ? 'N/A' : confusingProcedures.length} />
-        <MetricCard title="Department adoption" value={fetchError ? 'N/A' : avgAdoptionRate} />
-      </section>
-
-      <MeasuredOutcomes />
-
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between"><div><CardTitle>Confidence performance</CardTitle><CardDescription>Latest measured grounded-answer quality</CardDescription></div><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><TrendingUp className="h-4 w-4" /></span></CardHeader>
-          <CardContent>
-            {confidenceTrends.length === 0 ? <EmptyMetric>No confidence trends recorded yet.</EmptyMetric> : <div className="space-y-4">{confidenceTrends.slice(0, 7).map((item, index) => { const score = Math.max(0, Math.min(100, (item.avg_confidence_score || 0) * 100)); return <div key={`${item.metric_date}-${index}`}><div className="mb-1.5 flex items-center justify-between text-xs"><span className="text-muted-foreground">{item.metric_date}</span><span className="font-semibold text-foreground">{score.toFixed(1)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${score}%` }} /></div></div>; })}</div>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-start justify-between"><div><CardTitle>Attention required</CardTitle><CardDescription>Procedures with elevated confusion</CardDescription></div><Badge variant={confusingProcedures.length ? 'danger' : 'default'}>{confusingProcedures.length} flagged</Badge></CardHeader>
-          <CardContent>
-            {confusingProcedures.length === 0 ? <EmptyMetric>No procedures currently exceed the escalation threshold.</EmptyMetric> : <ul className="divide-y">{confusingProcedures.slice(0, 7).map((procedure, index) => <li key={`${procedure.sop_id}-${index}`} className="flex items-center justify-between gap-4 py-3 first:pt-0"><div className="min-w-0"><p className="truncate text-xs font-semibold">{procedure.sop_title || `SOP ${procedure.sop_id}`}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Needs content review</p></div><Badge variant="danger">{procedure.confusion_rate_pct || 0}%</Badge></li>)}</ul>}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between"><div><CardTitle>Frequently asked topics</CardTitle><CardDescription>What employees need help with most</CardDescription></div><HelpCircle className="h-4 w-4 text-muted-foreground" /></CardHeader>
-          <CardContent>{faqs.length === 0 ? <EmptyMetric>No categorized employee questions yet.</EmptyMetric> : <ul className="divide-y">{faqs.slice(0, 10).map((item, index) => <li key={`${item.department_id}-${item.query_topic}-${index}`} className="flex items-center justify-between gap-4 py-3 first:pt-0"><span className="min-w-0 truncate text-xs font-medium">{item.query_topic}</span><span className="flex-none text-[10px] text-muted-foreground">{item.query_count} · {item.department_id}</span></li>)}</ul>}</CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-start justify-between"><div><CardTitle>Escalation queue</CardTitle><CardDescription>Supervisor review and resolution</CardDescription></div><Badge variant={openEscalations ? 'warning' : 'default'}>{openEscalations} open</Badge></CardHeader>
-          <CardContent>{escalations.length === 0 ? <EmptyMetric>No escalation records.</EmptyMetric> : <ul className="divide-y">{escalations.slice(0, 10).map((item) => <li key={item.escalation_id} className="py-3 first:pt-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-xs font-semibold">{item.sop_title || 'General Copilot request'}</p><p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground">{item.escalation_reason}</p></div><Badge variant={item.escalation_status === 'resolved' ? 'default' : 'warning'}>{item.escalation_status}</Badge></div>{item.escalation_status !== 'resolved' ? <Button size="sm" variant="ghost" onClick={() => setResolutionId(item.escalation_id)} className="mt-2 h-7 px-2 text-[10px] text-emerald-700">Resolve <ArrowRight className="h-3 w-3" /></Button> : <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700"><CircleCheck className="h-3 w-3" />Resolved</span>}</li>)}</ul>}</CardContent>
-        </Card>
-      </section>
-      <ConfirmDialog open={Boolean(resolutionId)} tone="default" title="Resolve this escalation" description="Record what the supervisor confirmed so the resolution remains auditable." confirmLabel="Save resolution" busy={resolving} value={resolutionNote} valueLabel="Resolution note" valuePlaceholder="Describe the verified resolution…" onValueChange={setResolutionNote} onConfirm={resolveEscalation} onClose={() => { if (!resolving) { setResolutionId(null); setResolutionNote(''); } }} />
-    </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="Common questions"><Bars empty="No questions yet." items={(data?.top_questions ?? []).map((q) => ({ label: q.question, value: q.count }))} /></Card>
+            <Card title="Most used procedures"><Bars empty="No procedure has been started yet." items={sops.slice(0, 8).map((s) => ({ label: String(s.sop_title ?? s.title ?? ''), value: Number(s.total_executions ?? s.executions ?? s.sessions ?? 0) })).filter((x) => x.value > 0)} /></Card>
+            <Card title="Unanswered topics" note="Questions with no approved procedure.">
+              {gaps.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">Nothing is unanswered right now.</p> : <ul className="divide-y divide-border pt-2">{gaps.map((g) => <li key={g.id} className="px-4 py-2.5 text-sm">{g.title}</li>)}</ul>}
+            </Card>
+            <Card title="Language used" note="Hindi written in English letters cannot be told from English, so it counts as English letters.">
+              <Bars empty="No messages yet." items={[{ label: 'Hindi (Devanagari)', value: m.messages_in_devanagari ?? 0 }, { label: 'English letters (English or Hinglish)', value: m.messages_in_latin_script ?? 0 }].filter((x) => x.value > 0)} />
+            </Card>
+            <Card title="Department adoption" note="Share of the department's people who used WorkMate.">
+              {adoption.length === 0 ? <EmptyState title="No department data" /> : <Bars empty="No data." items={adoption.slice(0, 8).map((a) => ({ label: String(a.department_id ?? a.department ?? '').replace(/[_-]+/g, ' '), value: Math.round(Number(a.adoption_rate_pct ?? 0)) }))} />}
+            </Card>
+            <Card title="Not measured" note="Shown so nobody mistakes a missing number for a good one.">
+              <ul className="space-y-2 p-4 text-sm text-muted-foreground">{Object.entries(data?.unavailable ?? {}).map(([k, v]) => <li key={k}><span className="font-medium text-foreground">{k.replace(/_/g, ' ')}:</span> {v}</li>)}</ul>
+            </Card>
+          </div>
+        </>
+      )}
+    </Page>
   );
 }

@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
+from app.core.database import get_postgres_connection
 from app.core.text_matching import fuzzy_relevance_score
 from app.services import assistant_actions, live_data_guard, safety_triage
 from app.middleware.auth_middleware import get_current_user
@@ -150,6 +151,34 @@ def _workflow_confirmation_explanation(
     if len(words) > 18:
         context += "..."
     return f"{context}. Start it? Yes or no." if not context.endswith("...") else f"{context} Start it? Yes or no."
+
+
+def _workflow_overview(workflow: Dict[str, Any]) -> str:
+    """Answer a how-to question with the approved steps themselves, then offer step-by-step guidance.
+
+    Nothing here is generated: the lines are the published SOP's own instructions. Falls back to the short
+    confirmation wording if the steps cannot be read.
+    """
+    try:
+        with get_postgres_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT st.instruction FROM knowledge_studio.workflow_steps st "
+                "JOIN knowledge_studio.workflow_states s ON s.id = st.state_id "
+                "WHERE s.workflow_version_id = %s ORDER BY st.ordinal_index",
+                (str(workflow["workflow_version_id"]),))
+            steps = [" ".join(str(r[0]).split()) for r in cur.fetchall() if r[0]]
+    except Exception:
+        steps = []
+    if not steps:
+        return _workflow_confirmation_explanation("", workflow)
+    shown = [(x[:177].rstrip() + "...") if len(x) > 180 else x for x in steps[:8]]
+    lines = [f"Here is the approved procedure for {workflow.get('title') or 'this task'}:"]
+    lines += [f"{i}. {text}" for i, text in enumerate(shown, 1)]
+    if len(steps) > len(shown):
+        lines.append(f"...and {len(steps) - len(shown)} more steps.")
+    lines.append("")
+    lines.append("Want me to guide you through it one step at a time? Say yes to start.")
+    return "\n".join(lines)
 
 
 async def _localized_text(text: str, language: str | None) -> str:
@@ -1061,9 +1090,7 @@ async def copilot_message(
             intent = "WORKFLOW_SELECTION_CONFLICT"
         else:
             if not active_session:
-                answer = _workflow_confirmation_explanation(
-                    payload.message, workflow_match
-                )
+                answer = _workflow_overview(workflow_match)
                 intent = "WORKFLOW_CONFIRMATION_REQUIRED"
                 position = None
             else:

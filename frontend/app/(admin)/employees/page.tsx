@@ -162,15 +162,16 @@ export default function EmployeesPage() {
           {rows.length === 0 ? (
             <div className="grid min-h-32 place-items-center rounded-xl border border-dashed bg-muted/25 p-5 text-center text-sm text-muted-foreground">{query ? 'No one matches that search.' : 'No employees yet. Use “Add employee” to invite the first person.'}</div>
           ) : (
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="text-[11px] uppercase tracking-wide text-muted-foreground"><tr><th className="py-2 pr-3">Name</th><th className="pr-3">Role</th><th className="pr-3">Job profile</th><th className="pr-3">Warehouse</th><th className="pr-3">Status</th><th className="text-right">Actions</th></tr></thead>
+            <table className="w-full min-w-[860px] text-left text-sm">
+              <thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="py-3 pr-3 font-medium">Name</th><th className="pr-3 font-medium">Employee ID</th><th className="pr-3 font-medium">Department</th><th className="pr-3 font-medium">Job profile</th><th className="pr-3 font-medium">Language</th><th className="pr-3 font-medium">Status</th><th className="text-right font-medium">Actions</th></tr></thead>
               <tbody className="divide-y">
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td className="py-3 pr-3"><p className="font-semibold">{r.full_name ?? '—'}{r.is_demo ? <Badge variant="neutral" className="ml-2">demo</Badge> : null}</p><p className="text-xs text-muted-foreground">{r.email}</p></td>
-                    <td className="pr-3 capitalize">{r.role}</td>
-                    <td className="pr-3">{org?.job_profiles.find((j) => j.code === r.job_profile)?.name_en ?? '—'}</td>
-                    <td className="pr-3">{org?.warehouses.find((w) => w.id === r.warehouse_id)?.code ?? '—'}</td>
+                    <td className="pr-3 font-mono text-xs text-muted-foreground">{r.id.replace(/^(demo_|usr_)/, '')}</td>
+                    <td className="pr-3">{org?.departments.find((d) => d.id === r.department_id)?.name ?? r.department_id}</td>
+                    <td className="pr-3">{org?.job_profiles.find((j) => j.code === r.job_profile)?.name_en ?? (r.role === 'employee' ? '—' : r.role[0].toUpperCase() + r.role.slice(1))}</td>
+                    <td className="pr-3">{r.preferred_language === 'hi' ? 'हिन्दी' : r.preferred_language === 'hinglish' ? 'Hinglish' : 'English'}</td>
                     <td className="pr-3"><Badge variant={STATUS_VARIANT[r.status] ?? 'neutral'}>{r.status}</Badge></td>
                     <td className="space-x-1 whitespace-nowrap text-right">
                       <Button size="sm" variant="ghost" disabled={busy || r.role === 'admin'} onClick={() => recovery(r)}><KeyRound className="h-3.5 w-3.5" />Reset link</Button>

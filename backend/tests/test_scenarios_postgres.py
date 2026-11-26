@@ -63,7 +63,7 @@ def _finish_workflow(api: Api, user: str, conversation_id: str, limit: int = 12)
 def test_A_employee_guidance_cited_answer_and_permitted_steps(world):
     api = world
     offer = api.ask("emp1", "How do I receive this shipment?")
-    assert "Start it?" in offer["answer"] and "Goods receipt posting" in (offer["sop_details"] or "")
+    assert "Say yes to start" in offer["answer"] and "Goods receipt posting" in (offer["sop_details"] or "")
     assert offer["active_session_id"] is None            # nothing starts without confirmation
     conv = offer["conversation_id"]
     started = api.ask("emp1", "yes", conv)
@@ -359,7 +359,7 @@ def test_E_admin_uploads_a_document_through_review_and_approval_to_employee_retr
            b"3. Log the inspection time on the cold room sheet\n")
     question = "how do I inspect the cold room door seal"
     before = api.ask("emp1", question)
-    assert "Start it?" not in before["answer"]              # not retrievable before publication
+    assert "Say yes to start" not in before["answer"]              # not retrievable before publication
 
     up = api.c.post("/api/v1/procedure/drafts/import", headers=headers("admin1"),
                     data={"title": "Cold room door seal inspection"}, files={"file": ("cold-room.txt", doc, "text/plain")})
@@ -381,12 +381,12 @@ def test_E_admin_uploads_a_document_through_review_and_approval_to_employee_retr
     assert done.status_code == 200, done.text
 
     after = api.ask("emp1", question)
-    assert "Start it?" in after["answer"] and "cold room door seal" in (after["sop_details"] or "").lower()
+    assert "Say yes to start" in after["answer"] and "cold room door seal" in (after["sop_details"] or "").lower()
     started = api.ask("emp1", "yes", after["conversation_id"])
     assert "seal" in started["answer"].lower() and started["active_session_id"]
     # Another company's employee cannot retrieve it.
     other = api.ask("emp_b", question)
-    assert "Start it?" not in other["answer"] and "cold room" not in (other.get("sop_details") or "").lower()
+    assert "Say yes to start" not in other["answer"] and "cold room" not in (other.get("sop_details") or "").lower()
 
 
 @pytest.mark.live_integration
@@ -402,7 +402,7 @@ def test_H_service_failures_are_reported_honestly_and_lose_nothing(world, monkey
     import time
     t = time.perf_counter()
     offer = api.ask("emp1", "how do I do goods receipt posting")
-    assert "Start it?" in offer["answer"]
+    assert "Say yes to start" in offer["answer"]
     started = api.ask("emp1", "yes", offer["conversation_id"])
     assert started["active_session_id"]
     follow = api.ask("emp1", "what if the WMS rejects the receipt?", offer["conversation_id"])
@@ -431,7 +431,7 @@ def test_H_service_failures_are_reported_honestly_and_lose_nothing(world, monkey
     from app.main import app
     with TestClient(app, raise_server_exceptions=False) as quiet:
         resp = quiet.post("/api/v1/copilot/message", headers=headers("emp1"), json={"message": "how do I do goods receipt posting"})
-    assert resp.status_code >= 500 and "Start it?" not in resp.text
+    assert resp.status_code >= 500 and "Say yes to start" not in resp.text
 
 
 @pytest.mark.live_integration
@@ -458,7 +458,7 @@ def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
     # Nothing is live: no workflow exists and employees cannot retrieve it.
     assert api.get("admin1", "/knowledge").json()["items"] and all(
         i["item"]["workflow_code"] != "SOP_REV_001" for i in api.get("admin1", "/knowledge").json()["items"])
-    assert "Start it?" not in api.ask("emp1", question)["answer"]
+    assert "Say yes to start" not in api.ask("emp1", question)["answer"]
     # The same bytes cannot be queued twice; the admin sees the pending item; other companies do not.
     assert api.c.post("/api/v1/knowledge/upload", headers=headers("admin1"), data=form, files=files).status_code == 409
     assert [s["id"] for s in api.get("admin1", "/knowledge/submissions?status=pending").json()["items"]] == [sub_id]
@@ -476,7 +476,7 @@ def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
     assert api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "return", "note": "no"}).status_code == 422
     back = api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "return", "note": "Step 1 must name the staging bay."})
     assert back.status_code == 200 and back.json()["status"] == "returned"
-    assert "Start it?" not in api.ask("emp1", question)["answer"]
+    assert "Say yes to start" not in api.ask("emp1", question)["answer"]
     assert api.post("mgr", f"/procedure/approvals/uploads/{sub_id}", {"decision": "approve"}).status_code == 409   # already decided
 
     fixed = api.c.post("/api/v1/knowledge/upload", headers=headers("admin1"), data=form,
@@ -486,7 +486,7 @@ def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
     assert done.status_code == 200 and done.json()["status"] == "published" and done.json()["version_number"] == 1
     assert api.post("mgr", f"/procedure/approvals/uploads/{new_id}", {"decision": "approve"}).status_code == 409   # replay
     found = api.ask("emp1", question)
-    assert "Start it?" in found["answer"] and "Pallet wrap audit" in (found["sop_details"] or "")
+    assert "Say yes to start" in found["answer"] and "Pallet wrap audit" in (found["sop_details"] or "")
     assert api.get("mgr", "/procedure/approvals").json()["uploads"] == []
 
 
@@ -494,7 +494,7 @@ def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
 def test_unrelated_question_sharing_one_word_does_not_propose_a_wrong_sop(world):
     api = world
     noisy = api.ask("emp1", "how do I check the dock leveller plate")     # no such SOP in the library
-    assert "Start it?" not in noisy["answer"] and "won't guess" in noisy["answer"]
+    assert "Say yes to start" not in noisy["answer"] and "won't guess" in noisy["answer"]
     for question, expect in (("I found a damaged box", "Damaged inbound goods"),
                              ("what is the process for requesting leave", "Leave request"),
                              ("how do I do a cycle count", "Cycle counting")):

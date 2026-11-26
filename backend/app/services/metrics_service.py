@@ -116,6 +116,17 @@ def summary(department_ids: List[str], days: int) -> Dict[str, Any]:
             (department_ids, days))
         msgs_hi, msgs_latin = cur.fetchone()
 
+        # What people actually ask, in their own words (aggregated by wording; confirmations like "yes" are not questions).
+        cur.execute(
+            """SELECT lower(btrim(m.message_text)) AS q, COUNT(*) AS n, COUNT(DISTINCT c.user_id) AS people
+               FROM workmate_copilot.conversation_messages m JOIN workmate_copilot.conversations c ON c.id=m.conversation_id
+               WHERE m.sender='employee' AND c.department_id = ANY(%s) AND m.created_at >= now() - make_interval(days => %s)
+                 AND length(btrim(m.message_text)) >= 8
+                 AND lower(btrim(m.message_text)) NOT IN ('yes','no','done','yes.','no.','ok','okay','thanks','thank you')
+               GROUP BY 1 ORDER BY n DESC, q LIMIT 8""",
+            (department_ids, days))
+        top_questions = [{"question": q[:140], "count": n, "people": people} for q, n, people in cur.fetchall()]
+
         cur.execute(
             """SELECT COUNT(*), COUNT(*) FILTER (WHERE s.status='completed')
                FROM workmate_copilot.workflow_sessions s
@@ -185,7 +196,7 @@ def summary(department_ids: List[str], days: int) -> Dict[str, Any]:
         "cases_opened": support_opened, "cases_resolved": support_resolved, "median_case_resolution_hours": rnd(support_median),
         "messages_in_devanagari": msgs_hi, "messages_in_latin_script": msgs_latin,
     }
-    return {"period_days": days, "departments": department_ids, "metrics": metrics,
+    return {"period_days": days, "departments": department_ids, "metrics": metrics, "top_questions": top_questions,
             "definitions": {k: DEFINITIONS[k] for k in metrics}, "unavailable": UNAVAILABLE}
 
 
