@@ -45,7 +45,8 @@ export default function IntelligenceHubPage() {
     ])
       .then(([usage, confusing, adoption, trends, topics, escalationRows]) => {
         setSopUsage(Array.isArray(usage) ? usage : []);
-        setConfusingProcedures(Array.isArray(confusing) ? confusing : []);
+        // The API lists every SOP; only those where people actually got confused are 'flagged'.
+        setConfusingProcedures(Array.isArray(confusing) ? confusing.filter(row => Number(row.confusing_sessions) > 0) : []);
         setDepartmentAdoption(Array.isArray(adoption) ? adoption : []);
         setConfidenceTrends(Array.isArray(trends) ? trends : []);
         setFaqs(Array.isArray(topics) ? topics : []);
