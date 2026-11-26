@@ -23,3 +23,9 @@ striprtf>=0.0.26,<1.0.0
 Pillow>=10.4.0,<12.0.0
 pytesseract>=0.3.13,<1.0.0
 pypdfium2>=4.30.0,<5.0.0
+
+# Private local speech (transcription + synthesis). Models are mounted, never downloaded at runtime.
+faster-whisper>=1.1.0,<2.0.0
+piper-tts>=1.4.0,<2.0.0
+numpy>=1.26.0,<3.0.0
+sentencepiece>=0.2.0,<1.0.0

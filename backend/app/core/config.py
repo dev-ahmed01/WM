@@ -28,6 +28,21 @@ class Settings(BaseSettings):
     POSTGRES_POOL_TIMEOUT_SECONDS: float = Field(default=5.0, ge=1.0, le=30.0)
     SOURCE_OBJECT_MAX_BYTES: int = 25 * 1024 * 1024
 
+    # Private local speech: transcription, synthesis and Hindi translation. No external speech APIs.
+    VOICE_ENABLED: bool = True
+    VOICE_MAX_AUDIO_BYTES: int = 12 * 1024 * 1024
+    VOICE_MAX_SECONDS: int = Field(default=60, ge=5, le=180)
+    VOICE_MAX_TTS_CHARS: int = Field(default=1500, ge=200, le=6000)
+    FFMPEG_BIN: str = "ffmpeg"
+    HINDI_TRANSLATION_MODEL_DIR: str = "/app/data/voice/m2m100"
+    WHISPER_MODEL: str = "small"
+    WHISPER_MODEL_EN: str = "base"
+    WHISPER_DOWNLOAD_ROOT: str = "/app/data/voice/whisper"
+    WHISPER_LOCAL_ONLY: bool = True
+    WHISPER_CPU_THREADS: int = Field(default=4, ge=1, le=16)
+    PIPER_VOICE_DIR: str = "/app/data/voice/piper"
+    PIPER_VOICE_MAP: str = '{"en": "en_US-lessac-medium", "hi": "hi_IN-pratham-medium"}'
+
     # Local/private OCR of scanned operational references. No external API calls.
     OCR_ENABLED: bool = True
     OCR_LANGUAGES: str = "eng+hin"

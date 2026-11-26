@@ -147,6 +147,8 @@ services:
     networks: [internal]
     expose: ["8000"]
     read_only: true
+    volumes:
+      - ${VOICE_MODELS_DIR:-./voice-models}:/app/data/voice:ro
     tmpfs:
       - /tmp:size=256m,mode=1777
     healthcheck:

@@ -43,7 +43,7 @@ class KnowledgeGapRepository:
             cur.execute(
                 "INSERT INTO knowledge_studio.knowledge_gaps (id, department_id, reported_by, conversation_message_id, question) "
                 "VALUES (%s,%s,%s,%s,%s) "
-                "ON CONFLICT (department_id, lower(question)) WHERE status IN ('open','answered','drafting') "
+                "ON CONFLICT (department_id, lower(question)) WHERE kind = 'unanswered' AND status IN ('open','answered','drafting','in_progress') "
                 "DO UPDATE SET occurrences = knowledge_studio.knowledge_gaps.occurrences + 1, updated_at = now() "
                 "RETURNING id, (xmax = 0)", (gap_id, department, user_id, message_id, text))
             row = cur.fetchone()

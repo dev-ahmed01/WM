@@ -1,12 +1,13 @@
 # Lean runtime image (used by staging and the single-host VPS package): API, workflow engine, document/OCR.
-# It contains no model weights; Ollama runs as a separate private container when AI is enabled.
+# It contains no model weights; Ollama runs as a separate private container when AI is enabled, and the speech models
+# (Whisper + Piper voices) are mounted read-only at /app/data/voice.
 FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/backend:/app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin \
+    curl ffmpeg tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir -r /app/requirements.txt

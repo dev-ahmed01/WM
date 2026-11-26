@@ -71,6 +71,30 @@
   "employee": "allowed",
   "manager": "allowed"
  },
+ "GET /api/v1/cases": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/cases/people": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/cases/{case_id}": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "GET /api/v1/copilot/conversations": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "GET /api/v1/copilot/history": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -179,6 +203,18 @@
   "employee": "denied",
   "manager": "denied"
  },
+ "GET /api/v1/my/cases": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "GET /api/v1/my/cases/{case_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "GET /api/v1/pilot/config": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -220,6 +256,12 @@
   "anonymous": "denied",
   "employee": "denied",
   "manager": "denied"
+ },
+ "GET /api/v1/voice/status": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
  },
  "GET /api/v1/work/exceptions": {
   "admin": "allowed",
@@ -311,6 +353,12 @@
   "employee": "denied",
   "manager": "denied"
  },
+ "PATCH /api/v1/copilot/conversations/{conversation_id}": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "POST /api/v1/admin/employees": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -333,6 +381,42 @@
   "admin": "allowed",
   "anonymous": "denied",
   "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/cases/{case_id}/assign": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/cases/{case_id}/flags": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/cases/{case_id}/messages": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
+ "POST /api/v1/cases/{case_id}/resolve": {
+  "admin": "denied",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "denied"
+ },
+ "POST /api/v1/copilot/escalate": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/copilot/feedback": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
   "manager": "allowed"
  },
  "POST /api/v1/copilot/message": {
@@ -437,6 +521,18 @@
   "employee": "denied",
   "manager": "denied"
  },
+ "POST /api/v1/my/cases/{case_id}/acknowledge": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/my/cases/{case_id}/messages": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
  "POST /api/v1/pilot/feedback": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -472,6 +568,24 @@
   "anonymous": "denied",
   "employee": "denied",
   "manager": "denied"
+ },
+ "POST /api/v1/voice/speak": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/voice/transcribe": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
+ },
+ "POST /api/v1/voice/translate": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "allowed",
+  "manager": "allowed"
  },
  "POST /api/v1/work/exceptions/{case_id}/action": {
   "admin": "allowed",

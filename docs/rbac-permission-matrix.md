@@ -2,7 +2,7 @@
 
 Generated from `backend/tests/golden/rbac_matrix.json`, which `backend/tests/test_rbac_matrix.py` produces by calling
 every API operation anonymously and with admin/manager/employee tokens. ✔ = the role reaches the handler; — = rejected
-by the auth/role dependency (401/403). All 107 operations deny anonymous callers.
+by the auth/role dependency (401/403). All 126 operations deny anonymous callers.
 
 **What this proves:** each route's role guard exists and matches this table; a change fails CI until the golden file is
 regenerated and reviewed (`UPDATE_RBAC_GOLDEN=1`), then run `python scripts/generate_rbac_doc.py`.
@@ -35,6 +35,17 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `GET /api/v1/analytics/sop-usage` | ✔ | ✔ | — |
 | `GET /api/v1/analytics/summary` | ✔ | ✔ | — |
 | `GET /api/v1/auth/me` | ✔ | ✔ | ✔ |
+| `GET /api/v1/cases` | — | — | — |
+| `GET /api/v1/cases/people` | — | — | — |
+| `GET /api/v1/cases/{case_id}` | — | — | — |
+| `POST /api/v1/cases/{case_id}/assign` | — | — | — |
+| `POST /api/v1/cases/{case_id}/flags` | — | — | — |
+| `POST /api/v1/cases/{case_id}/messages` | ✔ | ✔ | — |
+| `POST /api/v1/cases/{case_id}/resolve` | — | — | — |
+| `GET /api/v1/copilot/conversations` | ✔ | ✔ | ✔ |
+| `PATCH /api/v1/copilot/conversations/{conversation_id}` | ✔ | ✔ | ✔ |
+| `POST /api/v1/copilot/escalate` | ✔ | ✔ | ✔ |
+| `POST /api/v1/copilot/feedback` | ✔ | ✔ | ✔ |
 | `GET /api/v1/copilot/history` | ✔ | ✔ | ✔ |
 | `GET /api/v1/copilot/history/{conversation_id}` | ✔ | ✔ | ✔ |
 | `POST /api/v1/copilot/message` | ✔ | ✔ | ✔ |
@@ -73,6 +84,10 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `DELETE /api/v1/knowledge/{id}/permanent` | ✔ | — | — |
 | `GET /api/v1/knowledge/{id}/status` | ✔ | — | — |
 | `GET /api/v1/knowledge/{id}/versions` | ✔ | — | — |
+| `GET /api/v1/my/cases` | ✔ | ✔ | ✔ |
+| `GET /api/v1/my/cases/{case_id}` | ✔ | ✔ | ✔ |
+| `POST /api/v1/my/cases/{case_id}/acknowledge` | ✔ | ✔ | ✔ |
+| `POST /api/v1/my/cases/{case_id}/messages` | ✔ | ✔ | ✔ |
 | `GET /api/v1/pilot/config` | ✔ | ✔ | ✔ |
 | `POST /api/v1/pilot/feedback` | ✔ | ✔ | ✔ |
 | `GET /api/v1/pilot/summary` | ✔ | ✔ | — |
@@ -87,6 +102,10 @@ not user role. Managers are scoped to their own department; admins to their orga
 | `POST /api/v1/procedure/drafts/{draft_id}/publish` | ✔ | — | — |
 | `POST /api/v1/procedure/drafts/{draft_id}/review` | ✔ | — | — |
 | `GET /api/v1/procedure/drafts/{draft_id}/source` | ✔ | — | — |
+| `POST /api/v1/voice/speak` | ✔ | ✔ | ✔ |
+| `GET /api/v1/voice/status` | ✔ | ✔ | ✔ |
+| `POST /api/v1/voice/transcribe` | ✔ | ✔ | ✔ |
+| `POST /api/v1/voice/translate` | ✔ | ✔ | ✔ |
 | `GET /api/v1/work/exceptions` | ✔ | ✔ | — |
 | `GET /api/v1/work/exceptions/mine` | ✔ | ✔ | ✔ |
 | `GET /api/v1/work/exceptions/{case_id}` | ✔ | ✔ | — |
