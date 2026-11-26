@@ -235,7 +235,7 @@ function CopilotContent() {
             <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">Operational Copilot</h1>
             <Badge variant="neutral" className="hidden sm:inline-flex"><ShieldCheck className="h-3 w-3" />SOP-grounded</Badge>
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id || 'your department'}</p>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id ? user.department_id.replace(/[_-]+/g, ' ').replace(/b[a-z]/g, c => c.toUpperCase()) : 'your department'}</p>
         </div>
         <div className="flex flex-none items-center gap-2">
           <button
@@ -269,6 +269,16 @@ function CopilotContent() {
               messageId={feedbackMessage.id}
               surface={feedbackMessage.copilotData?.citations.some(c => c.source_type === 'reference') ? 'reference' : 'workflow'}
             />
+          ) : null}
+          {messages.length === 1 && !sessionId && !input ? (
+            <div className="flex flex-wrap gap-2 px-4 pb-2 sm:px-6" aria-label="Example questions">
+              {STARTER_PROMPTS.map(prompt => (
+                <button key={prompt} type="button" onClick={() => setInput(prompt)}
+                  className="rounded-full border border-border bg-white px-3 py-1.5 text-xs text-muted-foreground transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                  {prompt}
+                </button>
+              ))}
+            </div>
           ) : null}
           <ChatComposer
             value={input}
@@ -312,6 +322,9 @@ function CopilotContent() {
     </div>
   );
 }
+
+// Prompts only: they fill the box for the user to edit and send; WorkMate still answers from approved SOPs.
+const STARTER_PROMPTS = ['How do I post a goods receipt?', 'Two cartons arrived damaged', 'Start cycle counting', 'What is the stop-work rule for a forklift fault?'];
 
 export default function CopilotPage() {
   return <Suspense fallback={<LoadingState label="Loading Copilot" />}><CopilotContent /></Suspense>;

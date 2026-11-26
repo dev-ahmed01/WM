@@ -85,21 +85,21 @@ function UserMenu({ user, onLogout, compact = false }: { user: UserClaims; onLog
           )}
         >
           <span className={cn('grid h-9 w-9 flex-none place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-800', compact && 'bg-emerald-100 text-emerald-800')}>
-            {user.sub.slice(0, 1).toUpperCase()}
+            {displayName(user.sub).slice(0, 1).toUpperCase()}
           </span>
           <span className={cn('min-w-0 flex-1', compact && 'hidden sm:block')}>
-            <span className={cn('block truncate text-xs font-semibold text-foreground')}>{user.sub}</span>
-            <span className={cn('mt-0.5 block truncate text-[11px] capitalize text-muted-foreground')}>{user.role} · {user.department_id}</span>
+            <span className={cn('block truncate text-xs font-semibold capitalize text-foreground')}>{displayName(user.sub)}</span>
+            <span className={cn('mt-0.5 block truncate text-[11px] capitalize text-muted-foreground')}>{user.role} · {departmentLabel(user.department_id)}</span>
           </span>
           <ChevronDown className={cn('h-4 w-4 flex-none text-slate-500', compact && 'hidden sm:block')} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top" className="w-64 rounded-xl border-border p-1.5 shadow-lift">
         <DropdownMenuLabel className="p-3 font-normal">
-          <p className="truncate text-sm font-semibold text-foreground">{user.sub}</p>
+          <p className="truncate text-sm font-semibold capitalize text-foreground">{displayName(user.sub)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold capitalize text-emerald-800"><ShieldCheck className="h-3 w-3" />{user.role}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="h-3 w-3" />{user.department_id}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground"><Building2 className="h-3 w-3" />{departmentLabel(user.department_id)}</span>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -164,6 +164,10 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
     </div>
   );
 }
+
+// Presentation only: the token carries ids, not display names.
+const displayName = (sub: string) => sub.replace(/^(demo|usr)_/, '').replace(/[_-]+/g, ' ');
+const departmentLabel = (id: string) => id.replace(/[_-]+/g, ' ').replace(/\b[a-z]/g, c => c.toUpperCase());
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
