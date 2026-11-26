@@ -93,6 +93,12 @@ services:
       DATABASE_URL: postgresql://${OWNER_DB_USER}:${OWNER_DB_PASSWORD}@postgres:5432/workmate
       JWT_SECRET: ${JWT_SECRET:?Missing JWT secret}
       INTERNAL_WEBHOOK_SECRET: ${INTERNAL_WEBHOOK_SECRET:?Missing webhook secret}
+      # Settings validates production controls at import time, so the one-off job must declare the same ones.
+      AUTH_REVALIDATE_DB: "true"
+      AUTH_SESSION_STORE_ENABLED: "true"
+      AUTH_RATE_LIMIT_ENABLED: "true"
+      POSTGRES_RLS_REFERENCES: "true"
+      FRONTEND_ORIGIN: https://${WORKMATE_DOMAIN:?Missing HTTPS hostname}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       BOOTSTRAP_DEPARTMENT_ID: ${BOOTSTRAP_DEPARTMENT_ID:-operations}

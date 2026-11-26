@@ -93,3 +93,11 @@ before it is live.
   objects, drafts, handovers, work items, exceptions, integration records, pilot feedback). The remaining tenant isolation
   (knowledge items, analytics, escalations, gaps, employees, sessions) is application-level and covered by cross-tenant tests, not DB policies.
 - Free-form model answers are unmeasured for quality; the acceptance scenarios exercise the deterministic paths.
+
+## 8. Local trial on a laptop (what was actually run)
+`docker compose -f compose.yml -f compose.local.yml up -d` with `WORKMATE_DOMAIN=localhost` in `.env`. The overlay lets the API use an
+Ollama already running on the host (a 4 GB Docker VM cannot also hold the 2.6 GB models) and therefore puts the API on the `public`
+network — **never use the overlay on a server.** Caddy issues a private-CA certificate for `localhost`, so the browser shows a
+certificate warning. Verified locally: migrations, non-owner runtime-login preflight, container health, bootstrap admin, HTTPS login,
+Employees page, and an honest "no approved procedure" answer from an empty knowledge base. Not verified there: the model answering
+from SOPs (no SOPs were loaded), the backup job, the model-pull job.

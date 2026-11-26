@@ -1,0 +1,16 @@
+# Local trial overlay (NOT for servers). Docker's VM here has ~3.9 GB, too small to also hold the 2.6 GB models, so the
+# API uses the Ollama already running on the host (same local-only models). That requires the API to reach the host,
+# so it joins the 'public' network in this overlay -- on a real server it stays internal-only (see compose.yml).
+services:
+  ollama:
+    profiles: ["models"]
+  backend:
+    environment:
+      LOCAL_AI_ENABLED: "true"
+      LOCAL_AI_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: !override [internal, public]
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
