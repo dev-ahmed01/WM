@@ -284,6 +284,7 @@ function CopilotContent() {
             value={input}
             placeholder={answerMode === 'reference' ? 'Ask what an approved company document says…' : composerPlaceholder}
             answerMode={answerMode}
+            showModes={user?.role !== 'employee'}
             onAnswerModeChange={setAnswerMode}
             busy={isSending}
             onChange={setInput}

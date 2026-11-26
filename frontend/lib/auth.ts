@@ -42,7 +42,7 @@ export function clearCachedUser() {
 export function getRoleRedirectPath(role?: string): string {
   if (role === 'admin') return '/procedure-studio';
   if (role === 'manager') return '/control-room';
-  return '/workspace';
+  return '/copilot';
 }
 
 export function useRequireRole(allowedRoles: Array<'admin' | 'employee' | 'manager'>) {

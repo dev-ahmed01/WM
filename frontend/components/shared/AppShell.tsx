@@ -32,10 +32,10 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'My work', description: 'Your assigned queue', href: '/workspace', icon: ClipboardList, roles: ['admin','manager','employee'] },
   { label: 'Control room', description: 'Department overview', href: '/control-room', icon: LayoutDashboard, roles: ['admin','manager'] },
-  { label: 'SOP guidance', description: 'Contextual AI assistance', href: '/copilot', icon: Bot, roles: ['admin','manager','employee'] },
+  { label: 'Ask WorkMate', description: 'Get the right procedure', href: '/copilot', icon: Bot, roles: ['admin','manager','employee'] },
   { label: 'Shift handover', description: 'Transfer open context', href: '/copilot/handover', icon: ClipboardCheck, roles: ['admin','manager','employee'] },
-  { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager','employee'] },
-  { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager','employee'] },
+  { label: 'Approved sources', description: 'Verified documents', href: '/copilot/sources', icon: Search, roles: ['admin','manager'] },
+  { label: 'Session history', description: 'Previous guidance', href: '/copilot/history', icon: History, roles: ['admin','manager'] },
   { label: 'Knowledge Studio', description: 'Upload and publish SOPs', href: '/knowledge-studio', icon: Library, roles: ['admin'] },
   { label: 'Unanswered questions', description: 'Close knowledge gaps', href: '/knowledge-gaps', icon: CircleHelp, roles: ['admin','manager'] },
   { label: 'SOP approvals', description: 'Approve before publishing', href: '/approvals', icon: FileCheck2, roles: ['manager'] },

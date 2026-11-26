@@ -5,17 +5,18 @@ interface ChatComposerProps {
   value: string;
   placeholder: string;
   answerMode: 'workflow' | 'reference';
+  showModes?: boolean;
   onAnswerModeChange: (mode: 'workflow' | 'reference') => void;
   busy: boolean;
   onChange: (value: string) => void;
   onSend: () => void;
 }
 
-export function ChatComposer({ value, placeholder, answerMode, onAnswerModeChange, busy, onChange, onSend }: ChatComposerProps) {
+export function ChatComposer({ value, placeholder, answerMode, showModes = true, onAnswerModeChange, busy, onChange, onSend }: ChatComposerProps) {
   return (
     <footer className="border-t border-border/80 bg-white/95 p-3 backdrop-blur-xl sm:p-4">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        {showModes ? <div className="mb-2 flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-xl border border-border bg-muted/60 p-1" role="group" aria-label="Copilot answer mode">
             <button
               type="button"
@@ -33,7 +34,7 @@ export function ChatComposer({ value, placeholder, answerMode, onAnswerModeChang
             >Ask documents</button>
           </div>
           <span className="text-[11px] text-muted-foreground">{answerMode === 'reference' ? 'Read-only answers from approved sources' : 'Verified procedural steps and workflow progress'}</span>
-        </div>
+        </div> : null}
         <div className="rounded-2xl border border-input bg-white p-2 shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100/70">
           <textarea
             rows={2}

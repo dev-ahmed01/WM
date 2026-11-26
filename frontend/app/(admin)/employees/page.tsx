@@ -124,20 +124,27 @@ export default function EmployeesPage() {
             <form onSubmit={createEmployee} className="grid gap-4 sm:grid-cols-2">
               <label className="block"><span className="wm-label">Full name</span><input required className="wm-input" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></label>
               <label className="block"><span className="wm-label">Email</span><input required type="email" className="wm-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+              <label className="block"><span className="wm-label">Role</span>
+                <select className="wm-input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="employee">Employee</option><option value="manager">Manager</option></select></label>
+              {org.departments.length > 1 ? (
               <label className="block"><span className="wm-label">Department</span>
                 <select className="wm-input" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
                   {org.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
-              <label className="block"><span className="wm-label">Role</span>
-                <select className="wm-input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="employee">Employee</option><option value="manager">Manager</option></select></label>
+              ) : null}
+              <details className="sm:col-span-2 rounded-xl border border-border p-3">
+                <summary className="cursor-pointer text-sm font-medium text-muted-foreground">More details (optional)</summary>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <label className="block"><span className="wm-label">Job profile</span>
                 <select className="wm-input" value={form.job_profile} onChange={(e) => setForm({ ...form, job_profile: e.target.value })}>
                   <option value="">Not set</option>{org.job_profiles.map((j) => <option key={j.code} value={j.code}>{j.name_en}</option>)}</select></label>
               <label className="block"><span className="wm-label">Warehouse</span>
                 <select className="wm-input" value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })}>
                   <option value="">Not set</option>{org.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
-              <label className="block sm:col-span-2"><span className="wm-label">Supervisor</span>
+              <label className="block"><span className="wm-label">Supervisor</span>
                 <select className="wm-input" value={form.supervisor_id} onChange={(e) => setForm({ ...form, supervisor_id: e.target.value })}>
                   <option value="">Not set</option>{supervisors.map((s) => <option key={s.id} value={s.id}>{s.full_name ?? s.email}</option>)}</select></label>
+                </div>
+              </details>
               <div className="flex gap-3 sm:col-span-2"><Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create and get invite link'}</Button><Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button></div>
             </form>
           </CardContent>
