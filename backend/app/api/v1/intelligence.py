@@ -1,11 +1,14 @@
 """Intelligence Hub API router delivering managerial analytics dashboards."""
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rbac_middleware import require_role
 from app.middleware.tenant_scope import DepartmentScope, department_scope
+from app.services import metrics_service
 from app.services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["Intelligence Hub Analytics"])
@@ -87,3 +90,28 @@ async def get_department_adoption(departments: List[str] = Depends(analytics_dep
 async def get_confidence_trends(departments: List[str] = Depends(analytics_departments)) -> List[Dict[str, Any]]:
     """Retrieve time-series trend of average AI response confidence scores."""
     return AnalyticsService.get_confidence_trends(department_ids=departments)
+
+
+@router.get("/summary", dependencies=[Depends(require_role("manager", "admin"))])
+async def get_summary(
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    departments: List[str] = Depends(analytics_departments),
+) -> Dict[str, Any]:
+    """Measured KPIs for your scope, each with its definition. Unavailable metrics are listed, never invented."""
+    return await run_in_threadpool(metrics_service.summary, departments, days)
+
+
+class RoiInputs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    employees: int = Field(ge=1, le=1_000_000)
+    questions_per_employee_per_week: float = Field(ge=0, le=500)
+    minutes_per_supervisor_interruption: float = Field(ge=0, le=240)
+    share_answered_without_supervisor_pct: float = Field(ge=0, le=100)
+    loaded_hourly_cost: float = Field(ge=0, le=100000)
+    weeks: int = Field(default=52, ge=1, le=52)
+
+
+@router.post("/roi-estimate", dependencies=[Depends(require_role("manager", "admin"))])
+async def roi_estimate(body: RoiInputs) -> Dict[str, Any]:
+    """An ESTIMATE computed purely from the supplied assumptions (nothing measured)."""
+    return metrics_service.roi_estimate(**body.model_dump())

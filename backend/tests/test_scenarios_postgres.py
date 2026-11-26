@@ -596,3 +596,51 @@ def test_D_gap_draft_is_linked_and_visible_to_the_approver_in_both_database_role
     assert api.post("admin1", f"/procedure/drafts/{draft_id}/publish",
                     {"expected_revision": rev, "approval": "PUBLISH_REVIEWED_SOP"}).status_code == 200
     assert api.get("admin1", "/knowledge-gaps?status=resolved").json()["items"][0]["id"] == gap["id"]
+
+
+@pytest.mark.live_integration
+def test_metrics_summary_counts_only_what_happened_inside_your_scope(world):
+    api = world
+    c1 = api.ask("emp1", "how do I do goods receipt posting")["conversation_id"]
+    api.ask("emp1", "yes", c1)
+    api.ask("emp2", "what is the weather on mars")
+    api.ask("emp2", "there is smoke coming from the dock")
+    api.ask("emp2", "What is the stock level of SKU 12345 in bin A-01?")
+    r = api.ask("emp2", "2 cartons damaged in the delivery")
+    api.ask("emp2", "yes", r["conversation_id"])
+    for _ in range(3):
+        api.ask("emp_b", "quarantine of purple widgets")
+
+    a = api.get("admin1", "/analytics/summary?days=30").json()
+    m = a["metrics"]
+    assert m["active_employees"] == 2                      # emp_b (another company) is not counted
+    assert m["knowledge_gaps_raised"] == 1 and m["safety_stops"] == 1 and m["live_data_declined"] == 1
+    assert m["actions_confirmed"] == 1 and m["handovers_submitted"] == 1
+    assert m["matched_an_approved_sop"] >= 2
+    assert m["workflows_started"] == 1 and m["workflows_completed"] == 0 and m["workflow_completion_rate_pct"] == 0.0
+    assert m["gap_rate_pct"] == round(100 * 1 / m["questions_received"], 1)
+    assert set(a["definitions"]) == set(m), "every reported metric carries its definition"
+    assert "response_latency_ms" in a["unavailable"] and "response_latency_ms" not in m   # honest about what is not measured
+    b = api.get("admin_b", "/analytics/summary").json()["metrics"]
+    assert b["questions_received"] == 3 and b["active_employees"] == 1 and b["knowledge_gaps_raised"] == 0
+    assert api.get("mgr", "/analytics/summary").json()["metrics"]["active_employees"] == 2     # manager of the same department
+    assert api.get("admin1", f"/analytics/summary?department_id={DEPT_B}").status_code == 404
+    assert api.get("emp1", "/analytics/summary").status_code == 403
+
+
+@pytest.mark.live_integration
+def test_roi_estimate_is_labelled_arithmetic_on_supplied_assumptions(world):
+    api = world
+    body = {"employees": 100, "questions_per_employee_per_week": 5, "minutes_per_supervisor_interruption": 4,
+            "share_answered_without_supervisor_pct": 60, "loaded_hourly_cost": 20}
+    r = api.post("mgr", "/analytics/roi-estimate", body)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["kind"] == "ESTIMATE_FROM_ASSUMPTIONS" and "not measured" in out["caveat"]
+    assert (out["estimated_questions_per_year"], out["estimated_supervisor_interruptions_avoided"]) == (26000, 15600)
+    assert (out["estimated_supervisor_hours_saved"], out["estimated_cost_saved"]) == (1040.0, 20800.0)
+    assert out["assumptions"]["employees"] == 100                       # inputs are echoed, never hidden
+    assert api.post("admin1", "/analytics/roi-estimate", {**body, "share_answered_without_supervisor_pct": 101}).status_code == 422
+    assert api.post("mgr", "/analytics/roi-estimate", {**body, "employees": 0}).status_code == 422
+    assert api.post("mgr", "/analytics/roi-estimate", {**body, "surprise": 1}).status_code == 422
+    assert api.post("emp1", "/analytics/roi-estimate", body).status_code == 403

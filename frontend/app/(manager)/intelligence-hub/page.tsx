@@ -5,6 +5,7 @@ import { AlertCircle, ArrowRight, CircleCheck, HelpCircle, TrendingUp } from 'lu
 import { useRequireRole } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { MetricCard } from '@/components/dashboard/MetricCard';
+import { MeasuredOutcomes } from '@/components/dashboard/MeasuredOutcomes';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Badge } from '@/components/ui/badge';
@@ -88,6 +89,8 @@ export default function IntelligenceHubPage() {
         <MetricCard title="Flagged procedures" value={fetchError ? 'N/A' : confusingProcedures.length} />
         <MetricCard title="Department adoption" value={fetchError ? 'N/A' : avgAdoptionRate} />
       </section>
+
+      <MeasuredOutcomes />
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>

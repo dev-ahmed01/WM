@@ -59,6 +59,12 @@
   "employee": "denied",
   "manager": "allowed"
  },
+ "GET /api/v1/analytics/summary": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
+ },
  "GET /api/v1/auth/me": {
   "admin": "allowed",
   "anonymous": "denied",
@@ -322,6 +328,12 @@
   "anonymous": "denied",
   "employee": "denied",
   "manager": "denied"
+ },
+ "POST /api/v1/analytics/roi-estimate": {
+  "admin": "allowed",
+  "anonymous": "denied",
+  "employee": "denied",
+  "manager": "allowed"
  },
  "POST /api/v1/copilot/message": {
   "admin": "allowed",
