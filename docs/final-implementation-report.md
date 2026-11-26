@@ -62,3 +62,19 @@ Model footprint on an 8 GB CPU laptop: `qwen2.5:3b` 2.2 GB, `nomic-embed-text` 0
 - Invite/recovery links are manual; WorkMate sends no email.
 - No live WMS/ERP data: stock, bin and shipment questions are declined by design.
 - Eval sets are partly circular (see §2); the true accuracy on real data is unknown until a pilot.
+
+
+---
+## Addendum — role-based simplification and voice (latest work)
+* **Three destinations per role**: Employee (Assistant, History, Escalations), Admin (Knowledge Studio, Conversations, Employees),
+  Manager (Overview, Escalations, Analytics). Obsolete routes redirect (`next.config.mjs`); APIs and data are untouched.
+* **Assistant**: no mode toggle; how-to questions answer with the approved steps and *offer* guided mode; feedback; "Ask a person";
+  voice in/out in English and Hindi (see `docs/voice-audio-report.md`); suggested questions come from published SOPs.
+* **Cases** (migration 021, additive): one thread per request with internal notes, assignment, escalation, resolution; helpful /
+  not-helpful feedback; conversation titles and archiving.
+* **Tests**: 12 new live case/history/metrics/how-to tests (50 passing with the scenarios, both DB roles), 9 voice pipeline tests,
+  Hindi filler regression, real-browser voice test. RBAC matrix regenerated (128 operations).
+* **Not done / limits**: physical-microphone and phone testing; load testing; Dribbble/competitor research was limited to
+  public pages (no logged-in products) — `docs/design-research.md`; categories are read-only; the old pilot/handover pages still exist
+  as secondary routes; Hindi quality is machine-level; the Docker engine became unresponsive during the final rebuild, so the last
+  image rebuild was not re-verified in the browser (restart Docker Desktop and follow `docs/DEMO.md`).
