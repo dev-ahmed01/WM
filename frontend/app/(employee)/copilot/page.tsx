@@ -144,7 +144,7 @@ function Assistant() {
       <header className="flex h-12 flex-none items-center justify-end gap-1 px-3 sm:px-5">
         <button type="button" onClick={toggleReadAloud} aria-pressed={readAloud} aria-label="Read answers aloud after I speak"
           title={readAloud ? 'Answers to spoken questions are read aloud' : 'Answers are not read aloud'}
-          className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          className="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {readAloud ? <Volume2 className="h-[18px] w-[18px]" /> : <VolumeX className="h-[18px] w-[18px]" />}
         </button>
         <button type="button" onClick={newConversation} disabled={empty && !conversationId}

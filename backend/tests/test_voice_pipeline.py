@@ -79,6 +79,7 @@ def test_hindi_round_trip_is_transcribed_in_devanagari(client):
     assert out["language"] == "hi"
     assert any("ऀ" <= ch <= "ॿ" for ch in out["text"])
     assert len(_words(text) & _words(out["text"])) >= 4, out
+    assert "स्कैनर" in out["text"], out          # the domain hint fixes the key noun (was 'श्कैनर' without it)
 
 
 def test_silence_and_garbage_produce_understandable_errors(client):

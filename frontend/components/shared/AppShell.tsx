@@ -23,7 +23,7 @@ const departmentLabel = (id: string) => id.replace(/[_-]+/g, ' ').replace(/(^|\s
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 rounded-lg focus-visible:outline-offset-4" aria-label="WorkMate home">
+    <Link href="/" className="flex min-h-11 items-center gap-2.5 rounded-lg focus-visible:outline-offset-4" aria-label="WorkMate home">
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-xs font-bold tracking-tight text-primary-foreground">WM</span>
       <span className="font-display text-[17px] font-semibold tracking-tight text-foreground">WorkMate</span>
     </Link>

@@ -25,6 +25,8 @@ from app.core.config import settings
 logger = logging.getLogger("workmate.voice")
 SAMPLE_RATE = 16_000
 SUPPORTED = ("en", "hi")
+# Vocabulary hint for Hindi, in Devanagari: with it Whisper writes "स्कैनर"; without it, "श्कैनर"/"च्केनर" (measured).
+HINDI_DOMAIN_PROMPT = "वेयरहाउस की बातचीत: स्कैनर, पैलेट, कार्टन, बारकोड, रैक, फोर्कलिफ्ट, सुपरवाइज़र, स्टॉक, डॉक, शिपमेंट।"
 DOMAIN_PROMPT = (
     "Warehouse operations: goods receipt, pallet, SKU, scanner, WMS, dock, picking, packing, cycle count, "
     "putaway, damaged cartons, SOP, supervisor."
@@ -87,8 +89,8 @@ class _Whisper:
 
     def run(self, audio: np.ndarray, language: Optional[str]) -> Dict[str, Any]:
         name = settings.WHISPER_MODEL_EN if language == "en" else settings.WHISPER_MODEL
-        # The English vocabulary hint would push Hindi output into Latin letters, so only English gets it.
-        prompt = DOMAIN_PROMPT if language == "en" else None
+        # Each language gets a hint in its own script (an English hint pushes Hindi output into Latin letters).
+        prompt = DOMAIN_PROMPT if language == "en" else HINDI_DOMAIN_PROMPT if language == "hi" else None
         segments, info = self.model(name).transcribe(
             audio, language=language, beam_size=1, vad_filter=True, initial_prompt=prompt, condition_on_previous_text=False)
         text = " ".join(s.text.strip() for s in segments).strip()

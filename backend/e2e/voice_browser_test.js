@@ -54,7 +54,8 @@ const { chromium } = require(pwPath);
   await page.waitForTimeout(800);
   const answerText = await page.getByRole('log').innerText();
   result.answer = answerText.slice(-400);
-  ok('assistant answered from an approved procedure', /approved procedure|Goods receipt|Sources|scanner|Barcode/i.test(answerText));
+  // A refusal ("I don't have an approved procedure") must NOT count as an answer.
+  ok('assistant found an approved procedure for what was said', !/won.t guess|don.t have an approved procedure/i.test(answerText) && /Here is the approved procedure|closest|Choose/i.test(answerText), result.answer);
 
   // Voice questions are read aloud automatically; verify that, then stop it, then replay manually.
   await page.evaluate(() => { window.__played = 0; const orig = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { window.__played++; return orig.apply(this, arguments); }; });
