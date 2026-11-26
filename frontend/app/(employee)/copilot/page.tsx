@@ -235,7 +235,7 @@ function CopilotContent() {
             <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">Operational Copilot</h1>
             <Badge variant="neutral" className="hidden sm:inline-flex"><ShieldCheck className="h-3 w-3" />SOP-grounded</Badge>
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id ? user.department_id.replace(/[_-]+/g, ' ').replace(/b[a-z]/g, c => c.toUpperCase()) : 'your department'}</p>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Verified, step-by-step guidance for {user?.department_id ? user.department_id.replace(/[_-]+/g, ' ').replace(/(^|\s)[a-z]/g, c => c.toUpperCase()) : 'your department'}</p>
         </div>
         <div className="flex flex-none items-center gap-2">
           <button
