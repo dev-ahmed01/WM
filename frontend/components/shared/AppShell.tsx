@@ -148,7 +148,7 @@ function SidebarContent({ pathname, user, onNavigate, onLogout }: { pathname: st
                     <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-[#b7efd1]' : 'text-[#83a591]')} aria-hidden="true" />
                     <span className="min-w-0">
                       <span className="block text-[13px] font-semibold">{item.label}</span>
-                      <span className="block truncate text-[11px] text-[#87a592]">{item.description}</span>
+                      <span className="block truncate text-[11px] text-[#bfd6c6]">{item.description}</span>
                     </span>
                   </Link>
                 );
@@ -202,6 +202,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-emerald-900 focus:shadow-lg focus:outline focus:outline-2 focus:outline-emerald-600"
+      >
+        Skip to main content
+      </a>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[#244b35] lg:block">
         <SidebarContent pathname={pathname} user={user} onLogout={handleLogout} />
       </aside>
@@ -236,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {user ? <div className="w-14 sm:w-56"><UserMenu user={user} onLogout={handleLogout} compact /></div> : <Button asChild size="sm"><Link href="/login">Sign in</Link></Button>}
           </div>
         </header>
-        <main className="min-w-0">{children}</main>
+        <main id="main-content" tabIndex={-1} className="min-w-0 focus:outline-none">{children}</main>
       </div>
     </div>
   );

@@ -84,3 +84,32 @@ class Api:
 
     def put(self, user: str, path: str, json=None):
         return self.c.put("/api/v1" + path, headers=headers(user), json=json)
+
+
+def provision_runtime_role(owner_dsn: str) -> tuple[str, str]:
+    """Create a production-shaped runtime login (NOT the owner, no BYPASSRLS) using the project's own grants script.
+    Returns (runtime_dsn, role_name). Row-level security therefore applies exactly as it does in staging/production."""
+    import importlib.util
+    import uuid
+    from pathlib import Path
+    from urllib.parse import urlsplit, urlunsplit
+
+    role = "wm_rt_" + uuid.uuid4().hex[:8]
+    parts = urlsplit(owner_dsn)
+    runtime_dsn = urlunsplit(parts._replace(netloc=f"{role}:rt-test-pass-9@{parts.hostname}:{parts.port or 5432}"))
+    with psycopg.connect(owner_dsn, autocommit=True) as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_roles WHERE rolname='workmate_scoped_reader'")
+        if not cur.fetchone():
+            cur.execute("CREATE ROLE workmate_scoped_reader NOLOGIN")
+        cur.execute(f"CREATE ROLE {role} LOGIN PASSWORD 'rt-test-pass-9' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE")
+    spec = importlib.util.spec_from_file_location("grant_pg_runtime", Path(__file__).resolve().parents[2] / "scripts" / "grant_pg_runtime.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.provision(owner_dsn, runtime_dsn)
+    return runtime_dsn, role
+
+
+def drop_runtime_role(owner_dsn: str, role: str) -> None:
+    with psycopg.connect(owner_dsn, autocommit=True) as conn, conn.cursor() as cur:
+        cur.execute(f"DROP OWNED BY {role}")
+        cur.execute(f"DROP ROLE IF EXISTS {role}")

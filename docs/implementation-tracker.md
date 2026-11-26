@@ -89,6 +89,14 @@ no admin/manager console for knowledge-gap escalations beyond the Intelligence H
 - **Closed:** direct OWD upload now stages a pending submission and needs manager approval (migration 020, `owd_submissions`,
   `/knowledge/submissions`, `/procedure/approvals/uploads/{id}`); verified in the browser. Next: phone/tablet and accessibility pass.
 
+## Session 2026-11-26: governance, responsive/a11y, two more tenant leaks
+- Direct OWD uploads need manager approval (migration 020). Proposal/suggestion floors 0.45 (+ regression tests).
+- UI sweep `backend/e2e/ui_sweep.js`: 60 role/route/size combinations, 0 problems after fixing touch targets, labels, ~280 low-contrast
+  colors, skip link. Keyboard focus indicators present everywhere. Not done: screen-reader pass, axe.
+- **Security:** analytics endpoints leaked across companies; any admin could read/advance/abandon any session. Both fixed with live
+  tests (`G2`, `G3`) that fail on the old code. `G3` is a direct-object-reference sweep over conversations, sessions, work, cases,
+  handovers, drafts, gaps for same-company and cross-company attackers.
+
 ## Open issues / blockers
 - Hindi translation (M2M100) and speech models (Whisper, Piper) still not downloaded/exercised. LLM follow-up latency/timeouts need tuning (see above).
 - Out-of-scope questions show unrelated "closest SOP" suggestions and create no escalation.

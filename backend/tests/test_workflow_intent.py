@@ -53,7 +53,7 @@ def test_problem_descriptions_can_propose_a_confirmable_sop():
         },
         {
             "workflow_code": "WH_REC_004", "title": "Barcode Registration On Receipt",
-            "description": "Register and scan received product barcodes.",
+            "description": "Register and scan received product barcodes; also covers a barcode that is not scanning.",
             "workflow_version_id": "ver_barcode",
         },
     ]
@@ -138,3 +138,14 @@ def test_all_steps_completion_requires_an_attestation_not_a_question():
     assert WorkflowIntentService.is_all_steps_completion("I finished every step")
     assert WorkflowIntentService.is_all_steps_completion("everything is completed")
     assert not WorkflowIntentService.is_all_steps_completion("are all the steps done?")
+
+
+def test_one_word_overlap_is_not_a_proposal():
+    """A single shared word ("dock") must not propose an unrelated SOP; the proposal floor exists for this."""
+    catalog = CATALOG + [{
+        "workflow_code": "SOP_INB_001", "title": "Supplier arrival and gate check",
+        "description": "Record each arriving vehicle and confirm it has a booking before it is directed to a dock.",
+        "workflow_version_id": "ver_gate",
+    }]
+    assert WorkflowIntentService.match_published_workflow(
+        "how do I check the dock leveller plate", catalog, proposal_mode=True) is None

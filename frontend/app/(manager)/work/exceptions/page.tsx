@@ -269,7 +269,7 @@ export default function SupervisorExceptionDesk() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[.17em] text-emerald-700">OPERATIONS / SUPERVISOR</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-.045em] text-[#1c3527] sm:text-[2.5rem]">Task exceptions</h1>
-        <p className="mt-2 text-sm text-[#6c8071]">Blocked assignments and published SOP escalations, with their execution records.</p>
+        <p className="mt-2 text-sm text-[#596a5e]">Blocked assignments and published SOP escalations, with their execution records.</p>
       </div>
       <div className="flex items-center gap-2">
         <Link href="/control-room" className="rounded-xl border border-[#dce7dd] bg-white px-4 py-3 text-xs font-semibold text-emerald-900">Control room</Link>
@@ -283,14 +283,14 @@ export default function SupervisorExceptionDesk() {
         {label:'Critical holds',value:criticalCount,icon:ShieldAlert},
         {label:'Longest open',value:openCount?elapsed(items.filter(unresolved).reduce((old,x)=>Date.parse(x.created_at)<Date.parse(old)?x.created_at:old,items.find(unresolved)!.created_at),now):'—',icon:Clock3},
       ].map(metric=><div key={metric.label} className="rounded-[1.2rem] border border-[#dce7de] bg-white p-5">
-        <div className="flex items-center justify-between text-xs text-[#708276]"><span>{metric.label}</span><metric.icon className="h-4 w-4 text-emerald-700"/></div>
+        <div className="flex items-center justify-between text-xs text-[#5b6a60]"><span>{metric.label}</span><metric.icon className="h-4 w-4 text-emerald-700"/></div>
         <p className="mt-3 text-3xl font-semibold tabular-nums text-[#173824]">{fetching?'—':metric.value}</p>
       </div>)}
     </div>
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(17rem,.9fr)_minmax(0,1.2fr)]">
       <section className="overflow-hidden rounded-[1.5rem] border border-[#dce5de] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eaf0eb] p-5">
-          <div><h2 className="text-lg font-semibold">Review queue</h2><p className="mt-1 text-xs text-[#738375]">Critical and oldest unresolved first</p></div>
+          <div><h2 className="text-lg font-semibold">Review queue</h2><p className="mt-1 text-xs text-[#5e6b5f]">Critical and oldest unresolved first</p></div>
           <label className="flex items-center gap-2 text-[11px] font-semibold text-[#506e58]"><input type="checkbox" checked={showAll} onChange={e=>setShowAll(e.target.checked)} className="h-4 w-4 accent-emerald-700"/>Include reviewed</label>
         </div>
         {fetching?<div className="p-5"><LoadingState label="Reading incidents"/></div>:
@@ -300,17 +300,17 @@ export default function SupervisorExceptionDesk() {
           <div className={'grid h-10 w-10 shrink-0 place-items-center rounded-xl '+(item.severity==='critical'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700')}><AlertTriangle className="h-5 w-5"/></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-[#20392a]">{item.work_title}</p>
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#6d7c71]">{item.reason}</p>
-            <p className="mt-2 text-[10px] font-semibold text-[#708672]">{item.severity.toUpperCase()} · {item.corrective_status==='pending'?'Authorization pending':statusText(item.status)} · {elapsed(item.created_at,now)} since report</p>
-          </div><ArrowRight className="mt-1 h-4 w-4 text-[#66856c]"/>
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#5c6960]">{item.reason}</p>
+            <p className="mt-2 text-[10px] font-semibold text-[#596b5a]">{item.severity.toUpperCase()} · {item.corrective_status==='pending'?'Authorization pending':statusText(item.status)} · {elapsed(item.created_at,now)} since report</p>
+          </div><ArrowRight className="mt-1 h-4 w-4 text-[#526b57]"/>
         </button>)}</div>:
-        <div className="p-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-700"/><p className="mt-3 text-sm font-semibold">No outstanding cases</p><p className="mt-1 text-xs text-[#718473]">Exceptions appear when a work item is blocked.</p></div>}
+        <div className="p-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-700"/><p className="mt-3 text-sm font-semibold">No outstanding cases</p><p className="mt-1 text-xs text-[#5a695b]">Exceptions appear when a work item is blocked.</p></div>}
       </section>
       <section className="rounded-[1.5rem] border border-[#dce5de] bg-white p-5 sm:p-7">
-        {!selected?<div className="grid min-h-64 place-content-center text-center"><FileText className="mx-auto h-8 w-8 text-[#92b19b]"/><h2 className="mt-3 text-base font-semibold">Select an exception</h2><p className="mt-2 text-xs text-[#748276]">Review the linked work, recorded events and next action.</p></div>:
+        {!selected?<div className="grid min-h-64 place-content-center text-center"><FileText className="mx-auto h-8 w-8 text-[#92b19b]"/><h2 className="mt-3 text-base font-semibold">Select an exception</h2><p className="mt-2 text-xs text-[#5f6a60]">Review the linked work, recorded events and next action.</p></div>:
         <div className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><p className="text-[10px] font-bold uppercase tracking-[.13em] text-emerald-800">CASE / {selected.id.slice(-8).toUpperCase()}</p><h2 className="mt-2 text-xl font-semibold tracking-tight">{selected.work_title}</h2><p className="mt-2 text-xs text-[#708174]">{formatTime(selected.created_at)} · Reported by {selected.raised_by}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-[.13em] text-emerald-800">CASE / {selected.id.slice(-8).toUpperCase()}</p><h2 className="mt-2 text-xl font-semibold tracking-tight">{selected.work_title}</h2><p className="mt-2 text-xs text-[#5d6b61]">{formatTime(selected.created_at)} · Reported by {selected.raised_by}</p></div>
             <span className={'rounded-lg px-3 py-2 text-xs font-semibold '+(selected.severity==='critical'?'bg-red-50 text-red-800':'bg-amber-50 text-amber-800')}>{selected.severity.toUpperCase()}</span>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -318,32 +318,32 @@ export default function SupervisorExceptionDesk() {
             <p className="mt-1 text-xs leading-6 text-amber-900">A review or acknowledgment does not release safety controls or independently verify physical evidence.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl bg-[#f4f8f4] p-4"><p className="text-[10px] font-semibold uppercase text-[#67816b]">Task state</p><p className="mt-2 text-sm font-semibold capitalize">{selected.work_status}</p><p className="mt-1 text-[11px] text-[#738576]">{elapsed(selected.created_at,now)} since report</p></div>
-            <div className="rounded-xl bg-[#f4f8f4] p-4"><p className="text-[10px] font-semibold uppercase text-[#67816b]">Review owner</p><p className="mt-2 truncate text-sm font-semibold">{selected.reviewer_id||'Unassigned'}</p></div>
+            <div className="rounded-xl bg-[#f4f8f4] p-4"><p className="text-[10px] font-semibold uppercase text-[#576d5a]">Task state</p><p className="mt-2 text-sm font-semibold capitalize">{selected.work_status}</p><p className="mt-1 text-[11px] text-[#5b6a5e]">{elapsed(selected.created_at,now)} since report</p></div>
+            <div className="rounded-xl bg-[#f4f8f4] p-4"><p className="text-[10px] font-semibold uppercase text-[#576d5a]">Review owner</p><p className="mt-2 truncate text-sm font-semibold">{selected.reviewer_id||'Unassigned'}</p></div>
           </div>
-          <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#66826b]">Incident</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{selected.reason}</p>
-            {selected.decision_option?<p className="mt-2 text-xs text-[#7b857c]">Published decision: {selected.decision_option}</p>:null}
+          <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#546b58]">Incident</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{selected.reason}</p>
+            {selected.decision_option?<p className="mt-2 text-xs text-[#606861]">Published decision: {selected.decision_option}</p>:null}
           </div>
           <Link href={'/work/'+encodeURIComponent(selected.work_item_id)} className="inline-flex items-center gap-2 text-xs font-bold text-emerald-800">Open linked work and evidence timeline <ArrowRight className="h-4 w-4"/></Link>
           <div className="rounded-xl border border-[#e2e9e1] bg-[#f7faf6] p-4">
             <p className="text-xs font-bold text-[#305b3c]">Shift continuity</p>
             {selected.handover_id?<div className="mt-2 space-y-2">
-              <p className="text-xs text-[#53735c]">Linked handover: {selected.handover_id} · {selected.handover_status}</p>
+              <p className="text-xs text-[#4f6d57]">Linked handover: {selected.handover_id} · {selected.handover_status}</p>
               <Link href="/handover/review" className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800">Open shift handover reviews <ArrowRight className="h-4 w-4"/></Link>
-            </div>:<p className="mt-2 text-xs text-[#7b8d7d]">No linked shift handover yet. The originating worker can submit one from the blocked assignment.</p>}
+            </div>:<p className="mt-2 text-xs text-[#5c6a5d]">No linked shift handover yet. The originating worker can submit one from the blocked assignment.</p>}
           </div>
           <div className="border-t border-[#e6eee6] pt-5">
             <h3 className="text-sm font-semibold">Audit trail</h3>
             <div className="mt-3 space-y-3">{selected.events.map(event=><div key={event.id} className="flex gap-3 rounded-lg bg-[#f8faf7] p-3">
               <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500"/>
-              <div className="min-w-0"><p className="text-xs font-semibold capitalize">{event.action.replaceAll('_',' ')}</p><p className="mt-1 text-[11px] text-[#788678]">{event.actor_id} · {formatTime(event.created_at)}</p>
+              <div className="min-w-0"><p className="text-xs font-semibold capitalize">{event.action.replaceAll('_',' ')}</p><p className="mt-1 text-[11px] text-[#5e685e]">{event.actor_id} · {formatTime(event.created_at)}</p>
                 {event.note?<p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#4d6553]">{event.note}</p>:null}
               </div>
             </div>)}</div>
           </div>
           {canRecord?<div className="space-y-3 border-t border-[#e6eee6] pt-5">
             <h3 className="text-sm font-semibold">Containment and remediation</h3>
-            <p className="text-xs leading-5 text-[#6c806f]">Record what was actually done, then propose a separately approved remediation. Neither action unblocks work.</p>
+            <p className="text-xs leading-5 text-[#596a5c]">Record what was actually done, then propose a separately approved remediation. Neither action unblocks work.</p>
             <label htmlFor="case-containment-note" className="wm-label">Operational action note</label>
             <textarea id="case-containment-note" rows={3} minLength={12} maxLength={1000}
               className="wm-input min-h-24" value={actionNote}
@@ -360,12 +360,12 @@ export default function SupervisorExceptionDesk() {
           </div>:null}
           <div className="space-y-3 border-t border-[#e6eee6] pt-5">
             <h3 className="text-sm font-semibold">Independent corrective work</h3>
-            <p className="text-xs leading-5 text-[#6c806f]">A second administrator must authorize any new task. Approval does not release the original blocked assignment.</p>
+            <p className="text-xs leading-5 text-[#596a5c]">A second administrator must authorize any new task. Approval does not release the original blocked assignment.</p>
             {selected.corrective_request ? <div className="space-y-2 rounded-xl bg-[#f3f8f3] p-4">
               <p className="text-xs font-bold capitalize text-[#254b32]">Request {selected.corrective_request.status}</p>
               <p className="text-xs text-[#4b6553]">{selected.corrective_request.procedure_title} · {selected.corrective_request.workflow_version_id}</p>
               <p className="text-xs leading-5 text-[#526c59]">{selected.corrective_request.plan_note}</p>
-              <p className="text-xs text-[#778678]">Proposed by {selected.corrective_request.proposed_by}</p>
+              <p className="text-xs text-[#5d685e]">Proposed by {selected.corrective_request.proposed_by}</p>
               {selected.corrective_request.decision_note?<p className="text-xs font-semibold text-[#41604a]">Decision: {selected.corrective_request.decision_note}</p>:null}
               {selected.corrective_request.corrective_work_id?<Link className="inline-flex items-center gap-1 text-xs font-bold text-emerald-900"
                 href={'/work/'+encodeURIComponent(selected.corrective_request.corrective_work_id)}>Open new corrective assignment <ArrowRight className="h-4 w-4"/></Link>:null}
@@ -404,13 +404,13 @@ export default function SupervisorExceptionDesk() {
                 className="min-h-11 rounded-xl border border-[#bcd9c4] bg-[#eaf5ed] px-4 text-xs font-bold text-[#235737] disabled:opacity-50">
                 Submit for independent authorization
               </button>
-            </div>:<p className="text-xs text-[#75877a]">A reviewed incident with recorded containment and remediation is required before requesting corrective work.</p>}
+            </div>:<p className="text-xs text-[#5b695f]">A reviewed incident with recorded containment and remediation is required before requesting corrective work.</p>}
           </div>
 
           <div className="space-y-3 border-t border-[#e6eee6] pt-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-[#1c3527]">Closure controls</h3>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#66826b]">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#546b58]">
                 {selected.status==='closed'?'Closed · original work held':selected.closure?'Evidence reviewed · site acceptance pending':'Separate verification required'}
               </span>
             </div>
@@ -418,7 +418,7 @@ export default function SupervisorExceptionDesk() {
               <p className="text-xs text-[#526c59]">
                 Corrective SOP task: {selected.corrective_work_status||'not started'}.
                 A completed task with retained attachments and independent site inspection are required.
-              </p>:<p className="text-xs text-[#718574]">An authorized corrective SOP must be completed first.</p>}
+              </p>:<p className="text-xs text-[#5a6a5c]">An authorized corrective SOP must be completed first.</p>}
             {canReviewEvidence?<div className="space-y-2 rounded-xl border border-[#dce9de] bg-[#f8fbf8] p-4">
               <label htmlFor="closure-evidence-note" className="wm-label">Corrective evidence review</label>
               <textarea id="closure-evidence-note" rows={3} minLength={20} maxLength={1000}
@@ -431,7 +431,7 @@ export default function SupervisorExceptionDesk() {
             </div>:null}
             {selected.closure?<div className="space-y-2 rounded-xl border border-[#dce9de] bg-[#f8fbf8] p-4">
               <p className="text-xs font-semibold text-[#28593c]">Evidence review recorded · {formatTime(selected.closure.evidence_reviewed_at)}</p>
-              <p className="text-xs text-[#54705c]">Reviewer: {selected.closure.evidence_reviewed_by} · {selected.closure.evidence_snapshot.recorded_step_count} steps · {selected.closure.evidence_snapshot.received_evidence.length} received files</p>
+              <p className="text-xs text-[#526d5a]">Reviewer: {selected.closure.evidence_reviewed_by} · {selected.closure.evidence_snapshot.recorded_step_count} steps · {selected.closure.evidence_snapshot.received_evidence.length} received files</p>
               <p className="whitespace-pre-wrap text-xs leading-5 text-[#526c59]">{selected.closure.evidence_review_note}</p>
               {selected.closure.site_accepted_at?<div className="space-y-1 border-t border-[#d9e6da] pt-3">
                 <p className="text-xs font-bold text-[#1d603f]">Site acceptance recorded · {formatTime(selected.closure.site_accepted_at)}</p>

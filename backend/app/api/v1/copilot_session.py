@@ -21,27 +21,40 @@ router = APIRouter(prefix="/copilot/session", tags=["Copilot Session State"])
 _authorized_user = require_role("employee", "admin", "manager")
 
 
-def _owned_session(session_id: str, current_user: Dict[str, Any]) -> Dict[str, Any]:
+def _same_organization(admin_id: str, owner_id: str) -> bool:
+    """True only when both users belong to the same, configured organization."""
+    from app.repositories.org_repository import organization_of_user
+    with get_postgres_connection() as conn:
+        with conn.cursor() as cur:
+            a, b = organization_of_user(cur, admin_id), organization_of_user(cur, owner_id)
+    return bool(a) and a == b
+
+
+def _forbidden(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"error_code": "AUTH_FORBIDDEN", "message": message, "details": None},
+    )
+
+
+def _owned_session(session_id: str, current_user: Dict[str, Any], *, write: bool = True) -> Dict[str, Any]:
+    """Owner-scoped. An administrator may READ sessions inside their own organization (supervision);
+    nobody but the owner may change a session, because advancing steps is an attestation by that person.
+    Foreign sessions answer exactly like missing ones."""
     session = WorkflowSessionRepository.get_by_id(session_id)
+    not_found = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"error_code": "NOT_FOUND", "message": f"Workflow session '{session_id}' not found.", "details": None},
+    )
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error_code": "NOT_FOUND",
-                "message": f"Workflow session '{session_id}' not found.",
-                "details": None,
-            },
-        )
-    is_admin = normalize_role(current_user.get("role", "")) == "admin"
-    if not is_admin and session.get("user_id") != current_user.get("sub"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error_code": "AUTH_FORBIDDEN",
-                "message": "You do not own this workflow session.",
-                "details": None,
-            },
-        )
+        raise not_found
+    me, owner = str(current_user.get("sub") or ""), str(session.get("user_id") or "")
+    if owner != me:
+        is_admin = normalize_role(current_user.get("role", "")) == "admin"
+        if not (is_admin and not write and _same_organization(me, owner)):
+            if is_admin and write and _same_organization(me, owner):
+                raise _forbidden("Only the employee who started this session can change it.")
+            raise not_found
     if _task_bound(session_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -67,7 +80,7 @@ async def get_session_endpoint(
     id: str,
     current_user: Dict[str, Any] = Depends(_authorized_user),
 ) -> WorkflowSession:
-    return WorkflowSession(**_owned_session(id, current_user))
+    return WorkflowSession(**_owned_session(id, current_user, write=False))
 
 
 @router.post("/{id}/resume", response_model=WorkflowSession)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_postgres_connection
+from app.core.database import get_postgres_connection, get_transaction
 from app.repositories.procedure_draft_repository import COLUMNS, DraftConflict, DraftNotFound, _dict, _event, _start
 
 GAP_COLS = ("g.id, g.department_id, g.reported_by, g.question, g.occurrences, g.status, g.employee_reply, "
@@ -102,7 +102,7 @@ class KnowledgeGapRepository:
 
     @staticmethod
     def reply(org, dept, gap_id: str, actor: str, text: str) -> Dict[str, Any]:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             gap = KnowledgeGapRepository._get(cur, org, dept, gap_id)
             if gap["status"] in ("resolved", "dismissed"):
                 raise DraftConflict("This question is already closed.")
@@ -113,7 +113,7 @@ class KnowledgeGapRepository:
 
     @staticmethod
     def dismiss(org, dept, gap_id: str) -> Dict[str, Any]:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             gap = KnowledgeGapRepository._get(cur, org, dept, gap_id)
             if gap["status"] in ("resolved", "dismissed"):
                 raise DraftConflict("This question is already closed.")
@@ -122,14 +122,21 @@ class KnowledgeGapRepository:
 
     @staticmethod
     def link_draft(gap_id: str, draft_id: str) -> None:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
-            cur.execute("UPDATE knowledge_studio.knowledge_gaps SET draft_id=%s, status='drafting', updated_at=now() WHERE id=%s",
-                        (draft_id, gap_id))
-            cur.execute("UPDATE knowledge_studio.procedure_drafts SET source_gap_id=%s WHERE id=%s", (gap_id, draft_id))
+        with get_transaction() as cur:
+            cur.execute("UPDATE knowledge_studio.knowledge_gaps SET draft_id=%s, status='drafting', updated_at=now() "
+                        "WHERE id=%s RETURNING department_id", (draft_id, gap_id))
+            department = cur.fetchone()[0]
+            # procedure_drafts is protected by row-level security: without the tenant context a restricted
+            # runtime login would update zero rows without any error.
+            cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department,))
+            cur.execute("UPDATE knowledge_studio.procedure_drafts SET source_gap_id=%s WHERE id=%s AND department_id=%s",
+                        (gap_id, draft_id, department))
+            if cur.rowcount != 1:
+                raise RuntimeError("Draft could not be linked to its knowledge gap")
 
     @staticmethod
     def resolve_by_draft(draft_id: str) -> int:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             cur.execute("UPDATE knowledge_studio.knowledge_gaps SET status='resolved', resolved_at=now(), updated_at=now() "
                         "WHERE draft_id=%s AND status IN ('open','answered','drafting')", (draft_id,))
             return cur.rowcount

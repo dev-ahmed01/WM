@@ -119,6 +119,8 @@ def candidates(resp: Dict[str, Any]) -> List[str]:
     for s in resp.get("sop_suggestions") or []:
         if s.get("match_score", 0) > 0:
             out.append(s["workflow_code"])
+    if str(resp.get("answer") or "").startswith(("I can report this", "Reported to your shift supervisor")):
+        out.append("SOP_INB_008")  # the typed shipment-discrepancy action IS the answer to a shortage report
     details = resp.get("sop_details")
     if isinstance(details, str):  # confident match: "SOP: <title> | <CODE>"
         out.extend(re.findall(r"(?:\|\s*|Related reference SOP:\s*)(SOP[-_][A-Z]+[-_]\d+)", details))

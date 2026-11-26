@@ -183,3 +183,86 @@ def test_escalations_are_scoped_to_organization_and_manager_department(tenants):
             cur.execute("DELETE FROM workmate_copilot.conversation_messages WHERE id LIKE %s", (f"msg_%_{s}",))
             cur.execute("DELETE FROM workmate_copilot.conversations WHERE id LIKE %s", (f"cv_%_{s}",))
             cur.execute("DELETE FROM security.departments WHERE id=%s", (dept_a2,))
+
+
+@pytest.mark.live_integration
+def test_failed_invitation_leaves_no_half_created_user(tenants, monkeypatch):
+    """The pool runs in autocommit mode; multi-statement writes must still be all-or-nothing."""
+    from app.repositories.org_repository import OrgRepository
+    t = tenants
+    a = _hdr(t["adminA"], "admin", t["deptA"])
+    email = f"ghost_{t['empA']}@example.test"
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("token store unavailable")
+
+    monkeypatch.setattr(OrgRepository, "_issue_token", staticmethod(boom))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/api/v1/admin/employees", headers=a, json={
+            "email": email, "full_name": "Ghost", "department_id": t["deptA"]})
+        assert r.status_code >= 500
+    with psycopg.connect(settings.DATABASE_URL) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM security.users WHERE lower(email)=lower(%s)", (email,))
+        assert cur.fetchone()[0] == 0, "a failed invitation must not leave a user behind"
+        cur.execute("SELECT count(*) FROM security.user_roles WHERE user_id NOT IN (SELECT id FROM security.users)")
+        assert cur.fetchone()[0] == 0
+
+
+@pytest.mark.live_integration
+def test_rejected_redeem_does_not_burn_the_one_time_token(tenants):
+    t = tenants
+    a = _hdr(t["adminA"], "admin", t["deptA"])
+    with TestClient(app) as client:
+        body = client.post("/api/v1/admin/employees", headers=a, json={
+            "email": f"keep_{t['empA']}@example.test", "full_name": "Keep", "department_id": t["deptA"]}).json()
+        uid, token = body["employee"]["id"], body["one_time_token"]
+        # Deactivated accounts cannot redeem, but that refusal must not consume the token.
+        assert client.post(f"/api/v1/admin/employees/{uid}/status", headers=a, json={"active": False}).status_code == 200
+        assert client.post("/api/v1/auth/token/redeem", json={"token": token, "password": PASSWORD + "z"}).status_code == 422
+        assert client.post(f"/api/v1/admin/employees/{uid}/status", headers=a, json={"active": True}).status_code == 200
+        assert client.post("/api/v1/auth/token/redeem", json={"token": token, "password": PASSWORD + "z"}).status_code == 200
+
+
+@pytest.mark.live_integration
+def test_bootstrap_creates_an_administrator_who_can_actually_run_the_admin_screens(monkeypatch):
+    """First-run path: bootstrap -> sign in -> organization overview -> invite an employee. Scratch database."""
+    import importlib.util
+    from pathlib import Path
+    from test_knowledge_loop_postgres import _migrate
+    from urllib.parse import urlsplit, urlunsplit
+    import uuid
+    base = urlsplit(settings.DATABASE_URL)
+    name = "wm_boot_" + uuid.uuid4().hex[:8]
+    admin_dsn = urlunsplit(base._replace(path="/postgres"))
+    dsn = urlunsplit(base._replace(path="/" + name))
+    with psycopg.connect(admin_dsn, autocommit=True) as conn:
+        conn.execute(f'CREATE DATABASE "{name}"')
+    close_postgres_pool()
+    monkeypatch.setattr(settings, "DATABASE_URL", dsn)
+    try:
+        _migrate(dsn)
+        for k, v in {"BOOTSTRAP_ADMIN_EMAIL": "First.Admin@Example.test", "BOOTSTRAP_ADMIN_PASSWORD": "A-long-first-admin-pass-1",
+                     "BOOTSTRAP_DEPARTMENT_ID": "ops", "BOOTSTRAP_DEPARTMENT_NAME": "Operations",
+                     "BOOTSTRAP_ORGANIZATION_NAME": "Acme Logistics", "BOOTSTRAP_WAREHOUSE_NAME": "Main DC"}.items():
+            monkeypatch.setenv(k, v)
+        spec = importlib.util.spec_from_file_location("bootstrap_postgres", Path(__file__).resolve().parents[2] / "scripts" / "bootstrap_postgres.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.bootstrap().startswith("usr_")
+        with pytest.raises(ValueError):                      # never overwrites an existing administrator
+            module.bootstrap()
+        monkeypatch.setattr(settings, "AUTH_REVALIDATE_DB", False)
+        with TestClient(app) as client:
+            login = client.post("/api/v1/auth/login", json={"email": "first.admin@example.test", "password": "A-long-first-admin-pass-1"})
+            assert login.status_code == 200 and login.json()["role"] == "admin", login.text
+            h = {"Authorization": "Bearer " + login.json()["access_token"]}
+            overview = client.get("/api/v1/admin/org", headers=h)
+            assert overview.status_code == 200 and overview.json()["organization"]["name"] == "Acme Logistics", overview.text
+            assert [w["name"] for w in overview.json()["warehouses"]] == ["Main DC"]
+            made = client.post("/api/v1/admin/employees", headers=h, json={
+                "email": "first.picker@example.test", "full_name": "First Picker", "department_id": "ops", "job_profile": "PICKER"})
+            assert made.status_code == 201, made.text
+    finally:
+        close_postgres_pool()
+        with psycopg.connect(admin_dsn, autocommit=True) as conn:
+            conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')

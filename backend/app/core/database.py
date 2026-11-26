@@ -38,6 +38,27 @@ def get_postgres_connection() -> Generator[Any, None, None]:
         yield conn
 
 
+@contextlib.contextmanager
+def get_transaction(department: str | None = None) -> Generator[Any, None, None]:
+    """One real transaction on a pooled connection (the pool itself runs in autocommit mode).
+
+    Everything executed on the yielded cursor commits together or not at all, row locks
+    (SELECT ... FOR UPDATE) hold until the block ends, and, when a department is given, the tenant
+    context for row-level security is set for the whole transaction.
+    """
+    with get_postgres_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("BEGIN")
+            try:
+                if department:
+                    cur.execute("SELECT set_config('workmate.department_id', %s, true)", (department,))
+                yield cur
+                cur.execute("COMMIT")
+            except BaseException:
+                cur.execute("ROLLBACK")
+                raise
+
+
 def close_postgres_pool() -> None:
     global _pool
     if _pool is not None:

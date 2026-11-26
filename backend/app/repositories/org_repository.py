@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import psycopg
 
-from app.core.database import get_postgres_connection
+from app.core.database import get_postgres_connection, get_transaction
 from app.core.security import hash_password
 
 LANGUAGES = {"en", "hi", "hinglish"}
@@ -165,7 +165,7 @@ class OrgRepository:
         user_id = f"usr_{uuid.uuid4().hex[:16]}"
         token = secrets.token_urlsafe(32)
         try:
-            with get_postgres_connection() as conn, conn.cursor() as cur:
+            with get_transaction() as cur:
                 org = _require_org(cur, actor_id)
                 refs = OrgRepository._resolve_refs(cur, org, data)
                 if "department_id" not in refs:
@@ -203,7 +203,7 @@ class OrgRepository:
     @staticmethod
     def update_employee(actor_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            with get_postgres_connection() as conn, conn.cursor() as cur:
+            with get_transaction() as cur:
                 org = _require_org(cur, actor_id)
                 OrgRepository._get_in_org(cur, org, user_id)
                 refs = OrgRepository._resolve_refs(cur, org, data)
@@ -227,7 +227,7 @@ class OrgRepository:
 
     @staticmethod
     def set_active(actor_id: str, user_id: str, active: bool) -> Dict[str, Any]:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             org = _require_org(cur, actor_id)
             cur.execute("SELECT status FROM security.users WHERE id=%s", (user_id,))
             OrgRepository._get_in_org(cur, org, user_id)
@@ -244,7 +244,7 @@ class OrgRepository:
     @staticmethod
     def issue_recovery(actor_id: str, user_id: str) -> Dict[str, Any]:
         token = secrets.token_urlsafe(32)
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             org = _require_org(cur, actor_id)
             OrgRepository._get_in_org(cur, org, user_id)
             OrgRepository._issue_token(cur, user_id, "recovery", token, RECOVERY_TTL, actor_id)
@@ -253,7 +253,7 @@ class OrgRepository:
     @staticmethod
     def redeem_token(token: str, new_password: str) -> bool:
         """Set a password from an unused, unexpired token and activate the account."""
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             cur.execute(
                 "UPDATE security.account_tokens SET used_at = now() "
                 "WHERE token_hash=%s AND used_at IS NULL AND expires_at > now() "

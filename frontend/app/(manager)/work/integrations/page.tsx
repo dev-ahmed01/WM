@@ -117,7 +117,7 @@ export default function IntegrationInbox(){
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[.16em] text-emerald-800">OPERATIONS / CONNECTIONS</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-.045em] text-[#183527] sm:text-[2.5rem]">Integration inbox</h1>
-        <p className="mt-2 text-sm text-[#687d6e]">Source work, independently reviewed before assignment.</p>
+        <p className="mt-2 text-sm text-[#5a6c5f]">Source work, independently reviewed before assignment.</p>
       </div>
       <div className="flex items-center gap-2">
         <Link href="/control-room" className="min-h-11 rounded-xl border border-[#d6e4d9] bg-white px-4 py-3 text-xs font-semibold text-[#285b3c]">Control room</Link>
@@ -129,8 +129,8 @@ export default function IntegrationInbox(){
     {error?<p role="alert" className="rounded-xl bg-red-50 p-4 text-xs text-red-800">{error}</p>:null}
     {info?<p role="status" className="rounded-xl border border-[#d8e8db] bg-[#f3faf4] p-4 text-xs font-medium text-[#295f41]">{info}</p>:null}
     <div className="grid grid-cols-2 gap-3 sm:max-w-lg">
-      <div className="rounded-2xl border border-[#dae6dd] bg-white p-5"><p className="text-xs text-[#687e6f]">Awaiting review</p><p className="mt-3 text-3xl font-semibold tabular-nums text-[#193f2a]">{pending.length}</p></div>
-      <div className="rounded-2xl border border-[#dae6dd] bg-white p-5"><p className="text-xs text-[#687e6f]">Queued after review</p><p className="mt-3 text-3xl font-semibold tabular-nums text-[#193f2a]">{accepted}</p></div>
+      <div className="rounded-2xl border border-[#dae6dd] bg-white p-5"><p className="text-xs text-[#586b5e]">Awaiting review</p><p className="mt-3 text-3xl font-semibold tabular-nums text-[#193f2a]">{pending.length}</p></div>
+      <div className="rounded-2xl border border-[#dae6dd] bg-white p-5"><p className="text-xs text-[#586b5e]">Queued after review</p><p className="mt-3 text-3xl font-semibold tabular-nums text-[#193f2a]">{accepted}</p></div>
     </div>
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(300px,.85fr)_minmax(0,1.45fr)]">
       <section className="rounded-[1.5rem] border border-[#dae6dd] bg-white p-5 sm:p-6">
@@ -171,22 +171,22 @@ export default function IntegrationInbox(){
       <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-[#dae6dd] bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebf0eb] px-5 py-5 sm:px-6">
           <h2 className="text-base font-semibold">Review source records</h2>
-          <span className="text-xs text-[#718172]">Current department only</span>
+          <span className="text-xs text-[#5e6b5f]">Current department only</span>
         </div>
         <div className="grid lg:grid-cols-[minmax(15rem,.85fr)_minmax(0,1fr)]">
           <div className="max-h-[520px] overflow-y-auto border-b border-[#edf1ed] lg:border-b-0 lg:border-r">
             {items.length?items.map(entry=><button type="button" key={entry.id} onClick={()=>{setSelected(entry.id);setReviewNote('');}}
               aria-pressed={selected===entry.id} className={'w-full border-b border-[#edf1ed] px-5 py-4 text-left hover:bg-[#f5f9f5] '+(selected===entry.id?'bg-[#eff7ef]':'')}>
               <p className="truncate text-xs font-semibold text-[#1b3c28]">{entry.normalized_payload.title}</p>
-              <p className="mt-1 truncate text-[11px] text-[#728275]">{entry.source_system.toUpperCase()} · {entry.external_work_id}</p>
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-[#547d61]">{entry.status} · {time(entry.created_at)}</p>
-            </button>):<p className="p-6 text-xs text-[#718477]">No integration records yet.</p>}
+              <p className="mt-1 truncate text-[11px] text-[#5d6a5f]">{entry.source_system.toUpperCase()} · {entry.external_work_id}</p>
+              <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-[#4a6e55]">{entry.status} · {time(entry.created_at)}</p>
+            </button>):<p className="p-6 text-xs text-[#5a695f]">No integration records yet.</p>}
           </div>
           <div className="min-h-[310px] p-5 sm:p-6">
             {focus?<div className="space-y-4">
               <div><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">{focus.source_system} / {focus.status}</p>
                 <h3 className="mt-2 text-lg font-semibold text-[#1b3929]">{focus.normalized_payload.title}</h3>
-                <p className="mt-2 text-xs text-[#758675]">{focus.external_event_id}</p></div>
+                <p className="mt-2 text-xs text-[#5d6b5d]">{focus.external_event_id}</p></div>
               <div className="rounded-xl bg-[#f5f9f5] p-4 text-xs leading-6 text-[#42624d]">
                 <p>Work ID: {focus.external_work_id}</p><p>Assigned: {focus.normalized_payload.assigned_to||'Unassigned'}</p>
                 <p>Type: {focus.normalized_payload.work_type.replaceAll('_',' ')} · {focus.normalized_payload.priority}</p>
@@ -202,14 +202,14 @@ export default function IntegrationInbox(){
                   <button type="button" disabled={working||reviewNote.trim().length<16} onClick={()=>void decide('accepted')} className="min-h-11 rounded-xl bg-[#155a40] px-4 text-xs font-semibold text-white disabled:opacity-50">Accept into queue</button>
                   <button type="button" disabled={working||reviewNote.trim().length<16} onClick={()=>void decide('rejected')} className="min-h-11 rounded-xl border border-[#b9d2bd] px-4 text-xs font-semibold text-[#316645] disabled:opacity-50">Reject import</button>
                 </div>
-              </div>:focus.status==='pending'?<p className="flex gap-2 text-xs text-[#58775f]"><ShieldCheck className="h-4 w-4 shrink-0"/>A different manager must review this import.</p>:null}
-            </div>:<div className="grid min-h-64 place-content-center text-center"><ShieldCheck className="mx-auto h-7 w-7 text-[#719c7b]"/><p className="mt-3 text-xs text-[#788b7a]">Select a source record to review.</p></div>}
+              </div>:focus.status==='pending'?<p className="flex gap-2 text-xs text-[#516e58]"><ShieldCheck className="h-4 w-4 shrink-0"/>A different manager must review this import.</p>:null}
+            </div>:<div className="grid min-h-64 place-content-center text-center"><ShieldCheck className="mx-auto h-7 w-7 text-[#4d6e55]"/><p className="mt-3 text-xs text-[#5b6b5d]">Select a source record to review.</p></div>}
           </div>
         </div>
       </section>
     </div>
     {user?.role==='admin'?<IntegrationOperationsPanel/>:null}
     {user?.role==='admin'?<IntegrationSourcesPanel/>:null}
-    <p className="text-xs text-[#738275]">Signed custom connectors require separately configured secrets. Native vendor SDKs, bidirectional synchronization and automatic SOP execution remain disabled.</p>
+    <p className="text-xs text-[#5e6a5f]">Signed custom connectors require separately configured secrets. Native vendor SDKs, bidirectional synchronization and automatic SOP execution remain disabled.</p>
   </div>;
 }

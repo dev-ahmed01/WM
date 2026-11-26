@@ -15,14 +15,31 @@ from scenarios_support import (Api, DEPT_A, DEPT_B, headers, publish_demo_librar
 from test_knowledge_loop_postgres import scratch  # noqa: F401  (fixture)
 
 
-@pytest.fixture()
-def world(scratch):  # noqa: F811
+@pytest.fixture(params=["owner", "restricted_runtime"])
+def world(request, scratch, monkeypatch):  # noqa: F811
+    """The whole acceptance world, run twice: as the database owner (RLS bypassed) and as the restricted
+    non-owner runtime login production uses (RLS enforced, POSTGRES_RLS_REFERENCES on)."""
+    from app.core import database
+    from app.core.config import settings
     from app.main import app
+    from scenarios_support import drop_runtime_role, provision_runtime_role
     seed_world(scratch)
     publish_demo_library(DEPT_A)
     publish_org_b_sop(DEPT_B)
-    with TestClient(app) as client:
-        yield Api(client)
+    role = None
+    if request.param == "restricted_runtime":
+        runtime_dsn, role = provision_runtime_role(scratch)
+        database.close_postgres_pool()
+        monkeypatch.setattr(settings, "DATABASE_URL", runtime_dsn)
+        monkeypatch.setattr(settings, "POSTGRES_RLS_REFERENCES", True)
+    try:
+        with TestClient(app) as client:
+            yield Api(client)
+    finally:
+        database.close_postgres_pool()
+        if role:
+            monkeypatch.undo()
+            drop_runtime_role(scratch, role)
 
 
 def _finish_workflow(api: Api, user: str, conversation_id: str, limit: int = 12) -> dict:
@@ -471,3 +488,111 @@ def test_E2_direct_owd_upload_cannot_bypass_manager_approval(world):
     found = api.ask("emp1", question)
     assert "Start it?" in found["answer"] and "Pallet wrap audit" in (found["sop_details"] or "")
     assert api.get("mgr", "/procedure/approvals").json()["uploads"] == []
+
+
+@pytest.mark.live_integration
+def test_unrelated_question_sharing_one_word_does_not_propose_a_wrong_sop(world):
+    api = world
+    noisy = api.ask("emp1", "how do I check the dock leveller plate")     # no such SOP in the library
+    assert "Start it?" not in noisy["answer"] and "won't guess" in noisy["answer"]
+    for question, expect in (("I found a damaged box", "Damaged inbound goods"),
+                             ("what is the process for requesting leave", "Leave request"),
+                             ("how do I do a cycle count", "Cycle counting")):
+        good = api.ask("emp1", question)
+        assert expect in (good["sop_details"] or "") or expect in good["answer"] or any(
+            expect in s["title"] for s in good.get("sop_suggestions", [])), (question, good["answer"])
+
+
+@pytest.mark.live_integration
+def test_G2_analytics_never_cross_company_or_department_boundaries(world):
+    """Intelligence Hub endpoints used to return every company's rows when no department was given."""
+    api = world
+    for user, q in (("emp1", "I found a damaged box"), ("emp2", "how do I do goods receipt posting"),
+                    ("emp_b", "quarantine of purple widgets"), ("emp_b", "what is the weather on mars")):
+        api.ask(user, q)
+    endpoints = ("sop-usage", "faqs", "confusing-procedures", "escalations", "department-adoption", "confidence-trends")
+    for who, allowed in (("admin1", {DEPT_A}), ("mgr", {DEPT_A}), ("admin_b", {DEPT_B})):
+        for ep in endpoints:
+            r = api.get(who, f"/analytics/{ep}")
+            assert r.status_code == 200, (who, ep, r.text)
+            seen = {row.get("department_id") for row in r.json() if row.get("department_id")}
+            assert seen <= allowed, (who, ep, seen)
+    # The data really is there for the right company (the guard is not just returning nothing).
+    assert any(row["department_id"] == DEPT_B for row in api.get("admin_b", "/analytics/faqs").json())
+    assert any(row["department_id"] == DEPT_A for row in api.get("admin1", "/analytics/faqs").json())
+    # Asking for another company's department is a 404, for every endpoint and role; employees get 403.
+    for who in ("admin1", "mgr"):
+        for ep in endpoints[:3] + endpoints[4:]:
+            assert api.get(who, f"/analytics/{ep}?department_id={DEPT_B}").status_code == 404, (who, ep)
+    assert api.get("emp1", "/analytics/faqs").status_code == 403
+
+
+@pytest.mark.live_integration
+def test_G3_object_ids_from_one_tenant_or_employee_are_useless_to_others(world):
+    """Direct-object-reference sweep: ids that belong to emp1 (company A) must not open anything for
+    emp2 (same company, different person) or for company B's employee and admin."""
+    api = world
+    procs = {p["workflow_code"]: p["workflow_version_id"] for p in api.get("mgr", "/work/execution/procedures").json()["items"]}
+    offer = api.ask("emp1", "how do I do goods receipt posting")
+    conv = offer["conversation_id"]
+    started = api.ask("emp1", "yes", conv)
+    session_id = started["active_session_id"]
+    wid = api.post("mgr", "/work/items", {"title": "Receive trailer 77", "work_type": "receiving", "assigned_to": "emp1"}).json()["id"]
+    api.post("mgr", f"/work/execution/{wid}/bind", {"workflow_version_id": procs["SOP_INB_006"]})
+    api.post("emp1", f"/work/execution/{wid}/start")
+    case_id = api.post("emp1", f"/work/execution/{wid}/block", {"reason": "Seal number does not match the paperwork."}).json()["case_id"]
+    handover = api.ask("emp1", "2 cartons damaged in the delivery")
+    api.ask("emp1", "yes", handover["conversation_id"])
+    hid = api.get("mgr", "/handover").json()["items"][0]["id"]
+    api.ask("emp1", "what is the weather on mars")
+    gap_id = api.get("admin1", "/knowledge-gaps").json()["items"][0]["id"]
+    draft = api.c.post("/api/v1/procedure/drafts/import", headers=headers("admin1"), data={"title": "Seal inspection checklist"},
+                       files={"file": ("seal.txt", b"Seal inspection\n\n1. Check the seal number against the paperwork\n2. Tell the supervisor about any mismatch\n", "text/plain")}).json()["id"]
+
+    reads = [f"/copilot/history/{conv}", f"/copilot/session/{session_id}", f"/work/items/{wid}", f"/work/execution/{wid}",
+             f"/work/execution/{wid}/timeline", f"/work/exceptions/{case_id}", f"/procedure/drafts/{draft}",
+             f"/procedure/drafts/{draft}/source", f"/procedure/drafts/{draft}/compile-preview"]
+    writes = [(f"/copilot/session/{session_id}/pause", None), (f"/copilot/session/{session_id}/abandon", {"reason": "not mine to close"}),
+              (f"/work/execution/{wid}/start", None), (f"/work/execution/{wid}/pause", None),
+              (f"/work/execution/{wid}/block", {"reason": "I should not be able to do this."}),
+              (f"/handover/{hid}/claim", None), (f"/knowledge-gaps/{gap_id}/reply", {"reply": "not allowed to reply"}),
+              (f"/knowledge-gaps/{gap_id}/dismiss", None), (f"/work/exceptions/{case_id}/claim", {"expected_revision": 1})]
+    attackers = ("emp2", "emp_b", "admin_b")
+    for who in attackers:
+        for path in reads:
+            r = api.get(who, path)
+            assert r.status_code in (401, 403, 404), (who, "GET", path, r.status_code, r.text[:120])
+        for path, body in writes:
+            r = api.post(who, path, body)
+            assert r.status_code in (401, 403, 404, 409, 422), (who, "POST", path, r.status_code, r.text[:120])
+            assert r.status_code != 200, (who, "POST", path)
+    # Nothing the attackers tried changed anything.
+    assert api.get("emp1", f"/work/execution/{wid}").json()["status"] == "blocked"
+    assert api.get("mgr", f"/work/exceptions/{case_id}").json()["status"] == "open"
+    assert api.get("admin1", "/knowledge-gaps").json()["items"][0]["status"] == "open"
+    # The owner still has access (the guards are not simply denying everything).
+    assert api.get("emp1", f"/copilot/history/{conv}").status_code == 200
+    assert api.get("emp1", f"/work/execution/{wid}").status_code == 200
+
+
+@pytest.mark.live_integration
+def test_D_gap_draft_is_linked_and_visible_to_the_approver_in_both_database_roles(world):
+    """Linking a draft to its gap touches a row-level-security table; it must work as the restricted runtime role."""
+    from test_knowledge_loop_postgres import _review
+    api = world
+    q = "How do I recalibrate the thermal ribbon on the pallet labeller?"
+    api.ask("emp1", q)
+    gap = api.get("admin1", "/knowledge-gaps").json()["items"][0]
+    draft_id = api.post("admin1", f"/knowledge-gaps/{gap['id']}/draft", {
+        "title": "Recalibrate pallet labeller ribbon",
+        "steps": ["Stop the labeller and tell the supervisor before touching it",
+                  "Ask the authorised maintenance associate to recalibrate it"]}).json()["draft_id"]
+    rev = _review(api.c, headers("admin1"), draft_id)
+    pending = api.get("mgr", "/procedure/approvals").json()["items"]
+    assert [p["id"] for p in pending] == [draft_id]
+    assert pending[0]["source_gap_id"] == gap["id"], pending[0]
+    assert (pending[0]["gap_question"] or "").startswith("How do I recalibrate"), pending[0]
+    assert api.post("mgr", f"/procedure/approvals/{draft_id}", {"expected_revision": rev, "decision": "approve"}).status_code == 200
+    assert api.post("admin1", f"/procedure/drafts/{draft_id}/publish",
+                    {"expected_revision": rev, "approval": "PUBLISH_REVIEWED_SOP"}).status_code == 200
+    assert api.get("admin1", "/knowledge-gaps?status=resolved").json()["items"][0]["id"] == gap["id"]

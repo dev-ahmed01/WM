@@ -40,6 +40,7 @@ export function ChatComposer({ value, placeholder, answerMode, onAnswerModeChang
             value={value}
             disabled={busy}
             placeholder={placeholder}
+            aria-label="Message WorkMate"
             aria-describedby="composer-help"
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {

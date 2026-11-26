@@ -270,7 +270,8 @@ def test_employee_cannot_read_another_users_session(mock_get, _task_guard):
         "/api/v1/copilot/session/sess_1",
         headers={"Authorization": f"Bearer {OTHER_TOKEN}"},
     )
-    assert response.status_code == 403
+    # Someone else's session answers exactly like a missing one: existence is not revealed.
+    assert response.status_code == 404
 
 
 @patch("app.api.v1.copilot_session.WorkflowStateService.pause_session")

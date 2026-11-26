@@ -37,7 +37,7 @@ export default function WorkItemDetail() {
 
   return (
     <div className="wm-page max-w-[1250px] space-y-7 pb-12">
-      <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-semibold text-[#577262] hover:text-emerald-700"><ArrowLeft className="h-4 w-4" />All work</Link>
+      <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-semibold text-[#536c5d] hover:text-emerald-700"><ArrowLeft className="h-4 w-4" />All work</Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -46,7 +46,7 @@ export default function WorkItemDetail() {
             <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">{workStatusLabel(item.status)}</span>
           </div>
           <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-.04em] text-[#142b20] sm:text-[2.6rem]">{item.title}</h1>
-          <p className="mt-2 text-xs text-[#6a776f]">{item.external_reference || item.id} · {item.department_id}</p>
+          <p className="mt-2 text-xs text-[#5e6a62]">{item.external_reference || item.id} · {item.department_id}</p>
         </div>
         <Link href={guidanceUrl(item)} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-sm font-semibold text-white hover:bg-[#0d3828]">Check published SOP <ArrowRight className="h-4 w-4" /></Link>
       </div>
@@ -65,13 +65,13 @@ export default function WorkItemDetail() {
         <section className="overflow-hidden rounded-[1.6rem] border border-[#d8e2da] bg-white">
           <div className="flex items-center gap-3 border-b border-[#e9efe9] px-6 py-5">
             <ClipboardList className="h-5 w-5 text-emerald-700" />
-            <div><h2 className="text-lg font-semibold">Work brief</h2><p className="text-xs text-[#748077]">Recorded by the supervisor</p></div>
+            <div><h2 className="text-lg font-semibold">Work brief</h2><p className="text-xs text-[#5e6861]">Recorded by the supervisor</p></div>
           </div>
           <div className="space-y-6 p-6">
-            <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#7d887f]">Instructions</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-[#243a2c]">{item.instructions || 'No additional instructions supplied. Check the applicable published procedure before acting.'}</p></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#606862]">Instructions</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-[#243a2c]">{item.instructions || 'No additional instructions supplied. Check the applicable published procedure before acting.'}</p></div>
             <div className="rounded-xl border border-[#d7e9db] bg-[#f1f8f2] p-4">
               <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-700" /><p className="text-sm font-semibold text-[#234735]">Procedure-first execution</p></div>
-              <p className="mt-2 text-xs leading-6 text-[#5d7564]">This assignment is executed against the linked, published SOP. WorkMate records worker attestations and received evidence, but does not independently verify physical conditions.</p>
+              <p className="mt-2 text-xs leading-6 text-[#566c5d]">This assignment is executed against the linked, published SOP. WorkMate records worker attestations and received evidence, but does not independently verify physical conditions.</p>
               <Link href={guidanceUrl(item)} className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 hover:underline">Open task-aware guidance <ArrowRight className="h-4 w-4" /></Link>
             </div>
           </div>
@@ -81,13 +81,13 @@ export default function WorkItemDetail() {
           <div className="rounded-[1.4rem] border border-[#d8e2da] bg-white p-5">
             <h2 className="text-sm font-semibold">Assignment details</h2>
             <div className="mt-4 space-y-4">
-              <div className="flex items-start gap-3"><UserRound className="mt-0.5 h-4 w-4 text-[#69907a]" /><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-[#87958a]">Assigned to</p><p className="mt-1 break-words text-sm font-semibold">{item.assigned_to || 'Unassigned'}</p></div></div>
-              <div className="flex items-start gap-3"><ClipboardList className="mt-0.5 h-4 w-4 text-[#69907a]" /><div><p className="text-[10px] uppercase tracking-wide text-[#87958a]">Created by</p><p className="mt-1 break-words text-sm font-semibold">{item.created_by}</p></div></div>
+              <div className="flex items-start gap-3"><UserRound className="mt-0.5 h-4 w-4 text-[#506c5c]" /><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-[#5d6960]">Assigned to</p><p className="mt-1 break-words text-sm font-semibold">{item.assigned_to || 'Unassigned'}</p></div></div>
+              <div className="flex items-start gap-3"><ClipboardList className="mt-0.5 h-4 w-4 text-[#506c5c]" /><div><p className="text-[10px] uppercase tracking-wide text-[#5d6960]">Created by</p><p className="mt-1 break-words text-sm font-semibold">{item.created_by}</p></div></div>
             </div>
           </div>
           <div className="rounded-[1.4rem] border border-[#efe2cc] bg-[#fffbf4] p-5">
             <div className="flex items-center gap-2 text-amber-900"><AlertCircle className="h-4 w-4" /><p className="text-sm font-semibold">Unexpected condition?</p></div>
-            <p className="mt-2 text-xs leading-6 text-[#8d7652]">Block the task in the execution panel when a physical safety condition is uncertain. Contact the responsible supervisor before continuing.</p>
+            <p className="mt-2 text-xs leading-6 text-[#766344]">Block the task in the execution panel when a physical safety condition is uncertain. Contact the responsible supervisor before continuing.</p>
             <Link href={guidanceUrl(item)} className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-amber-900 hover:underline">Get guidance <ArrowRight className="h-4 w-4" /></Link>
           </div>
         </aside>

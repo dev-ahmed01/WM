@@ -213,13 +213,13 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
         </button>
       </div>
       <div className="space-y-6 p-5 sm:p-6">
-        {loading ? <p className="text-sm text-[#62746a]">Checking the current task and approved SOP…</p> : null}
+        {loading ? <p className="text-sm text-[#596960]">Checking the current task and approved SOP…</p> : null}
         {error ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs leading-6 text-red-800">{error}</div> : null}
         {position ? <>
           {position.workflow_version_id ? (
             <div className="flex flex-wrap items-center gap-3 rounded-xl bg-[#f2f7f2] px-4 py-3">
               <ShieldCheck className="h-5 w-5 text-emerald-700" />
-              <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[#234b33]">Published SOP version linked</p><p className="break-all text-[11px] text-[#7c8c80]">{position.workflow_version_id}</p></div>
+              <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[#234b33]">Published SOP version linked</p><p className="break-all text-[11px] text-[#5d6960]">{position.workflow_version_id}</p></div>
               <span className="rounded-md bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{position.status.replaceAll('_',' ')}</span>
             </div>
           ) : null}
@@ -238,7 +238,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                   Assign worker
                 </button>
               </div>
-              <p className="text-[11px] text-[#77877b]">Only active employees in your department can receive this assignment. Ownership becomes locked once work starts.</p>
+              <p className="text-[11px] text-[#5d6960]">Only active employees in your department can receive this assignment. Ownership becomes locked once work starts.</p>
             </div>
           ) : null}
 
@@ -254,7 +254,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                   <option value="">Choose an approved SOP</option>
                   {procedures.map(proc => <option key={proc.workflow_version_id} value={proc.workflow_version_id}>{proc.title} · v{proc.version_number} ({proc.workflow_code})</option>)}
                 </select>
-                {procedures.length === 0 ? <p className="text-xs text-[#7b877b]">No executable published SOPs in this department. An administrator must publish one first.</p> : null}
+                {procedures.length === 0 ? <p className="text-xs text-[#606a60]">No executable published SOPs in this department. An administrator must publish one first.</p> : null}
                 <button type="button" disabled={!selectedVersion || working} onClick={() => void commit('bind', {workflow_version_id:selectedVersion})}
                   className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#175b42] px-5 text-sm font-semibold text-white disabled:opacity-50">
                   <GitBranchPlus className="h-4 w-4" />Link published SOP
@@ -275,11 +275,11 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
           {position.status === 'ready' ? (
             <div className="space-y-4 rounded-[1.35rem] bg-[#f1f8f3] p-6">
               <h3 className="text-lg font-semibold text-[#1d432d]">Ready for the first checkpoint</h3>
-              <p className="text-sm leading-6 text-[#607464]">The versioned SOP is locked to this assignment. Start only when you are ready to record your actions against its approved steps.</p>
+              <p className="text-sm leading-6 text-[#596c5d]">The versioned SOP is locked to this assignment. Start only when you are ready to record your actions against its approved steps.</p>
               {isAssignee ? <button type="button" disabled={working} onClick={() => void commit('start')}
                 className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-sm font-semibold text-white disabled:opacity-50">
                 <PlayCircle className="h-5 w-5" />Start guided work <ArrowRight className="h-4 w-4" />
-              </button> : <p className="text-xs font-semibold text-[#5f7867]">Waiting for the assigned employee to begin.</p>}
+              </button> : <p className="text-xs font-semibold text-[#566d5d]">Waiting for the assigned employee to begin.</p>}
             </div>
           ) : null}
 
@@ -332,7 +332,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
           {position.status === 'active' ? <>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-[#657b6e]">{position.state?.title || 'Current checkpoint'}</span>
+                <span className="text-xs font-semibold text-[#576b5f]">{position.state?.title || 'Current checkpoint'}</span>
                 <span className="text-xs font-bold tabular-nums text-emerald-800">{position.completed_steps} / {position.total_steps} recorded</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-[#e6eee7]">
@@ -343,7 +343,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             {step ? <div className="rounded-[1.4rem] border border-[#d7e2d8] p-5 sm:p-6">
               <p className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-700">STEP {step.ordinal_index} · {step.step_code}</p>
               <h3 className="mt-3 text-xl font-semibold leading-8 tracking-tight text-[#1b3527]">{step.instruction}</h3>
-              <p className="mt-3 text-xs leading-6 text-[#7c8a7e]">A recorded worker attestation is not independent verification that the physical action occurred.</p>
+              <p className="mt-3 text-xs leading-6 text-[#5f6a61]">A recorded worker attestation is not independent verification that the physical action occurred.</p>
               {isAssignee ? <div className="mt-5 space-y-4">
                 {step.expected_output_type === 'CONFIRMATION' ? (
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dfe9e0] bg-[#f5f9f5] p-4">
@@ -374,7 +374,7 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                         onChange={e => setFiles(old => ({...old,[spec.id]:e.target.files?.[0] || null}))}
                         className="block w-full max-w-full text-xs text-[#54695b] file:mr-3 file:rounded-lg file:border-0 file:bg-[#e0efe3] file:px-3 file:py-2 file:font-semibold file:text-[#15583e]" />
                         : <p className="text-xs leading-6 text-amber-800">Requires specialist human validation. WorkMate will not self-approve this checkpoint.</p>}
-                      {spec.min_size_bytes ? <p className="mt-2 text-[11px] text-[#8b998e]">Minimum size {spec.min_size_bytes} bytes. Maximum upload 2 MB.</p> : null}
+                      {spec.min_size_bytes ? <p className="mt-2 text-[11px] text-[#5d6b60]">Minimum size {spec.min_size_bytes} bytes. Maximum upload 2 MB.</p> : null}
                     </div>;
                   })}
                 </div> : null}
@@ -382,13 +382,13 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#15583e] px-5 text-sm font-semibold text-white hover:bg-[#0d3929] disabled:cursor-not-allowed disabled:opacity-50">
                   <ClipboardCheck className="h-5 w-5" />{working ? 'Recording…' : 'Record checkpoint'}<ArrowRight className="h-4 w-4" />
                 </button>
-              </div> : <p className="mt-5 text-xs text-[#728075]">Only the assigned employee can record this checkpoint.</p>}
+              </div> : <p className="mt-5 text-xs text-[#5d685f]">Only the assigned employee can record this checkpoint.</p>}
             </div> : null}
             {!step && position.decision_options.length ? (
               <div className="rounded-[1.4rem] border border-[#d7e2d8] p-5 sm:p-6">
                 <p className="text-[10px] font-bold uppercase tracking-[.15em] text-emerald-700">SOP DECISION</p>
                 <h3 className="mt-2 text-lg font-semibold">{position.decision_question || position.state?.title}</h3>
-                <p className="mt-2 text-xs leading-6 text-[#6d796f]">Select only the actual observed outcome. The approved workflow determines the next state.</p>
+                <p className="mt-2 text-xs leading-6 text-[#5f6961]">Select only the actual observed outcome. The approved workflow determines the next state.</p>
                 {isAssignee ? <div className="mt-4 space-y-3">
                   <fieldset className="space-y-2"><legend className="sr-only">Approved decision path</legend>
                     {position.decision_options.map(option => <label key={option.option_code} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[#dae6dc] p-4 text-sm font-medium">
@@ -406,8 +406,8 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
             {!step && position.decision_options.length === 0 ? (
               <div className="rounded-[1.3rem] border border-[#dbe5dc] bg-[#f4f8f4] p-5">
                 <h3 className="text-lg font-semibold">{position.state?.title || 'Procedure checkpoint'}</h3>
-                {position.state?.description ? <p className="mt-2 text-xs leading-6 text-[#657b6d]">{position.state.description}</p> : null}
-                <p className="mt-2 text-xs leading-6 text-[#728579]">No atomic step or decision is required in this published state. Continue only after checking the listed procedure context.</p>
+                {position.state?.description ? <p className="mt-2 text-xs leading-6 text-[#576b5f]">{position.state.description}</p> : null}
+                <p className="mt-2 text-xs leading-6 text-[#5b6a60]">No atomic step or decision is required in this published state. Continue only after checking the listed procedure context.</p>
                 {isAssignee ? <button type="button" disabled={working || safetyGates.length > 0} onClick={() => void commit('continue')}
                   className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-xs font-semibold text-white disabled:opacity-50">Continue approved procedure <ArrowRight className="h-4 w-4" /></button> : null}
               </div>
@@ -430,29 +430,29 @@ export function WorkExecutionPanel({ item, canManage, isAssignee, onTaskChanged 
 
           {position.status === 'paused' ? <div className="rounded-xl border border-[#dbe6dd] bg-[#f6f9f6] p-5">
             <h3 className="text-base font-semibold">Work paused</h3>
-            <p className="mt-2 text-xs leading-6 text-[#6b7b70]">Your step history is retained. Resume only when it is appropriate to continue.</p>
+            <p className="mt-2 text-xs leading-6 text-[#5d6b62]">Your step history is retained. Resume only when it is appropriate to continue.</p>
             {isAssignee ? <button type="button" onClick={() => void commit('resume')} disabled={working} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#15583e] px-5 text-xs font-semibold text-white"><PlayCircle className="h-4 w-4" />Resume execution</button> : null}
           </div> : null}
 
           {position.status === 'completed' ? <div className="rounded-[1.4rem] border border-[#cce4d1] bg-[#eff8f0] p-6">
             <CheckCircle2 className="h-7 w-7 text-emerald-700" />
             <h3 className="mt-3 text-xl font-semibold text-[#205036]">Published workflow completed</h3>
-            <p className="mt-2 text-xs leading-6 text-[#597261]">All required recorded checkpoints and published branch decisions were submitted. Photographs and documents are stored with hashes, but their physical truth has not been independently verified.</p>
+            <p className="mt-2 text-xs leading-6 text-[#556c5c]">All required recorded checkpoints and published branch decisions were submitted. Photographs and documents are stored with hashes, but their physical truth has not been independently verified.</p>
             <p className="mt-3 text-xs font-bold text-emerald-800">{position.completed_steps} / {position.total_steps} atomic steps recorded</p>
           </div> : null}
         </> : null}
 
         <div className="border-t border-[#eaf0e9] pt-5">
-          <div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-[#638975]" /><h3 className="text-sm font-semibold">Execution record</h3></div>
+          <div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-[#506e5e]" /><h3 className="text-sm font-semibold">Execution record</h3></div>
           {events.length ? <div className="mt-3 divide-y divide-[#eef2ed]">
             {events.slice(-12).reverse().map(event => <div key={event.id} className="flex items-start justify-between gap-3 py-3 text-xs">
-              <div><p className="font-semibold text-[#294434]">{eventLabel[event.action] || event.action.replaceAll('_',' ')}</p><p className="mt-1 break-words text-[11px] text-[#88968b]">Recorded by {event.actor_id}</p></div>
-              <span className="shrink-0 text-[11px] text-[#87958a]">{new Date(event.created_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',
+              <div><p className="font-semibold text-[#294434]">{eventLabel[event.action] || event.action.replaceAll('_',' ')}</p><p className="mt-1 break-words text-[11px] text-[#5e6a60]">Recorded by {event.actor_id}</p></div>
+              <span className="shrink-0 text-[11px] text-[#5d6960]">{new Date(event.created_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',
                 day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
             </div>)}
-          </div> : <p className="mt-3 text-xs text-[#77857b]">No workflow events recorded.</p>}
+          </div> : <p className="mt-3 text-xs text-[#5f6a62]">No workflow events recorded.</p>}
         </div>
-        <div className="flex items-start gap-2 text-[11px] leading-5 text-[#728175]">
+        <div className="flex items-start gap-2 text-[11px] leading-5 text-[#5d695f]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
           <p>Actions are checked against the current published procedure and server-side task state. Evidence is retained privately for review; recording does not certify physical SOP compliance.</p>
         </div>

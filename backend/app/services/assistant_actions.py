@@ -36,6 +36,10 @@ EXCEPTION = {"shortage": "quantity_mismatch", "excess": "quantity_mismatch", "da
 SEVERITY = {"shortage": "normal", "excess": "normal", "damage": "high"}
 
 
+# "How do I handle damaged goods?" is a request for a procedure, not a report of a shortage.
+_QUESTION_START = re.compile(r"^\W*(?:how|what|where|when|why|which|who|can|could|should)\b|^\W*(?:do|does)\s+(?:i|we|you)\b", re.I)
+
+
 @dataclass(frozen=True)
 class Discrepancy:
     kind: str
@@ -63,7 +67,7 @@ def detect(message: str) -> Optional[Discrepancy]:
     if kind is None:
         return None
     quantity = parse_quantity(text)
-    if quantity is None and not _CONTEXT.search(text):
+    if quantity is None and (not _CONTEXT.search(text) or _QUESTION_START.search(text)):
         return None
     return Discrepancy(kind, quantity)
 

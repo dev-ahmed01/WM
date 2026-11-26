@@ -51,7 +51,7 @@ copilot_logger = logging.getLogger("copilot_services")
 router = APIRouter(prefix="/copilot", tags=["WorkMate Copilot"])
 
 # Minimum catalog match score before a procedure is offered as a suggestion.
-SUGGESTION_FLOOR = 0.30
+SUGGESTION_FLOOR = 0.45
 
 _STEP_COMPLETION_COMMANDS = {
     "complete",
@@ -470,7 +470,20 @@ async def _handle_assistant_action(
     user_id: str, department_id: str, active_session: Any,
 ) -> Optional["CopilotResponse"]:
     """Propose -> confirm -> execute for allowlisted actions. Returns None when the message is not an action turn."""
-    history = ConversationRepository.get_history(conversation_id, limit=6)
+    # Cheap pre-check: only a new discrepancy report or a short yes/no/number reply can be an action turn,
+    # so every other message skips the extra history query entirely.
+    found = assistant_actions.detect(payload.message) if active_session is None else None
+    could_be_reply = (
+        WorkflowIntentService.confirmation_response(payload.message) is not None
+        or assistant_actions.parse_quantity(payload.message) is not None
+    )
+    if found is None and not could_be_reply:
+        return None
+    try:
+        history = ConversationRepository.get_history(conversation_id, limit=6)
+    except Exception:
+        copilot_logger.exception("Action state lookup failed; continuing as a normal message")
+        return None
     last_ai = next((m for m in reversed(history) if m.get("sender") == "ai"), None)
     state = assistant_actions.parse_state(last_ai.get("intent") if last_ai else None)
 
@@ -518,7 +531,6 @@ async def _handle_assistant_action(
         return None
 
     if active_session is None:
-        found = assistant_actions.detect(payload.message)
         if found:
             if found.quantity is None:
                 return reply(assistant_actions.ask_for_quantity(found.kind), assistant_actions.intent_ask(found.kind), "ACTION_ASK")

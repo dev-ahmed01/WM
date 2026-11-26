@@ -108,7 +108,7 @@ export default function ControlRoom() {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[.18em] text-emerald-700">OPERATIONS / {user?.department_id}</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-.05em] text-[#182c22] sm:text-[2.6rem]">Control room</h1>
-          <p className="mt-2 text-sm text-[#728078]">Department tasks, blocked execution and shift follow-ups.</p>
+          <p className="mt-2 text-sm text-[#5d6861]">Department tasks, blocked execution and shift follow-ups.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => void load()} disabled={fetching} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#d9e4db] bg-white px-4 text-xs font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" />Refresh</button>
@@ -123,28 +123,28 @@ export default function ControlRoom() {
           { title: 'High priority', value: priorityCount, icon: AlertTriangle },
           { title: 'Task exceptions', value: activeCases.length, icon: ShieldCheck },
         ].map(metric => <div key={metric.title} className="rounded-2xl border border-[#dce5dc] bg-white p-5">
-          <div className="flex items-center justify-between"><span className="text-xs text-[#708177]">{metric.title}</span><metric.icon className="h-4 w-4 text-emerald-700" /></div>
+          <div className="flex items-center justify-between"><span className="text-xs text-[#5b6960]">{metric.title}</span><metric.icon className="h-4 w-4 text-emerald-700" /></div>
           <p className="mt-4 text-4xl font-semibold tabular-nums tracking-tight text-[#142e20]">{fetching || error ? '—' : metric.value}</p>
         </div>)}
       </section>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,.7fr)]">
         <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-[#d9e4db] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0eb] p-5 sm:px-6">
-            <div><h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2><p className="mt-1 text-xs text-[#708177]">Priority-first · active work and queued assignments</p></div>
+            <div><h2 className="text-lg font-semibold text-[#1a3325]">Live queue</h2><p className="mt-1 text-xs text-[#5b6960]">Priority-first · active work and queued assignments</p></div>
             <Link href="/workspace" className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700">View all <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {fetching ? <div className="p-8"><LoadingState label="Loading work queue" /></div> : ordered.length ? (
             <div className="divide-y divide-[#edf0eb]">
               {ordered.map(item => <Link key={item.id} href={'/work/' + encodeURIComponent(item.id)} className="group flex min-w-0 items-center gap-4 px-5 py-4 hover:bg-[#f7faf7] sm:px-6">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eff5f0] text-[#22644a]"><Layers3 className="h-[18px] w-[18px]" /></span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#1a3227]">{item.title}</p><p className="mt-1 truncate text-xs text-[#78877e]">{workTypeLabel(item.work_type)} · {item.status.replaceAll('_',' ')} · {item.assigned_to || 'Not assigned'}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#1a3227]">{item.title}</p><p className="mt-1 truncate text-xs text-[#5e6962]">{workTypeLabel(item.work_type)} · {item.status.replaceAll('_',' ')} · {item.assigned_to || 'Not assigned'}</p></div>
                 <div className="flex items-center gap-2">
                   {item.priority === 'high' ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">HIGH</span> : null}
-                  <ArrowUpRight className="h-4 w-4 text-[#688878] group-hover:text-emerald-700" />
+                  <ArrowUpRight className="h-4 w-4 text-[#526b5e] group-hover:text-emerald-700" />
                 </div>
               </Link>)}
             </div>
-          ) : <div className="px-6 py-12 text-center"><Inbox className="mx-auto h-7 w-7 text-[#6e9680]" /><p className="mt-3 text-sm font-semibold">The queue is clear</p><p className="mt-2 text-xs text-[#76887c]">Create an assignment to begin tracking work.</p></div>}
+          ) : <div className="px-6 py-12 text-center"><Inbox className="mx-auto h-7 w-7 text-[#506d5d]" /><p className="mt-3 text-sm font-semibold">The queue is clear</p><p className="mt-2 text-xs text-[#5c6a61]">Create an assignment to begin tracking work.</p></div>}
         </section>
         <aside className="space-y-4">
           <Link href="/work/exceptions" className="group block rounded-[1.5rem] border border-[#214b35] bg-[#143c2b] p-6 text-white">
@@ -163,13 +163,13 @@ export default function ControlRoom() {
               {label:'Operational insights',href:'/intelligence-hub'},
             ].map(item => <Link href={item.href} key={item.href} className="flex min-h-12 items-center justify-between border-b border-[#edf1ec] text-xs font-semibold text-[#496452] last:border-0 hover:text-emerald-800">{item.label}<ArrowRight className="h-4 w-4" /></Link>)}
           </div>
-          <div className="flex gap-3 rounded-xl border border-[#dce5dc] bg-[#f4f8f4] p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700" /><p className="text-xs leading-6 text-[#69766e]">Queue metrics show created tasks, not completed work or proven productivity gains.</p></div>
+          <div className="flex gap-3 rounded-xl border border-[#dce5dc] bg-[#f4f8f4] p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700" /><p className="text-xs leading-6 text-[#5d6961]">Queue metrics show created tasks, not completed work or proven productivity gains.</p></div>
         </aside>
       </div>
 
       {open ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091a13]/60 px-4 py-8" role="presentation">
         <div role="dialog" aria-modal="true" aria-labelledby="new-work-title" className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[1.7rem] bg-white p-6 shadow-2xl sm:p-8">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">WORK INTAKE</p><h2 id="new-work-title" className="mt-2 text-2xl font-semibold tracking-tight">Create assignment</h2><p className="mt-1 text-xs leading-5 text-[#77857a]">Queue work for your department, then bind a published SOP before execution.</p></div><button type="button" aria-label="Close assignment" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
+          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">WORK INTAKE</p><h2 id="new-work-title" className="mt-2 text-2xl font-semibold tracking-tight">Create assignment</h2><p className="mt-1 text-xs leading-5 text-[#5f6a62]">Queue work for your department, then bind a published SOP before execution.</p></div><button type="button" aria-label="Close assignment" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
           <form onSubmit={event => void submit(event)} className="mt-6 space-y-4">
             <div><label htmlFor="wi-title" className="wm-label">Task title</label><input id="wi-title" className="wm-input" required minLength={5} maxLength={180} value={title} onChange={event => setTitle(event.target.value)} placeholder="Inspect inbound shipment 101" /></div>
             <div className="grid gap-4 sm:grid-cols-2">

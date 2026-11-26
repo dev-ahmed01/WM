@@ -25,7 +25,7 @@ export function MyReportedIssues() {
 
   return (
     <div className="rounded-[1.35rem] border border-[#dae4dc] bg-white p-5" aria-label="Issues you reported">
-      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#597765]"><ClipboardList className="h-4 w-4" />Issues you reported</h3>
+      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#506b5b]"><ClipboardList className="h-4 w-4" />Issues you reported</h3>
       <ul className="mt-3 space-y-3">
         {items.map((c) => (
           <li key={c.id} className="text-sm">

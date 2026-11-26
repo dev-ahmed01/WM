@@ -5,7 +5,9 @@ import hashlib
 import uuid
 from typing import Any, Dict, List, Optional
 
-from app.core.database import get_postgres_connection
+import psycopg
+
+from app.core.database import get_postgres_connection, get_transaction
 
 
 class SubmissionNotFound(Exception):
@@ -49,18 +51,17 @@ class OwdSubmissionRepository:
               workflow_code: str, version_hint: int) -> Dict[str, Any]:
         sub_id = f"owdsub_{uuid.uuid4().hex[:16]}"
         digest = hashlib.sha256(raw).hexdigest()
-        with get_postgres_connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT id FROM knowledge_studio.owd_submissions "
-                        "WHERE department_id=%s AND sha256=%s AND status='pending'", (department, digest))
-            existing = cur.fetchone()
-            if existing:
-                raise SubmissionConflict("This exact file is already waiting for approval.")
-            cur.execute("INSERT INTO knowledge_studio.owd_submissions "
-                        "(id,department_id,uploaded_by,filename,title,workflow_code,version_hint,sha256,content) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING " + COLS,
-                        (sub_id, department, uploader, filename[:255], title[:512], workflow_code[:128],
-                         version_hint, digest, raw))
-            return _row(cur)
+        try:
+            with get_transaction() as cur:
+                cur.execute("INSERT INTO knowledge_studio.owd_submissions "
+                            "(id,department_id,uploaded_by,filename,title,workflow_code,version_hint,sha256,content) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING " + COLS,
+                            (sub_id, department, uploader, filename[:255], title[:512], workflow_code[:128],
+                             version_hint, digest, raw))
+                return _row(cur)
+        except psycopg.errors.UniqueViolation as exc:
+            # ux_owd_submissions_pending_hash: the same bytes are already waiting.
+            raise SubmissionConflict("This exact file is already waiting for approval.") from exc
 
     @staticmethod
     def list_for_departments(departments: List[str], status: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
@@ -87,14 +88,15 @@ class OwdSubmissionRepository:
 
     @staticmethod
     def mark_returned(department: str, manager: str, sub_id: str, note: str) -> Dict[str, Any]:
-        with get_postgres_connection() as conn, conn.cursor() as cur:
+        with get_transaction() as cur:
             sub = OwdSubmissionRepository.get_locked(cur, department, sub_id)
             if sub["status"] != "pending":
                 raise SubmissionConflict("This submission was already decided.")
             if sub["uploaded_by"] == manager:
                 raise SubmissionConflict("You cannot decide a file you uploaded.")
             cur.execute("UPDATE knowledge_studio.owd_submissions SET status='returned', decision_note=%s, "
-                        "decided_by=%s, decided_at=now() WHERE id=%s RETURNING " + COLS, (note, manager, sub_id))
+                        "decided_by=%s, decided_at=now() WHERE id=%s AND status='pending' RETURNING " + COLS,
+                        (note, manager, sub_id))
             return _row(cur)
 
     @staticmethod

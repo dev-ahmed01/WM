@@ -1,0 +1,228 @@
+# Single-host deployment (one Linux VPS): local PostgreSQL + private Ollama + API + web + HTTPS.
+# NOTHING here is published to the internet except Caddy on 80/443. Postgres, Ollama and the API have no host ports.
+# This file is statically checked (scripts/check_vps_topology.py, backend/tests/test_vps_topology.py) but has NOT been
+# run on a real server by this repository; follow deploy/vps/README.md and its acceptance checklist.
+name: workmate
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${OWNER_DB_USER:?Missing owner login}
+      POSTGRES_PASSWORD: ${OWNER_DB_PASSWORD:?Missing owner password}
+      POSTGRES_DB: workmate
+      APP_DB_USER: ${APP_DB_USER:?Missing app login}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Missing app password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d workmate"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    environment:
+      # Models stay resident only while in use; a 2.6 GB pair must not pin RAM on a small host.
+      OLLAMA_KEEP_ALIVE: "10m"
+      OLLAMA_MAX_LOADED_MODELS: "2"
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  # One-shot, opt-in: `docker compose --profile models run --rm models`. The only service with internet egress.
+  models:
+    profiles: ["models"]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - ollama pull "${LOCAL_CHAT_MODEL:-qwen2.5:3b}" && ollama pull "${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks: [internal, egress]
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend.staging.Dockerfile
+    restart: "no"
+    environment:
+      APP_ENV: production
+      MIGRATION_DATABASE_URL: postgresql://${OWNER_DB_USER}:${OWNER_DB_PASSWORD}@postgres:5432/workmate
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/workmate
+    command: ["sh", "-ec", "python scripts/migrate_postgres.py && python scripts/grant_pg_runtime.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    security_opt:
+      - no-new-privileges:true
+
+  # One-time, opt-in: creates the first organization and administrator. Values come from the operator's shell (the script
+  # refuses to run without them; Compose must not require them or a plain `up` would fail), e.g.
+  #   BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... docker compose --profile bootstrap run --rm bootstrap
+  bootstrap:
+    profiles: ["bootstrap"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend.staging.Dockerfile
+    restart: "no"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://${OWNER_DB_USER}:${OWNER_DB_PASSWORD}@postgres:5432/workmate
+      JWT_SECRET: ${JWT_SECRET:?Missing JWT secret}
+      INTERNAL_WEBHOOK_SECRET: ${INTERNAL_WEBHOOK_SECRET:?Missing webhook secret}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_DEPARTMENT_ID: ${BOOTSTRAP_DEPARTMENT_ID:-operations}
+      BOOTSTRAP_DEPARTMENT_NAME: ${BOOTSTRAP_DEPARTMENT_NAME:-Operations}
+      BOOTSTRAP_ORGANIZATION_NAME: ${BOOTSTRAP_ORGANIZATION_NAME:-}
+      BOOTSTRAP_WAREHOUSE_NAME: ${BOOTSTRAP_WAREHOUSE_NAME:-}
+    command: ["python", "scripts/bootstrap_postgres.py"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend.staging.Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/workmate
+      JWT_SECRET: ${JWT_SECRET:?Missing JWT secret}
+      INTERNAL_WEBHOOK_SECRET: ${INTERNAL_WEBHOOK_SECRET:?Missing webhook secret}
+      FRONTEND_ORIGIN: https://${WORKMATE_DOMAIN:?Missing HTTPS hostname}
+      AUTH_REVALIDATE_DB: "true"
+      AUTH_SESSION_STORE_ENABLED: "true"
+      AUTH_RATE_LIMIT_ENABLED: "true"
+      AUTH_RATE_IP_BUCKET_ENABLED: "false"
+      POSTGRES_RLS_REFERENCES: "true"
+      PUBLISH_REQUIRES_APPROVAL: "true"
+      LOCAL_AI_ENABLED: "true"
+      LOCAL_AI_BASE_URL: http://ollama:11434
+      LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-qwen2.5:3b}
+      LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nomic-embed-text}
+      POSTGRES_POOL_SIZE: "8"
+      # No WMS/ERP callbacks leave this deployment unless an operator explicitly configures them.
+      WORKMATE_OUTBOUND_ENABLED: "false"
+      WORKMATE_OUTBOUND_ALLOWED_HOSTS: ""
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
+    command: ["sh", "-ec", "python scripts/verify_runtime_database.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    networks: [internal]
+    expose: ["8000"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ""
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      WORKMATE_INTERNAL_API_URL: http://backend:8000/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose: ["3000"]
+    networks: [internal]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+
+  ingress:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      WORKMATE_DOMAIN: ${WORKMATE_DOMAIN:?Missing HTTPS hostname}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+    networks: [internal, public]
+    security_opt:
+      - no-new-privileges:true
+
+  # Opt-in encrypted logical backup: `docker compose --profile backup run --rm backup`
+  backup:
+    profiles: ["backup"]
+    build:
+      context: ../..
+      dockerfile: deploy/staging/backup.Dockerfile
+    restart: "no"
+    environment:
+      BACKUP_DATABASE_URL: postgresql://${OWNER_DB_USER}:${OWNER_DB_PASSWORD}@postgres:5432/workmate?sslmode=disable
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_DIRECTORY: /backups
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  # No route to the internet: database, models, API and web talk only to each other.
+  internal:
+    internal: true
+  # Only Caddy and the one-shot model puller reach outside.
+  public: {}
+  egress: {}
+
+volumes:
+  pgdata: {}
+  ollama_models: {}
+  caddy_data: {}
+  caddy_config: {}

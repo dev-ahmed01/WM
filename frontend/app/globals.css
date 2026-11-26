@@ -13,7 +13,7 @@
     --secondary: 153 18% 93%;
     --secondary-foreground: 160 42% 18%;
     --muted: 150 12% 95%;
-    --muted-foreground: 158 10% 42%;
+    --muted-foreground: 158 12% 35%;
     --accent: 154 30% 91%;
     --accent-foreground: 158 52% 23%;
     --destructive: 2 66% 47%;
@@ -84,5 +84,23 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Touch ergonomics: on phones, tablets and any coarse pointer every control in the page body is at
+   least 44px tall (WCAG 2.2 target size / frontline gloves). Desktop with a mouse is unchanged. */
+@media (pointer: coarse), (max-width: 1023px) {
+  main button,
+  main [role="button"],
+  main select,
+  main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.sr-only),
+  main textarea {
+    min-height: 44px;
+  }
+  main button:not(:has(*)):not([class*="w-"]) { min-width: 44px; }
+  main a[href]:not(p a, span a, li > a:only-child:not([class])) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }

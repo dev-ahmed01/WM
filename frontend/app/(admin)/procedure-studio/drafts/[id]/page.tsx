@@ -116,7 +116,7 @@ export default function ProcedureDraftEditor() {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><p className="text-[10px] font-bold uppercase tracking-[.17em] text-emerald-700">SOURCE-REVIEWED PROCEDURE / REVISION {draft.revision}</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] text-[#1a3324] sm:text-[2.5rem]">Procedure editor</h1>
-        <p className="mt-2 text-sm text-[#718176]">{draft.source_filename} · {draft.status==='published'?'Published workflow':draft.status==='reviewed'?'Reviewed draft':'Draft · requires human validation'}</p>
+        <p className="mt-2 text-sm text-[#5c6960]">{draft.source_filename} · {draft.status==='published'?'Published workflow':draft.status==='reviewed'?'Reviewed draft':'Draft · requires human validation'}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={saving||published||!dirty||!steps.length||title.trim().length<5}
@@ -133,7 +133,7 @@ export default function ProcedureDraftEditor() {
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#dbe8dd] bg-[#f3faf5] p-4">
       <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-700"/>
       <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[#245239]">Source-linked, not automatically approved</p>
-        <p className="mt-1 text-xs leading-5 text-[#64796a]">The extracted candidates are suggestions. Check every action against the source document, then explicitly review the final draft. Published execution is a separate governed workflow.</p>
+        <p className="mt-1 text-xs leading-5 text-[#586b5e]">The extracted candidates are suggestions. Check every action against the source document, then explicitly review the final draft. Published execution is a separate governed workflow.</p>
       </div>
     </div>
     {error?<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">{error}</p>:null}
@@ -141,7 +141,7 @@ export default function ProcedureDraftEditor() {
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,.85fr)]">
       <section className="min-w-0 rounded-[1.5rem] border border-[#d7e3d8] bg-white p-5 sm:p-7">
         <div className="flex items-center justify-between gap-2">
-          <div><h2 className="text-xl font-semibold">Editable work steps</h2><p className="mt-1 text-xs text-[#708075]">{steps.filter(s=>s.reviewed).length} of {steps.length} reviewed · changes require saving</p></div>
+          <div><h2 className="text-xl font-semibold">Editable work steps</h2><p className="mt-1 text-xs text-[#5d6a61]">{steps.filter(s=>s.reviewed).length} of {steps.length} reviewed · changes require saving</p></div>
           <span className="rounded-lg bg-[#e9f3eb] px-3 py-1.5 text-xs font-bold text-[#266046]">{draft.status}</span>
         </div>
         <div className="mt-6"><label htmlFor="draft-title" className="wm-label">Procedure title</label>
@@ -155,7 +155,7 @@ export default function ProcedureDraftEditor() {
               <button type="button" aria-label={'Remove step '+(i+1)} onClick={()=>{
                 if(steps.length===1)return;
                 setSteps(prev=>prev.filter(s=>s.id!==step.id));setDirty(true);setMessage('');
-              }} disabled={steps.length===1||published} className="rounded-lg p-2 text-[#8b9990] hover:bg-red-50 hover:text-red-700 disabled:opacity-40"><Trash2 className="h-4 w-4"/></button>
+              }} disabled={steps.length===1||published} className="rounded-lg p-2 text-[#5d6b62] hover:bg-red-50 hover:text-red-700 disabled:opacity-40"><Trash2 className="h-4 w-4"/></button>
             </div>
             <textarea aria-label={'Step '+(i+1)+' instruction'} className="wm-input mt-3 min-h-24" maxLength={700} value={step.instruction}
               onChange={e=>change(i,{instruction:e.target.value,reviewed:false})} disabled={published}/>
@@ -185,7 +185,7 @@ export default function ProcedureDraftEditor() {
                 className="h-4 w-4 accent-emerald-700"/>Checked against original source
             </label>
           </div>)}
-          {!steps.length?<div className="rounded-xl border border-dashed border-[#d9e4db] p-8 text-center text-sm text-[#718176]">No numbered steps extracted. Add steps from the original SOP.</div>:null}
+          {!steps.length?<div className="rounded-xl border border-dashed border-[#d9e4db] p-8 text-center text-sm text-[#5c6960]">No numbered steps extracted. Add steps from the original SOP.</div>:null}
         </div>
         <button type="button" disabled={steps.length>=50||published} onClick={()=>{
           setSteps(prev=>[...prev,{id:'step_'+crypto.randomUUID().replaceAll('-','').slice(0,16),
@@ -193,7 +193,7 @@ export default function ProcedureDraftEditor() {
         }} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-[#97c2a0] px-5 text-xs font-semibold text-emerald-800 disabled:opacity-50"><Plus className="h-4 w-4"/>Add operational step</button>
         <div className="mt-7 border-t border-[#e7efe7] pt-6">
           <div className="flex items-center gap-2"><GitBranchPlus className="h-4 w-4 text-emerald-700"/><h3 className="text-base font-semibold">Final outcome</h3></div>
-          <p className="mt-2 text-xs leading-6 text-[#778678]">Record an observed result after the final checkpoint. This branches the procedure record; it does not authorize safety release or supervisor approval.</p>
+          <p className="mt-2 text-xs leading-6 text-[#5d685e]">Record an observed result after the final checkpoint. This branches the procedure record; it does not authorize safety release or supervisor approval.</p>
           <label className="mt-3 flex items-center gap-3 text-xs font-semibold text-[#456950]">
             <input type="checkbox" checked={decision.options.length>0} disabled={published}
               className="h-4 w-4 accent-emerald-700"
@@ -210,11 +210,11 @@ export default function ProcedureDraftEditor() {
                 onChange={e=>editDecision({question:e.target.value})}/>
             </div>
             {decision.options.map((option,i)=><div key={option.code} className="flex items-center gap-3">
-              <span className="w-12 shrink-0 text-[10px] font-bold text-[#65866d]">{i+1<10?'0'+(i+1):i+1}</span>
+              <span className="w-12 shrink-0 text-[10px] font-bold text-[#516c58]">{i+1<10?'0'+(i+1):i+1}</span>
               <div className="min-w-0 flex-1 space-y-2">
                 <input aria-label={'Outcome '+(i+1)+' label'} disabled={published} className="wm-input" maxLength={120}
                   value={option.label} onChange={e=>editDecision({options:decision.options.map((opt,j)=>j===i?{...opt,label:e.target.value}:opt)})}/>
-                <label className="flex items-center gap-2 text-[11px] font-semibold text-[#7c674c]">
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-[#79644a]">
                   <input type="checkbox" disabled={published} checked={Boolean(option.requires_supervisor_review)}
                     onChange={e=>editDecision({options:decision.options.map((opt,j)=>j===i?{...opt,requires_supervisor_review:e.target.checked}:opt)})}
                     className="h-4 w-4 accent-amber-700"/>
@@ -224,28 +224,28 @@ export default function ProcedureDraftEditor() {
             </div>)}
           </div>:null}
         </div>
-        <p className="mt-4 text-[11px] leading-5 text-[#78867b]">Maximum 50 steps per draft. Each step must have at least 10 characters before saving. Source line numbers are references to extracted text, not proof of real-world execution.</p>
+        <p className="mt-4 text-[11px] leading-5 text-[#5e6860]">Maximum 50 steps per draft. Each step must have at least 10 characters before saving. Source line numbers are references to extracted text, not proof of real-world execution.</p>
       </section>
       <aside className="space-y-4">
         <div className="overflow-hidden rounded-[1.5rem] border border-[#d9e3dc] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8eee9] p-5"><div className="flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-700"/><h2 className="text-base font-semibold">Original source excerpt</h2></div><a href={"/api/backend/procedure/drafts/"+encodeURIComponent(draft.id)+"/source"} download className="inline-flex min-h-9 items-center rounded-lg border border-[#d6e5d9] px-3 text-[11px] font-bold text-emerald-800 hover:bg-[#f3f8f3]">Download original</a></div>
           <div className="max-h-[600px] overflow-y-auto px-5 py-4"><pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-7 text-[#53665a]">{draft.source_excerpt}</pre></div>
-          <p className="border-t border-[#edf1eb] px-5 py-3 text-[11px] text-[#859184]">Shows the first 8,000 extracted characters. For long documents, verify the original file beyond this excerpt.</p>
+          <p className="border-t border-[#edf1eb] px-5 py-3 text-[11px] text-[#606a5f]">Shows the first 8,000 extracted characters. For long documents, verify the original file beyond this excerpt.</p>
         </div>
         {draft.warnings.length?<div className="rounded-[1.5rem] border border-[#efdfc6] bg-[#fffbf4] p-5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-[#886038]"><AlertTriangle className="h-4 w-4"/>Extraction notes</h2>
-          <div className="mt-3 space-y-2">{draft.warnings.map((warning,i)=><p key={i} className="text-xs leading-6 text-[#806b4b]">{warning}</p>)}</div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-[#845d37]"><AlertTriangle className="h-4 w-4"/>Extraction notes</h2>
+          <div className="mt-3 space-y-2">{draft.warnings.map((warning,i)=><p key={i} className="text-xs leading-6 text-[#766345]">{warning}</p>)}</div>
         </div>:null}
         <div className="rounded-[1.5rem] border border-[#dbe7de] bg-white p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-[#244c36]"><Play className="h-4 w-4"/>Compile and publish</h2>
-          <p className="mt-2 text-xs leading-6 text-[#6e8272]">The real OWD compiler checks the authored plan before anything is published. Only an unchanged reviewed revision can be released.</p>
+          <p className="mt-2 text-xs leading-6 text-[#5b6b5e]">The real OWD compiler checks the authored plan before anything is published. Only an unchanged reviewed revision can be released.</p>
           <button type="button" onClick={()=>void compile()} disabled={saving||dirty||!canReview||published}
             className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#bcd8c5] px-4 text-xs font-semibold text-emerald-900 disabled:opacity-50">
             Validate compiled workflow
           </button>
           {preview?<div className="mt-4 rounded-xl bg-[#f2f8f3] p-4">
             <p className="text-xs font-bold text-[#28563a]">{preview.valid?'Compiler validation passed':'Compiler validation failed'}</p>
-            <p className="mt-2 text-[11px] text-[#617e69]">{preview.states} states · {preview.steps} worker steps · {preview.decisions} decisions</p>
+            <p className="mt-2 text-[11px] text-[#536c5b]">{preview.states} states · {preview.steps} worker steps · {preview.decisions} decisions</p>
             {preview.validation_errors.map((e,i)=><p key={i} className="mt-2 text-xs text-red-700">{e}</p>)}
             {preview.warnings.map((e,i)=><p key={i} className="mt-2 text-xs text-amber-800">{e}</p>)}
             {preview.valid&&!published&&preview.approval_required&&!preview.approved?<p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">Waiting for manager approval. A manager must approve this exact reviewed revision on the Approvals page before it can be published. Editing the draft voids any approval.</p>:null}
@@ -266,7 +266,7 @@ export default function ProcedureDraftEditor() {
         </div>
         <div className="rounded-[1.5rem] border border-[#dce7df] bg-[#eff7f1] p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-[#244b35]"><Check className="h-4 w-4"/>Next publishing gate</h2>
-          <p className="mt-2 text-xs leading-6 text-[#677d6a]">Reviewing a draft does not make it executable. The approved OWD compiler and its separate validation process remain the only publishing authority.</p>
+          <p className="mt-2 text-xs leading-6 text-[#596c5c]">Reviewing a draft does not make it executable. The approved OWD compiler and its separate validation process remain the only publishing authority.</p>
           <Link href="/knowledge-studio" className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-800">Published workflow library <ArrowLeft className="h-4 w-4 rotate-180"/></Link>
         </div>
       </aside>

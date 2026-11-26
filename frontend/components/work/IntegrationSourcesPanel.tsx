@@ -106,7 +106,7 @@ export function IntegrationSourcesPanel(){
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-sm font-semibold text-[#21402b]">
         <LockKeyhole className="h-4 w-4 text-[#1d7048]"/> Signed connectors</h2>
-        <p className="mt-1 text-xs text-[#718174]">HMAC-verified ingress · delivery health · admin controls</p>
+        <p className="mt-1 text-xs text-[#5c695e]">HMAC-verified ingress · delivery health · admin controls</p>
       </div>
       <button type="button" onClick={()=>void load()} aria-label="Refresh signed connectors"
         className="rounded-lg border border-[#d8e5da] p-2"><RefreshCw className="h-4 w-4"/></button>
@@ -115,7 +115,7 @@ export function IntegrationSourcesPanel(){
     {message?<p role="status" className="mt-3 text-xs text-[#26704b]">{message}</p>:null}
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.2fr)]">
       <div className="space-y-3">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-[#61836a]">Preconfigured signing key ID</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[#526e59]">Preconfigured signing key ID</p>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <input aria-label="Connector signing key ID" className="wm-input" minLength={6} maxLength={64}
             value={sourceId} onChange={e=>setSourceId(e.target.value)}
@@ -130,43 +130,43 @@ export function IntegrationSourcesPanel(){
           className="min-h-11 rounded-xl border border-[#accbb3] px-4 text-xs font-semibold text-[#265d3b] disabled:opacity-50">
           Register preconfigured source
         </button>
-        <p className="text-[11px] leading-5 text-[#718275]">Keys are provisioned in server secrets and are never displayed or submitted here.</p>
+        <p className="text-[11px] leading-5 text-[#5c6a5f]">Keys are provisioned in server secrets and are never displayed or submitted here.</p>
         <div className="divide-y divide-[#eef2ee] overflow-hidden rounded-xl border border-[#e0e8e1]">
           {sources.map(s=><button key={s.id} type="button" onClick={()=>setSelected(s.id)}
             aria-pressed={s.id===selected} className={'flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-[#f6faf6] '+(s.id===selected?'bg-[#eff7ef]':'')}>
             <div><p className="text-xs font-semibold text-[#284c34]">{s.id}</p>
-              <p className="mt-1 text-[11px] text-[#758577]">{s.source_system} · {s.status}</p></div>
-            <span className="text-[11px] font-bold text-[#447451]">{s.failures} issues</span>
+              <p className="mt-1 text-[11px] text-[#5d6a5f]">{s.source_system} · {s.status}</p></div>
+            <span className="text-[11px] font-bold text-[#42714f]">{s.failures} issues</span>
           </button>)}
-          {!sources.length?<p className="p-3 text-xs text-[#718275]">No signed sources registered.</p>:null}
+          {!sources.length?<p className="p-3 text-xs text-[#5c6a5f]">No signed sources registered.</p>:null}
         </div>
       </div>
       <div className="space-y-3">
         {focused?<><div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="text-sm font-semibold text-[#23412c]">{focused.id}</p>
-            <p className="mt-1 text-xs text-[#67816a]">{focused.deliveries} deliveries · {focused.failures} rejected or conflicting</p></div>
+            <p className="mt-1 text-xs text-[#576d59]">{focused.deliveries} deliveries · {focused.failures} rejected or conflicting</p></div>
           <button type="button" disabled={busy} onClick={()=>void control(focused.id,focused.status!=='active')}
             className="min-h-10 rounded-lg border border-[#bcd3c0] px-3 text-xs font-semibold text-[#356546] disabled:opacity-50">
             {focused.status==='active'?'Disable source':'Enable source'}
           </button>
         </div>
-        <p className="text-xs text-[#718274]">Last delivery: {focused.last_delivery_at?fmt(focused.last_delivery_at):'None'}</p>
+        <p className="text-xs text-[#5c6a5e]">Last delivery: {focused.last_delivery_at?fmt(focused.last_delivery_at):'None'}</p>
         <div className="max-h-[210px] overflow-y-auto rounded-xl border border-[#e1e9e2]">
           {deliveries.map(x=><div key={x.id} className="flex justify-between gap-2 border-b border-[#eaf0ea] p-3 text-xs last:border-0">
             <div><p className="font-semibold text-[#335b41]">{x.status}</p>
-              <p className="mt-1 text-[#748778]">{x.reason_code==='none'?'Received':x.reason_code}</p></div>
-            <span className="text-[#829084]">{fmt(x.received_at)}</span></div>)}
-          {!deliveries.length?<p className="p-4 text-xs text-[#718275]">No signed deliveries yet.</p>:null}
+              <p className="mt-1 text-[#5a695d]">{x.reason_code==='none'?'Received':x.reason_code}</p></div>
+            <span className="text-[#5d695f]">{fmt(x.received_at)}</span></div>)}
+          {!deliveries.length?<p className="p-4 text-xs text-[#5c6a5f]">No signed deliveries yet.</p>:null}
         </div>
         <div className="space-y-2 border-t border-[#e6efe7] pt-4">
           <h3 className="text-xs font-semibold text-[#244a34]">Outbound reconciliation</h3>
-          <p className="text-[11px] leading-5 text-[#778979]">Reviewed warehouse tasks only · explicit remote acknowledgement</p>
+          <p className="text-[11px] leading-5 text-[#5d6b5f]">Reviewed warehouse tasks only · explicit remote acknowledgement</p>
           <div className="max-h-64 overflow-y-auto rounded-xl border border-[#e1e9e2]">
             {outbox.map(x=><div key={x.id} className="border-b border-[#eaf0ea] p-3 text-xs last:border-0">
               <div className="flex items-center justify-between gap-2"><span className="font-semibold text-[#315b3e]">{x.status}</span>
-                <span className="text-[#758679]">{x.attempts} attempts</span></div>
-              <p className="mt-1 truncate text-[11px] text-[#657a6a]">{x.work_item_id}</p>
-              <p className="mt-1 text-[11px] text-[#657a6a]">{x.ack_reference?'Acknowledged: '+x.ack_reference:x.last_error_code||'Awaiting dispatch'}</p>
+                <span className="text-[#5d6b61]">{x.attempts} attempts</span></div>
+              <p className="mt-1 truncate text-[11px] text-[#596c5e]">{x.work_item_id}</p>
+              <p className="mt-1 text-[11px] text-[#596c5e]">{x.ack_reference?'Acknowledged: '+x.ack_reference:x.last_error_code||'Awaiting dispatch'}</p>
               {x.status==='dead'&&x.recovered_count<3?<div className="mt-3">
                 {recovering===x.id?<div className="space-y-2">
                   <label htmlFor={'recovery-'+x.id} className="wm-label">Recovery justification</label>
@@ -177,14 +177,14 @@ export function IntegrationSourcesPanel(){
                     className="min-h-10 rounded-lg bg-[#155a40] px-3 text-xs font-semibold text-white disabled:opacity-50">
                     Retry delivery
                   </button>
-                  <button type="button" onClick={()=>{setRecovering('');setRecoveryNote('');}} className="ml-2 text-xs text-[#687e6d]">Cancel</button>
+                  <button type="button" onClick={()=>{setRecovering('');setRecoveryNote('');}} className="ml-2 text-xs text-[#586b5c]">Cancel</button>
                 </div>:<button type="button" onClick={()=>{setRecovering(x.id);setRecoveryNote('');}}
                   className="text-[11px] font-semibold text-[#286846]">Review failed delivery</button>}
               </div>:null}
             </div>)}
-            {!outbox.length?<p className="p-4 text-xs text-[#728474]">No reviewed signed work awaiting outbound acknowledgement.</p>:null}
+            {!outbox.length?<p className="p-4 text-xs text-[#5a695c]">No reviewed signed work awaiting outbound acknowledgement.</p>:null}
           </div>
-        </div></>:<div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center text-[#748476]">
+        </div></>:<div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center text-[#5c695e]">
           <ShieldAlert className="h-6 w-6"/><p className="text-xs">Select a registered source to inspect delivery health.</p>
         </div>}
       </div>

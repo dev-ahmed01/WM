@@ -91,10 +91,10 @@ export function TaskGuidancePanel({workId, status, workflowVersionId, stepId}: P
         </span>
         <div>
           <h3 className="text-sm font-semibold text-[#245036]">Ask about this task</h3>
-          <p className="mt-0.5 text-[11px] text-[#657d6a]">Current SOP · approved sources</p>
+          <p className="mt-0.5 text-[11px] text-[#576c5b]">Current SOP · approved sources</p>
         </div>
       </div>
-      <ChevronDown className={'h-4 w-4 text-[#61816b] transition-transform ' + (open ? 'rotate-180' : '')}/>
+      <ChevronDown className={'h-4 w-4 text-[#516c5a] transition-transform ' + (open ? 'rotate-180' : '')}/>
     </button>
     {open ? <div id={'task-guidance-' + workId} className="space-y-4 border-t border-[#e0ebdf] p-4 sm:p-5">
       <div className="flex flex-wrap gap-2">
@@ -116,26 +116,26 @@ export function TaskGuidancePanel({workId, status, workflowVersionId, stepId}: P
         </button>
       </form>
 
-      {busy ? <p role="status" className="text-xs text-[#68806b]">Checking the current procedure and approved references…</p> : null}
+      {busy ? <p role="status" className="text-xs text-[#586c5a]">Checking the current procedure and approved references…</p> : null}
       {error ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800">{error}</p> : null}
       {result ? <article aria-live="polite" className="rounded-xl border border-[#d3e5d6] bg-white p-4">
         <div className="flex items-center gap-2">
           {result.requires_supervisor ? <ShieldAlert className="h-4 w-4 text-amber-700"/> : <BookOpenText className="h-4 w-4 text-emerald-700"/>}
-          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#52775d]">{result.requires_supervisor ? 'Supervisor guidance required' : 'Source-linked guidance'}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#4c6e56]">{result.requires_supervisor ? 'Supervisor guidance required' : 'Source-linked guidance'}</p>
         </div>
         <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[#304a36]">{result.answer}</p>
         {result.citations.length ? <div className="mt-4 space-y-2 border-t border-[#edf2ec] pt-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[#67826b]">Verified source</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#556b58]">Verified source</p>
           {result.citations.map((citation, index) => <div key={citation.chunk_id || citation.step_id || index}
             className="rounded-lg bg-[#f5f9f5] px-3 py-2">
             <p className="text-[11px] font-semibold text-[#316142]">{citation.source_type === 'published_sop'
               ? 'Current SOP · state ' + (citation.state_id || '') : citation.document_title}</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#67806d]">{citation.excerpt}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#576c5c]">{citation.excerpt}</p>
           </div>)}
         </div> : null}
-        <p className="mt-3 text-[11px] leading-5 text-[#788c79]">Read-only guidance. No step, evidence requirement, decision or approval was recorded.</p>
+        <p className="mt-3 text-[11px] leading-5 text-[#5b6c5c]">Read-only guidance. No step, evidence requirement, decision or approval was recorded.</p>
       </article> : null}
-      <p className="text-[11px] leading-5 text-[#7b8d7d]">If anything is unsafe or unclear, stop and use the task’s reporting controls.</p>
+      <p className="text-[11px] leading-5 text-[#5c6a5d]">If anything is unsafe or unclear, stop and use the task’s reporting controls.</p>
     </div> : null}
   </section>;
 }

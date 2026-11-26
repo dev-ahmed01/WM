@@ -6,6 +6,10 @@ from typing import Any, Dict, Sequence
 from app.core.text_matching import fuzzy_relevance_score, search_terms
 
 
+# A proposal is confirmation-gated, but a one-word overlap (score ~0.2-0.44) is noise, not a candidate.
+PROPOSAL_MIN_SCORE = 0.45
+
+
 class WorkflowIntentService:
     """Resolve obvious workflow intents without depending on an LLM or embeddings."""
 
@@ -120,7 +124,7 @@ class WorkflowIntentService:
         request_signal = cls.is_workflow_request(message)
         # A proposal is never executed until the employee confirms it, so a
         # lower threshold is safe for natural problem descriptions.
-        minimum_score = 0.30 if proposal_mode else (0.58 if request_signal else 0.82)
+        minimum_score = PROPOSAL_MIN_SCORE if proposal_mode else (0.58 if request_signal else 0.82)
         if top_score < minimum_score:
             return None
 

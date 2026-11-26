@@ -20,6 +20,10 @@ Last full-suite result: **550 passed, 1 skipped, 0 failed**.
 | J | Hazardous equipment fault | `test_J_safety_critical_report_stops_work_and_never_invents_repairs` | Pass. Stop-work and emergency wording, no repair instructions, one urgent case, also when a workflow is in progress |
 
 ## Defects these scenarios found and fixed
+- **Analytics leaked across companies** (`G2`): the Intelligence Hub endpoints returned every company's FAQs, SOP usage, escalation
+  reasons (with user ids) and adoption when no department was given. Now scoped (managers: own department; admins: own organization).
+- **Workflow sessions readable and changeable by any admin of any company** (`G3`): the admin role bypassed the ownership check.
+  Now only the owner can change a session; an admin can only read sessions inside their own organization; foreign ids answer 404.
 - Re-running migrations failed once any SOP had been approved (migration 009 re-tightened a constraint) — a deploy-breaker.
 - An unrelated "explain …" question during a workflow was answered with the current step's rule as if relevant.
 - Employees could not see the status of an issue they reported (added `/work/exceptions/mine`, shown on the workspace).
@@ -40,11 +44,21 @@ leaves it pending). Replacing an existing SOP (scenario I) goes through the same
 admin upload shows "Waiting for manager approval", the manager's Approvals page lists the file, approval publishes, the employee
 then finds it.
 
+## Responsive and accessibility sweep (desktop 1440, tablet 820, phone 390)
+`backend/e2e/ui_sweep.js` (run with the Playwright MCP "run code" tool; credentials supplied locally) checks every role/route
+at three widths for horizontal overflow, touch targets under 40px, unlabeled controls, nameless buttons/links, exactly one
+`<h1>`, text contrast against WCAG AA (4.5:1 / 3:1 large), console errors and failed API calls.
+**Result: 60 route/size combinations, 0 problems.** Fixes made to get there: 44px minimum targets on touch widths, a label on the
+copilot message box, an accessible name on an icon button, darkened ~280 low-contrast text colors (about 120 failing text nodes
+across the app became 0), a higher-contrast sidebar description, and a "Skip to main content" link (first Tab; Enter moves into the
+page instead of through 9-18 sidebar stops). Keyboard audit: every focus stop has a visible indicator.
+Not done: a screen-reader pass (NVDA/VoiceOver) and an automated axe run (downloading a script into the page was declined by the
+tooling; the checks above are self-written and cover contrast, names, labels, landmarks and focus only).
+
 ## Known gaps (not hidden)
-1. The assistant's catalog match can propose a loosely related SOP when a question shares one word with it (e.g. a "dock plate"
-   question proposed "Supplier arrival and gate check" before the right SOP existed). It always asks "Start it?" first, so nothing
-   runs unconfirmed, but the proposal is noise. A stricter relevance floor or a "no, something else" shortcut would help.
-2. Not tested: phone/tablet layouts, keyboard-only use, assistive-technology review.
+1. The assistant's catalog match used to propose loosely related SOPs on a one-word overlap; the proposal and suggestion floors
+   are now 0.45 (regression tests added). Real customer SOPs with sparse descriptions may need aliases added to be found.
+2. Screen-reader testing and a full axe audit have not been done.
 3. Free-form answers from the language model are not part of any scenario; `qwen2.5:3b` is installed but unused by these paths.
 4. Row-level security still covers only reference documents; other tenant isolation is application-level (tested, not DB-enforced).
 5. The scenarios are API-level tests plus manual browser runs; there is no automated browser suite in CI.
