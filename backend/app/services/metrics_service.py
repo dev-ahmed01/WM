@@ -35,6 +35,16 @@ DEFINITIONS = {
     "median_exception_closure_hours": "Median of (closed - opened) over cases opened in the period and closed.",
     "gaps_closed_by_published_sop": "Knowledge gaps resolved because an approved SOP was published for them.",
     "handovers_submitted": "Shift handovers or discrepancy reports submitted in the period.",
+    "conversations_total": "Conversations in which an employee sent at least one message in the period.",
+    "conversations_confirmed_resolved": "Conversations where the employee marked an answer helpful and did not ask for a person or flag an answer.",
+    "self_service_resolution_pct": "conversations_confirmed_resolved / conversations_total. Only employee-confirmed outcomes count; an answer nobody rated is not counted as resolved.",
+    "answers_rated_helpful": "Answers employees marked helpful.",
+    "answers_rated_not_helpful": "Answers employees marked not helpful.",
+    "cases_opened": "Requests for a person, unanswered questions and flagged answers opened in the period.",
+    "cases_resolved": "Of those opened in the period, how many staff resolved or closed.",
+    "median_case_resolution_hours": "Median of (resolved - opened) over cases opened in the period that staff resolved.",
+    "messages_in_devanagari": "Employee messages written in Hindi (Devanagari script). Hindi written in English letters cannot be told apart from English and counts below.",
+    "messages_in_latin_script": "Employee messages written in English letters (English or Hinglish).",
 }
 UNAVAILABLE = {
     "response_latency_ms": "Not persisted: per-response latency is not stored, so no number is reported.",
@@ -65,6 +75,46 @@ def summary(department_ids: List[str], days: int) -> Dict[str, Any]:
                WHERE c.department_id = ANY(%s) AND m.created_at >= now() - make_interval(days => %s)""",
             (department_ids, days))
         active, questions, matched, gaps, safety, live, actions = cur.fetchone()
+
+        cur.execute(
+            """SELECT COUNT(DISTINCT c.id),
+                      COUNT(DISTINCT c.id) FILTER (WHERE EXISTS (SELECT 1 FROM workmate_copilot.message_feedback f
+                           JOIN workmate_copilot.conversation_messages fm ON fm.id=f.message_id
+                           WHERE fm.conversation_id=c.id AND f.rating='helpful')
+                         AND NOT EXISTS (SELECT 1 FROM workmate_copilot.message_feedback f2
+                           JOIN workmate_copilot.conversation_messages fm2 ON fm2.id=f2.message_id
+                           WHERE fm2.conversation_id=c.id AND f2.rating='not_helpful')
+                         AND NOT EXISTS (SELECT 1 FROM knowledge_studio.knowledge_gaps g
+                           WHERE g.conversation_id=c.id AND g.kind IN ('human_request','incorrect_answer')))
+               FROM workmate_copilot.conversations c
+               WHERE c.department_id = ANY(%s) AND EXISTS (SELECT 1 FROM workmate_copilot.conversation_messages m
+                     WHERE m.conversation_id=c.id AND m.sender='employee' AND m.created_at >= now() - make_interval(days => %s))""",
+            (department_ids, days))
+        convs, convs_ok = cur.fetchone()
+
+        cur.execute(
+            """SELECT COUNT(*) FILTER (WHERE f.rating='helpful'), COUNT(*) FILTER (WHERE f.rating='not_helpful')
+               FROM workmate_copilot.message_feedback f
+               WHERE f.department_id = ANY(%s) AND f.created_at >= now() - make_interval(days => %s)""",
+            (department_ids, days))
+        rated_up, rated_down = cur.fetchone()
+
+        cur.execute(
+            """SELECT COUNT(*), COUNT(*) FILTER (WHERE status IN ('resolved','closed','dismissed')),
+                      percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (resolved_at - created_at))/3600.0)
+                        FILTER (WHERE resolved_at IS NOT NULL)
+               FROM knowledge_studio.knowledge_gaps
+               WHERE department_id = ANY(%s) AND created_at >= now() - make_interval(days => %s)""",
+            (department_ids, days))
+        support_opened, support_resolved, support_median = cur.fetchone()
+
+        cur.execute(
+            """SELECT COUNT(*) FILTER (WHERE m.message_text ~ '[\u0900-\u097F]'),
+                      COUNT(*) FILTER (WHERE m.message_text !~ '[\u0900-\u097F]')
+               FROM workmate_copilot.conversation_messages m JOIN workmate_copilot.conversations c ON c.id=m.conversation_id
+               WHERE m.sender='employee' AND c.department_id = ANY(%s) AND m.created_at >= now() - make_interval(days => %s)""",
+            (department_ids, days))
+        msgs_hi, msgs_latin = cur.fetchone()
 
         cur.execute(
             """SELECT COUNT(*), COUNT(*) FILTER (WHERE s.status='completed')
@@ -129,6 +179,11 @@ def summary(department_ids: List[str], days: int) -> Dict[str, Any]:
         "exception_cases_opened": cases_opened, "exception_cases_closed": cases_closed,
         "median_exception_closure_hours": rnd(cases_median),
         "gaps_closed_by_published_sop": gaps_closed, "handovers_submitted": handovers,
+        "conversations_total": convs, "conversations_confirmed_resolved": convs_ok,
+        "self_service_resolution_pct": _pct(convs_ok, convs),
+        "answers_rated_helpful": rated_up, "answers_rated_not_helpful": rated_down,
+        "cases_opened": support_opened, "cases_resolved": support_resolved, "median_case_resolution_hours": rnd(support_median),
+        "messages_in_devanagari": msgs_hi, "messages_in_latin_script": msgs_latin,
     }
     return {"period_days": days, "departments": department_ids, "metrics": metrics,
             "definitions": {k: DEFINITIONS[k] for k in metrics}, "unavailable": UNAVAILABLE}

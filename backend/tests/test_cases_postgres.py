@@ -129,3 +129,24 @@ def test_history_search_rename_archive_are_private_to_the_owner(world):
     assert patch("emp1", c1, {"archived": False}).status_code == 200
     assert c1 in {i["id"] for i in api.get("emp1", "/copilot/conversations").json()["items"]}
     assert api.get("emp_b", "/copilot/conversations").json()["items"] == []
+
+
+@pytest.mark.live_integration
+def test_self_service_resolution_counts_only_employee_confirmed_outcomes(world):
+    api = world
+    a = api.ask("emp1", "how do I do goods receipt posting")           # rated helpful -> confirmed
+    api.post("emp1", "/copilot/feedback", {"message_id": a["message_id"], "rating": "helpful"})
+    api.ask("emp1", "start cycle counting")                              # answered but never rated -> NOT counted
+    c = api.ask("emp2", "how do I do goods receipt posting")            # helpful, then asks a person -> NOT counted
+    api.post("emp2", "/copilot/feedback", {"message_id": c["message_id"], "rating": "helpful"})
+    esc = api.post("emp2", "/copilot/escalate", {"conversation_id": c["conversation_id"], "note": "still stuck"})
+    assert esc.status_code == 201, esc.text
+    api.ask("emp2", "स्कैनर काम नहीं कर रहा")
+    m = api.get("admin1", "/analytics/summary?days=30").json()["metrics"]
+    assert m["conversations_total"] >= 3 and m["conversations_confirmed_resolved"] == 1
+    assert m["self_service_resolution_pct"] == round(100 / m["conversations_total"], 1)
+    assert m["answers_rated_helpful"] == 2 and m["answers_rated_not_helpful"] == 0
+    assert m["cases_opened"] >= 1
+    assert m["messages_in_devanagari"] == 1 and m["messages_in_latin_script"] == 3
+    other = api.get("admin_b", "/analytics/summary").json()["metrics"]
+    assert other["conversations_total"] == 0 and other["cases_opened"] == 0 and other["answers_rated_helpful"] == 0
